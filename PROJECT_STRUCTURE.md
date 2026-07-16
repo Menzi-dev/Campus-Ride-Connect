@@ -1,0 +1,169 @@
+# CampusConnect Project Structure
+
+## Overview
+This scaffold covers the combined Phase 1, Phase 2, and Phase 3 requirements for the CampusConnect student ride-sharing application.
+
+## Backend
+- backend/src/main/java/com/campusconnect/CampusConnectApplication.java — Main Spring Boot entry point for the application.
+- backend/src/main/java/com/campusconnect/config/AppConfig.java — Central application configuration for beans and shared setup.
+- backend/src/main/java/com/campusconnect/config/SecurityConfig.java — Security configuration for JWT, RBAC, and password handling.
+- backend/src/main/java/com/campusconnect/config/WebSocketConfig.java — WebSocket configuration for real-time ride and safety updates.
+- backend/src/main/java/com/campusconnect/config/JwtAuthenticationFilter.java — Filter for JWT authentication on incoming requests.
+- backend/src/main/java/com/campusconnect/controller/AuthController.java — Handles authentication, OTP verification, and login flows.
+- backend/src/main/java/com/campusconnect/controller/UserController.java — Manages student profiles and account status.
+- backend/src/main/java/com/campusconnect/controller/DriverController.java — Supports driver onboarding, verification, and approvals.
+- backend/src/main/java/com/campusconnect/controller/RideController.java — Handles ride requests, matching, and trip lifecycle management.
+- backend/src/main/java/com/campusconnect/controller/SosController.java — Manages SOS alerts and escalation workflows.
+- backend/src/main/java/com/campusconnect/controller/SecurityController.java — Supports security officer monitoring and live dashboard access.
+- backend/src/main/java/com/campusconnect/controller/AdminController.java — Provides university administration controls and review actions.
+- backend/src/main/java/com/campusconnect/controller/TripController.java — Manages trip completion, ratings, and history.
+- backend/src/main/java/com/campusconnect/controller/DocumentController.java — Handles document uploads and verification state updates.
+- backend/src/main/java/com/campusconnect/controller/NotificationController.java — Sends notifications for OTPs, ride updates, and alerts.
+- backend/src/main/java/com/campusconnect/service/AuthService.java — Core authentication and account security operations.
+- backend/src/main/java/com/campusconnect/service/UserService.java — Student and user account lifecycle management.
+- backend/src/main/java/com/campusconnect/service/DriverService.java — Driver onboarding, approval, and rating coordination.
+- backend/src/main/java/com/campusconnect/service/RideService.java — Matching, cost calculation, and ride state transitions.
+- backend/src/main/java/com/campusconnect/service/VerificationService.java — University email verification, student ID verification, and 2-factor checks.
+- backend/src/main/java/com/campusconnect/service/FaceRecognitionService.java — Face verification and similarity scoring against stored embeddings.
+- backend/src/main/java/com/campusconnect/service/SosService.java — SOS trigger handling, escalation, and resolution.
+- backend/src/main/java/com/campusconnect/service/AudioService.java — Audio recording and encryption workflows.
+- backend/src/main/java/com/campusconnect/service/NotificationService.java — Notification delivery for users, drivers, admins, and security staff.
+- backend/src/main/java/com/campusconnect/service/PaymentService.java — Payment initiation, status updates, and transaction tracking.
+- backend/src/main/java/com/campusconnect/service/RatingService.java — Ride rating submission and score recalculation.
+- backend/src/main/java/com/campusconnect/service/TripHistoryService.java — Trip history generation and in-app retrieval.
+- backend/src/main/java/com/campusconnect/service/UniversityService.java — University configuration and multi-university support management.
+- backend/src/main/java/com/campusconnect/service/SecurityService.java — Security officer operations and incident monitoring.
+- backend/src/main/java/com/campusconnect/service/AdminService.java — Admin dashboard workflows and review tools.
+- backend/src/main/java/com/campusconnect/repository/UserRepository.java — Data access layer for users.
+- backend/src/main/java/com/campusconnect/repository/DriverRepository.java — Data access layer for driver records.
+- backend/src/main/java/com/campusconnect/repository/RideRepository.java — Data access layer for ride records.
+- backend/src/main/java/com/campusconnect/repository/RatingRepository.java — Data access layer for ratings.
+- backend/src/main/java/com/campusconnect/repository/SosAlertRepository.java — Data access layer for SOS alerts.
+- backend/src/main/java/com/campusconnect/repository/FaceVerificationRepository.java — Data access layer for face verification events.
+- backend/src/main/java/com/campusconnect/repository/DocumentRepository.java — Data access layer for uploaded documents.
+- backend/src/main/java/com/campusconnect/repository/PaymentRepository.java — Data access layer for payments.
+- backend/src/main/java/com/campusconnect/repository/UniversityRepository.java — Data access layer for university records.
+- backend/src/main/java/com/campusconnect/repository/SafeZoneRepository.java — Data access layer for safe zone geography.
+- backend/src/main/java/com/campusconnect/entity/User.java — User entity covering riders, drivers, admins, and security roles.
+- backend/src/main/java/com/campusconnect/entity/Driver.java — Driver profile and vehicle details.
+- backend/src/main/java/com/campusconnect/entity/Ride.java — Ride record including status, geolocation, and timing.
+- backend/src/main/java/com/campusconnect/entity/Rating.java — Rating and review record.
+- backend/src/main/java/com/campusconnect/entity/SosAlert.java — SOS alert data and resolution state.
+- backend/src/main/java/com/campusconnect/entity/FaceVerification.java — Face verification attempt and confidence score.
+- backend/src/main/java/com/campusconnect/entity/Document.java — Uploaded student and driver documents.
+- backend/src/main/java/com/campusconnect/entity/Payment.java — Payment transaction record.
+- backend/src/main/java/com/campusconnect/entity/University.java — University profile and registration rules.
+- backend/src/main/java/com/campusconnect/entity/SafeZone.java — Safe zone polygon and campus boundary data.
+- backend/src/main/java/com/campusconnect/entity/AuditLog.java — Audit trail for security and compliance events.
+- backend/src/main/java/com/campusconnect/dto/AuthRequest.java — Login request model.
+- backend/src/main/java/com/campusconnect/dto/AuthResponse.java — Authentication response payload.
+- backend/src/main/java/com/campusconnect/dto/RegisterRequest.java — Registration request model.
+- backend/src/main/java/com/campusconnect/dto/RideRequest.java — Ride creation and matching request model.
+- backend/src/main/java/com/campusconnect/dto/RatingRequest.java — Rating submission model.
+- backend/src/main/java/com/campusconnect/dto/SosAlertRequest.java — SOS submission model.
+- backend/src/main/java/com/campusconnect/dto/DocumentUploadRequest.java — Document upload payload.
+- backend/src/main/java/com/campusconnect/dto/DriverApplicationRequest.java — Driver application payload.
+- backend/src/main/java/com/campusconnect/security/JwtTokenProvider.java — JWT generation and validation utilities.
+- backend/src/main/java/com/campusconnect/security/JwtAuthenticationEntryPoint.java — Authentication exception handling.
+- backend/src/main/java/com/campusconnect/security/CustomUserDetailsService.java — Custom user loading for Spring Security.
+- backend/src/main/java/com/campusconnect/security/UserPrincipal.java — Principal object for authenticated users.
+- backend/src/main/java/com/campusconnect/security/Role.java — Role enum for RBAC.
+- backend/src/main/java/com/campusconnect/websocket/SocketIoGateway.java — WebSocket gateway for live ride and security messaging.
+- backend/src/main/java/com/campusconnect/exception/GlobalExceptionHandler.java — Centralized exception handling.
+- backend/src/main/java/com/campusconnect/exception/ResourceNotFoundException.java — Not-found exception type.
+- backend/src/main/java/com/campusconnect/exception/ApiException.java — Business exception for API errors.
+- backend/src/main/java/com/campusconnect/util/OcrUtil.java — OCR support for student card parsing.
+- backend/src/main/java/com/campusconnect/util/EncryptionUtil.java — AES-256 and secure storage helpers.
+- backend/src/main/java/com/campusconnect/util/GeoUtil.java — Distance, geofence, and route calculation helpers.
+- backend/src/main/java/com/campusconnect/util/FileStorageUtil.java — File upload and storage path helpers.
+- backend/src/main/java/com/campusconnect/util/DateTimeUtil.java — Time and scheduling helpers.
+- backend/src/main/java/com/campusconnect/mapper/UserMapper.java — Mapping between entities and DTOs.
+- backend/src/main/java/com/campusconnect/mapper/DriverMapper.java — Mapping for driver DTOs.
+- backend/src/main/java/com/campusconnect/mapper/RideMapper.java — Mapping for ride DTOs.
+- backend/src/main/java/com/campusconnect/validation/ValidEmail.java — Validation annotation for university email rules.
+- backend/src/main/java/com/campusconnect/validation/ValidEmailValidator.java — Validator logic for .ac.za emails.
+- backend/src/main/resources/application.yml — Base Spring configuration.
+- backend/src/main/resources/application-dev.yml — Development profile settings.
+- backend/src/main/resources/application-prod.yml — Production settings and secrets placeholders.
+- backend/src/main/resources/messages.properties — Externalized messages for validation and errors.
+- backend/src/test/java/com/campusconnect/CampusConnectApplicationTests.java — Test scaffold for key application flows.
+- backend/docker/Dockerfile — Backend container definition.
+- backend/docker/docker-compose.yml — Local orchestration for backend and database.
+
+## Mobile Frontend
+- mobile/App.tsx — Root React Native entry point.
+- mobile/app.json — Expo application configuration.
+- mobile/babel.config.js — Babel configuration for Expo.
+- mobile/tsconfig.json — TypeScript project configuration.
+- mobile/package.json — Expo package manifest.
+- mobile/.env — Environment variables for API and map configuration.
+- mobile/src/navigation/AppNavigator.tsx — Main app navigation stack.
+- mobile/src/navigation/AuthNavigator.tsx — Authentication flow navigation.
+- mobile/src/navigation/MainNavigator.tsx — Authenticated user navigation.
+- mobile/src/navigation/RootNavigator.tsx — Root navigation composition.
+- mobile/src/screens/LoginScreen.tsx — Login screen for students, drivers, admins, and security users.
+- mobile/src/screens/CreateAccountScreen.tsx — Three-step account creation experience.
+- mobile/src/screens/FaceVerificationScannerScreen.tsx — Face verification scanner for pre-trip checks.
+- mobile/src/screens/HomeScreen.tsx — Ride booking and trip initiation screen.
+- mobile/src/screens/FindingDriversScreen.tsx — Driver matching and selection screen.
+- mobile/src/screens/DriverDashboardScreen.tsx — Driver overview and active assignments screen.
+- mobile/src/screens/ActiveTripScreen.tsx — Live trip monitoring screen.
+- mobile/src/screens/ShareRideLinkScreen.tsx — Ride share invitation screen.
+- mobile/src/screens/SosActivatedScreen.tsx — SOS response screen.
+- mobile/src/screens/TripCompletedScreen.tsx — Trip completion and confirmation screen.
+- mobile/src/screens/TripHistoryScreen.tsx — Past trips and history screen.
+- mobile/src/screens/ScheduleRideScreen.tsx — Scheduled ride planning screen.
+- mobile/src/screens/ProfileScreen.tsx — Personal profile management screen.
+- mobile/src/screens/PaymentMethodsScreen.tsx — Stored payment methods screen.
+- mobile/src/screens/DriverProfileScreen.tsx — Driver public profile screen.
+- mobile/src/screens/EarningsScreen.tsx — Driver earnings dashboard.
+- mobile/src/screens/DriverVerificationScreen.tsx — Four-step driver verification checklist.
+- mobile/src/screens/AdminDashboardScreen.tsx — Admin analytics and oversight screen.
+- mobile/src/screens/DriverApprovalsScreen.tsx — Driver application approval queue.
+- mobile/src/screens/UserManagementScreen.tsx — User lifecycle and role management screen.
+- mobile/src/screens/RideMonitoringScreen.tsx — Live ride oversight screen.
+- mobile/src/screens/IncidentReportsScreen.tsx — Incident report management screen.
+- mobile/src/screens/UniversitySettingsScreen.tsx — University configuration screen.
+- mobile/src/screens/SecurityCentreDashboardScreen.tsx — Security centre overview screen.
+- mobile/src/screens/ActiveRidesMonitorScreen.tsx — Active ride monitoring screen.
+- mobile/src/screens/SosAlertsScreen.tsx — SOS alert queue screen.
+- mobile/src/screens/AudioRecordingsScreen.tsx — Encrypted audio recording review screen.
+- mobile/src/components/RideCard.tsx — Reusable ride summary card.
+- mobile/src/components/DriverCard.tsx — Reusable driver summary card.
+- mobile/src/components/MapView.tsx — Map component using react-native-maps.
+- mobile/src/components/SosButton.tsx — One-tap emergency action component.
+- mobile/src/components/VerificationChecklist.tsx — Verification checklist widget for driver approvals.
+- mobile/src/services/ApiClient.ts — Shared API client for backend requests.
+- mobile/src/services/AuthService.ts — Authentication API integration.
+- mobile/src/services/RideService.ts — Ride request and trip workflow integration.
+- mobile/src/services/SocketService.ts — Socket.IO integration for real-time events.
+- mobile/src/services/FaceRecognitionService.ts — Face verification integration with face-api.js and TensorFlow.js.
+- mobile/src/services/NotificationService.ts — Push and in-app notification handlers.
+- mobile/src/services/PaymentService.ts — Payment request and method management integration.
+- mobile/src/services/StorageService.ts — Secure storage and local persistence helpers.
+- mobile/src/hooks/useAuth.ts — Authentication state hook.
+- mobile/src/hooks/useLocation.ts — GPS location tracking hook.
+- mobile/src/hooks/useFaceRecognition.ts — Face verification state and camera hook.
+- mobile/src/context/AuthContext.tsx — Global authentication context.
+- mobile/src/context/RideContext.tsx — Ride state and booking context.
+- mobile/src/context/SocketContext.tsx — Real-time socket state context.
+- mobile/src/theme/theme.ts — Shared theme configuration.
+- mobile/src/theme/colors.ts — App color palette.
+- mobile/src/utils/validators.ts — Validation helpers for emails, IDs, and ratings.
+- mobile/src/utils/constants.ts — App-wide constants and enum-like values.
+- mobile/src/utils/helpers.ts — Shared helpers for dates, formatting, and routing.
+
+## Database
+- database/mysql/schema.sql — SQL schema for Users, Drivers, Rides, Ratings, SOS_Alerts, FaceVerifications, Documents, Payments, and supporting entities.
+- database/mysql/seed.sql — Seed data for universities, initial roles, and administration accounts.
+- database/mysql/procedures.sql — Stored procedures for ride matching, trip lifecycle actions, and reporting.
+- database/mysql/views.sql — Views for trip history, active rides, and admin dashboards.
+- database/mysql/migrations/001_init_schema.sql — Initial migration entry point.
+
+## Documentation
+- docs/requirements.md — Consolidated functional and non-functional requirements.
+- docs/architecture.md — System architecture and component overview.
+- docs/api-spec.md — Backend API contract and endpoint plan.
+- docs/security.md — Authentication, encryption, and compliance guidance.
+- docs/deployment.md — Deployment and environment planning.
+- docs/testing.md — Test strategy and quality targets.

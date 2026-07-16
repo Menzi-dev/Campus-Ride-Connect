@@ -1,0 +1,16 @@
+{
+  "folders": [
+    {
+      "path": "backend"
+    }
+  ],
+  "settings": {
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "java.project.sourcePaths": [
+      "src/main/java",
+      "src/test/java"
+    ],
+    "java.project.outputPath": "target/classes",
+    "java.compile.nullAnalysis.mode": "automatic"
+  }
+}

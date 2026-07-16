@@ -1,0 +1,158 @@
+{"_e":"root:init","_t":1784225785429,"format":"v0-jsonl","version":"57.0.8"}
+{"_e":"env:mode","_t":1784225785430,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1784225785436,"mode":"development","files":["../..\\..\\.env"],"env":{}}
+{"_e":"devserver:start","_t":1784225785927,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1784225787044,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1784225789498,"plugins":[]}
+{"_e":"metro:instantiate","_t":1784225796740,"atlas":false,"workers":8,"host":"::","port":8081}
+{"_e":"metro:client_log","_t":1784225869063,"level":"error","data":["Project is incompatible with this version of Expo Go\n\nThe project you requested requires a newer version of Expo Go.\n\nHow to fix this error:\n\nDownload the latest version of Expo Go from the App Store."]}
+{"_e":"metro:client_log","_t":1784225948351,"level":"error","data":["Project is incompatible with this version of Expo Go\n\nThe project you requested requires a newer version of Expo Go.\n\nHow to fix this error:\n\nDownload the latest version of Expo Go from the App Store."]}
+{"_e":"root:init","_t":1784226127235,"format":"v0-jsonl","version":"57.0.8"}
+{"_e":"env:mode","_t":1784226127236,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1784226127241,"mode":"development","files":["../..\\..\\.env"],"env":{}}
+{"_e":"devserver:start","_t":1784226127582,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1784226128168,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1784226128594,"plugins":[]}
+{"_e":"metro:instantiate","_t":1784226135500,"atlas":false,"workers":8,"host":"::","port":8081}
+{"_e":"root:init","_t":1784226492412,"format":"v0-jsonl","version":"57.0.8"}
+{"_e":"env:mode","_t":1784226492414,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1784226492418,"mode":"development","files":["../..\\..\\.env"],"env":{}}
+{"_e":"root:init","_t":1784226631070,"format":"v0-jsonl","version":"57.0.8"}
+{"_e":"env:mode","_t":1784226631072,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1784226631076,"mode":"development","files":["../..\\..\\.env"],"env":{}}
+{"_e":"devserver:start","_t":1784226631462,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1784226632089,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1784226632556,"plugins":[]}
+{"_e":"metro:instantiate","_t":1784226639806,"atlas":false,"workers":8,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1784226640353,"id":"1","platform":"web","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1784226640353,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784226640357,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784226640945,"id":"1","progress":0.010000000000000002,"total":1,"current":1}
+{"_e":"metro:bundling:progress","_t":1784226641047,"id":"1","progress":0.04000000000000001,"total":4,"current":2}
+{"_e":"metro:bundling:progress","_t":1784226641727,"id":"1","progress":0.09,"total":4,"current":3}
+{"_e":"metro:bundling:progress","_t":1784226641829,"id":"1","progress":0.09,"total":66,"current":6}
+{"_e":"metro:bundling:progress","_t":1784226641930,"id":"1","progress":0.09,"total":77,"current":15}
+{"_e":"metro:bundling:progress","_t":1784226642032,"id":"1","progress":0.09,"total":84,"current":24}
+{"_e":"metro:bundling:progress","_t":1784226642135,"id":"1","progress":0.12808864265927977,"total":95,"current":34}
+{"_e":"metro:bundling:progress","_t":1784226642241,"id":"1","progress":0.15699537201851194,"total":106,"current":42}
+{"_e":"metro:bundling:progress","_t":1784226642344,"id":"1","progress":0.1586469405343292,"total":118,"current":47}
+{"_e":"metro:bundling:progress","_t":1784226642444,"id":"1","progress":0.22278399999999998,"total":125,"current":59}
+{"_e":"metro:bundling:progress","_t":1784226642563,"id":"1","progress":0.28444444444444444,"total":135,"current":72}
+{"_e":"metro:bundling:progress","_t":1784226642664,"id":"1","progress":0.34505354785075065,"total":143,"current":84}
+{"_e":"metro:bundling:progress","_t":1784226642772,"id":"1","progress":0.45606341710237813,"total":154,"current":104}
+{"_e":"metro:bundling:progress","_t":1784226642881,"id":"1","progress":0.5939794717838452,"total":157,"current":121}
+{"_e":"metro:bundling:progress","_t":1784226643000,"id":"1","progress":0.6038378838898131,"total":157,"current":122}
+{"_e":"metro:bundling:progress","_t":1784226643100,"id":"1","progress":0.617995923686057,"total":173,"current":136}
+{"_e":"metro:bundling:progress","_t":1784226643203,"id":"1","progress":0.6776655169256128,"total":181,"current":149}
+{"_e":"metro:bundling:progress","_t":1784226643304,"id":"1","progress":0.7105342507058467,"total":191,"current":161}
+{"_e":"metro:bundling:progress","_t":1784226643404,"id":"1","progress":0.7699202229911573,"total":204,"current":179}
+{"_e":"metro:bundling:progress","_t":1784226643504,"id":"1","progress":0.7722681359044995,"total":231,"current":203}
+{"_e":"metro:bundling:progress","_t":1784226643605,"id":"1","progress":0.7933255749151764,"total":247,"current":220}
+{"_e":"metro:bundling:progress","_t":1784226643704,"id":"1","progress":0.9529478458049886,"total":252,"current":246}
+{"_e":"metro:bundling:progress","_t":1784226643813,"id":"1","progress":0.9845562165735232,"total":258,"current":256}
+{"_e":"metro:bundling:progress","_t":1784226644888,"id":"1","progress":0.9922630851511327,"total":258,"current":257}
+{"_e":"metro:bundling:failed","_t":1784226644933,"id":"1","message":"SyntaxError: C:\\Users\\Admin\\Downloads\\CampusConnect\\mobile\\App.tsx: Missing semicolon. (7:4)\n\n   5 | import TestConnectionScreen from './src/screens/TestConnectionScreen';\n   6 |\n>  7 | type RootStackParamList = {\n     |     ^\n   8 |   TestConnection: undefined;\n   9 | };\n  10 |","importStack":null,"filename":"App.tsx","targetModuleName":null,"originModulePath":null}
+{"_e":"metro:bundling:started","_t":1784226658012,"id":"3","platform":"web","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1784226658013,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784226658015,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784226658148,"id":"3","progress":0.820805025933231,"total":234,"current":212}
+{"_e":"metro:bundling:failed","_t":1784226658165,"id":"3","message":"SyntaxError: C:\\Users\\Admin\\Downloads\\CampusConnect\\mobile\\App.tsx: Missing semicolon. (7:4)\n\n   5 | import TestConnectionScreen from './src/screens/TestConnectionScreen';\n   6 |\n>  7 | type RootStackParamList = {\n     |     ^\n   8 |   TestConnection: undefined;\n   9 | };\n  10 |","importStack":null,"filename":"App.tsx","targetModuleName":null,"originModulePath":null}
+{"_e":"metro:bundling:started","_t":1784226659336,"id":"5","platform":"web","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1784226659336,"id":"5","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784226659337,"id":"5","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784226659437,"id":"5","progress":0.5911578853684585,"total":212,"current":163}
+{"_e":"metro:bundling:failed","_t":1784226659507,"id":"5","message":"SyntaxError: C:\\Users\\Admin\\Downloads\\CampusConnect\\mobile\\App.tsx: Missing semicolon. (7:4)\n\n   5 | import TestConnectionScreen from './src/screens/TestConnectionScreen';\n   6 |\n>  7 | type RootStackParamList = {\n     |     ^\n   8 |   TestConnection: undefined;\n   9 | };\n  10 |","importStack":null,"filename":"App.tsx","targetModuleName":null,"originModulePath":null}
+{"_e":"root:init","_t":1784227362420,"format":"v0-jsonl","version":"57.0.8"}
+{"_e":"env:mode","_t":1784227362421,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1784227362425,"mode":"development","files":["../..\\..\\.env"],"env":{}}
+{"_e":"devserver:start","_t":1784227362837,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1784227363552,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1784227364004,"plugins":[]}
+{"_e":"metro:instantiate","_t":1784227371637,"atlas":false,"workers":8,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1784227372257,"id":"1","platform":"web","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1784227372257,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784227372262,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784227372362,"id":"1","progress":0.0021301775147928997,"total":65,"current":3}
+{"_e":"metro:bundling:progress","_t":1784227372463,"id":"1","progress":0.1847491535857187,"total":114,"current":49}
+{"_e":"metro:bundling:progress","_t":1784227372562,"id":"1","progress":0.5089604402141582,"total":164,"current":117}
+{"_e":"metro:bundling:progress","_t":1784227372662,"id":"1","progress":0.7807855231866825,"total":232,"current":205}
+{"_e":"metro:bundling:progress","_t":1784227372775,"id":"1","progress":0.9923224852071006,"total":260,"current":259}
+{"_e":"metro:bundling:failed","_t":1784227373174,"id":"1","message":"SyntaxError: C:\\Users\\Admin\\Downloads\\CampusConnect\\mobile\\App.tsx: Missing semicolon. (7:4)\n\n   5 | import TestConnectionScreen from './src/screens/TestConnectionScreen';\n   6 |\n>  7 | type RootStackParamList = {\n     |     ^\n   8 |   TestConnection: undefined;\n   9 | };\n  10 |","importStack":null,"filename":"App.tsx","targetModuleName":null,"originModulePath":null}
+{"_e":"metro:bundling:started","_t":1784227584216,"id":"3","platform":"web","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1784227584216,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784227584219,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784227584319,"id":"3","progress":0.6383515782761187,"total":194,"current":155}
+{"_e":"metro:bundling:progress","_t":1784227584419,"id":"3","progress":0.9770562130177516,"total":260,"current":257}
+{"_e":"metro:bundling:failed","_t":1784227584422,"id":"3","message":"SyntaxError: C:\\Users\\Admin\\Downloads\\CampusConnect\\mobile\\App.tsx: Missing semicolon. (7:4)\n\n   5 | import TestConnectionScreen from './src/screens/TestConnectionScreen';\n   6 |\n>  7 | type RootStackParamList = {\n     |     ^\n   8 |   TestConnection: undefined;\n   9 | };\n  10 |","importStack":null,"filename":"App.tsx","targetModuleName":null,"originModulePath":null}
+{"_e":"root:init","_t":1784227660254,"format":"v0-jsonl","version":"57.0.8"}
+{"_e":"env:mode","_t":1784227660256,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1784227660262,"mode":"development","files":["../..\\..\\.env"],"env":{}}
+{"_e":"devserver:start","_t":1784227660738,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1784227661600,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1784227662212,"plugins":[]}
+{"_e":"metro:instantiate","_t":1784227671297,"atlas":false,"workers":8,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1784227671938,"id":"1","platform":"web","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1784227671938,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784227671944,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:failed","_t":1784227671955,"id":"1","message":"Cannot read properties of undefined (reading 'transformFile')","importStack":null,"filename":null,"targetModuleName":null,"originModulePath":null}
+{"_e":"metro:bundling:started","_t":1784227678325,"id":"3","platform":"web","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1784227678326,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784227678328,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:failed","_t":1784227678332,"id":"3","message":"Cannot read properties of undefined (reading 'transformFile')","importStack":null,"filename":null,"targetModuleName":null,"originModulePath":null}
+{"_e":"metro:bundling:started","_t":1784227679932,"id":"5","platform":"web","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1784227679932,"id":"5","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784227679933,"id":"5","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:failed","_t":1784227679935,"id":"5","message":"Cannot read properties of undefined (reading 'transformFile')","importStack":null,"filename":null,"targetModuleName":null,"originModulePath":null}
+{"_e":"root:init","_t":1784228025052,"format":"v0-jsonl","version":"57.0.8"}
+{"_e":"env:mode","_t":1784228025053,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1784228025058,"mode":"development","files":["../..\\..\\.env"],"env":{}}
+{"_e":"devserver:start","_t":1784228025494,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1784228026227,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1784228026793,"plugins":[]}
+{"_e":"metro:instantiate","_t":1784228034758,"atlas":false,"workers":8,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1784228035462,"id":"1","platform":"web","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1784228035463,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784228035470,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:failed","_t":1784228035487,"id":"1","message":"Cannot read properties of undefined (reading 'transformFile')","importStack":null,"filename":null,"targetModuleName":null,"originModulePath":null}
+{"_e":"metro:bundling:started","_t":1784228042209,"id":"3","platform":"web","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1784228042209,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784228042210,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:failed","_t":1784228042212,"id":"3","message":"Cannot read properties of undefined (reading 'transformFile')","importStack":null,"filename":null,"targetModuleName":null,"originModulePath":null}
+{"_e":"root:init","_t":1784228373117,"format":"v0-jsonl","version":"57.0.8"}
+{"_e":"env:mode","_t":1784228373120,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1784228373130,"mode":"development","files":["../..\\..\\.env"],"env":{}}
+{"_e":"devserver:start","_t":1784228389649,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1784228390813,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1784228391656,"plugins":[]}
+{"_e":"metro:bundling:started","_t":1784228401711,"id":"6","platform":"web","environment":null,"entry":"index.js"}
+{"_e":"metro:instantiate","_t":1784228403155,"atlas":false,"workers":8,"host":"::","port":8082}
+{"_e":"metro:bundling:started","_t":1784228403610,"id":"1","platform":"web","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1784228403610,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784228403617,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:failed","_t":1784228403634,"id":"1","message":"Cannot read properties of undefined (reading 'transformFile')","importStack":null,"filename":null,"targetModuleName":null,"originModulePath":null}
+{"_e":"metro:bundling:progress","_t":1784228401712,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:started","_t":1784228409141,"id":"3","platform":"web","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1784228409141,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784228409143,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:failed","_t":1784228409148,"id":"3","message":"Cannot read properties of undefined (reading 'transformFile')","importStack":null,"filename":null,"targetModuleName":null,"originModulePath":null}
+{"_e":"metro:bundling:started","_t":1784228410385,"id":"5","platform":"web","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1784228410385,"id":"5","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784228410386,"id":"5","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:failed","_t":1784228410390,"id":"5","message":"Cannot read properties of undefined (reading 'transformFile')","importStack":null,"filename":null,"targetModuleName":null,"originModulePath":null}
+{"_e":"metro:bundling:progress","_t":1784228415391,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:failed","_t":1784228415399,"id":"6","message":"Cannot read properties of undefined (reading 'transformFile')","importStack":null,"filename":null,"targetModuleName":null,"originModulePath":null}
+{"_e":"root:init","_t":1784228451969,"format":"v0-jsonl","version":"57.0.8"}
+{"_e":"env:mode","_t":1784228451972,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1784228451981,"mode":"development","files":["../..\\..\\.env"],"env":{}}
+{"_e":"devserver:start","_t":1784228472093,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1784228472928,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1784228473419,"plugins":[]}
+{"_e":"metro:instantiate","_t":1784228482358,"atlas":false,"workers":8,"host":"::","port":8083}
+{"_e":"metro:bundling:started","_t":1784228482751,"id":"1","platform":"web","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1784228482752,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784228482761,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:failed","_t":1784228482779,"id":"1","message":"Cannot read properties of undefined (reading 'transformFile')","importStack":null,"filename":null,"targetModuleName":null,"originModulePath":null}
+{"_e":"metro:bundling:started","_t":1784228550332,"id":"3","platform":"web","environment":null,"entry":"index.js"}
+{"_e":"metro:bundling:progress","_t":1784228550332,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1784228550333,"id":"3","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:failed","_t":1784228550339,"id":"3","message":"Cannot read properties of undefined (reading 'transformFile')","importStack":null,"filename":null,"targetModuleName":null,"originModulePath":null}

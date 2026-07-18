@@ -1,3 +1,4 @@
 com\campusconnect\config\SecurityConfig.class
 com\campusconnect\CampusConnectApplication.class
+com\campusconnect\controller\UserController.class
 com\campusconnect\controller\TestController.class

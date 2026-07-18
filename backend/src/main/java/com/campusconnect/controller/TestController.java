@@ -13,6 +13,15 @@ public class TestController {
 
     @GetMapping("/connection")
     public ResponseEntity<Map<String, String>> connection() {
-        return ResponseEntity.ok(Map.of("status", "CONNECTED"));
+        return ResponseEntity.ok(Map.of(
+            "status", "CONNECTED",
+            "message", "Frontend successfully connected to the backend",
+            "database", "MySQL"
+        ));
+    }
+
+    @GetMapping("/hello")
+    public ResponseEntity<String> hello() {
+        return ResponseEntity.ok("Hello from CampusConnect Backend! 👋");
     }
 }

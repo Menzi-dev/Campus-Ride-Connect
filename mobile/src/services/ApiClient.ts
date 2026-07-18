@@ -1,23 +1,38 @@
 import axios from 'axios';
 import type { AxiosInstance } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 // =============================================
-// CHOOSE YOUR API URL BASED ON TESTING DEVICE
+// AUTO-DETECT API URL BASED ON PLATFORM
 // =============================================
 
-// OPTION 1: Android Emulator
-const API_BASE_URL = 'http://10.0.2.2:8080/api';
+const getApiBaseUrl = (): string => {
+    // Web browser should use localhost so the browser can reach the local backend.
+    if (typeof window !== 'undefined' && typeof window.location !== 'undefined') {
+        return 'http://localhost:8080/api';
+    }
 
-// OPTION 2: Physical Device (replace with your IP)
-// const API_BASE_URL = 'http://192.168.1.100:8080/api';
+    // React Native - Android Emulator
+    if (Platform.OS === 'android') {
+        return 'http://10.0.2.2:8080/api';
+    }
 
-// OPTION 3: iOS Simulator
-// const API_BASE_URL = 'http://localhost:8080/api';
+    // React Native - iOS Simulator
+    if (Platform.OS === 'ios') {
+        return 'http://localhost:8080/api';
+    }
+
+    // Fallback (physical device - you need to set your IP)
+    // return 'http://192.168.1.100:8080/api';
+    return 'http://localhost:8080/api';
+};
 
 // =============================================
 // AXIOS CLIENT CONFIGURATION
 // =============================================
+
+const API_BASE_URL = getApiBaseUrl();
 
 const apiClient: AxiosInstance = axios.create({
     baseURL: API_BASE_URL,
@@ -56,5 +71,8 @@ apiClient.interceptors.response.use(
         return Promise.reject(error);
     }
 );
+
+// Log the API URL being used (helpful for debugging)
+console.log(`🌐 API Client using base URL: ${API_BASE_URL}`);
 
 export default apiClient;

@@ -19,7 +19,7 @@ const TestConnectionScreen = () => {
     const testConnection = async () => {
         setLoading(true);
         try {
-            const response = await apiClient.get('/test/connection');
+            const response = await apiClient.get('/api/test/connection');
             setConnectionStatus(`✅ ${response.data.status} - ${response.data.message}`);
             Alert.alert('Success', `Connected to ${response.data.database}`);
         } catch (error: any) {
@@ -33,7 +33,7 @@ const TestConnectionScreen = () => {
     const testHello = async () => {
         setLoading(true);
         try {
-            const response = await apiClient.get('/test/hello');
+            const response = await apiClient.get('/api/test/hello');
             setBackendMessage(response.data);
         } catch (error: any) {
             Alert.alert('Error', error.message);
@@ -45,8 +45,8 @@ const TestConnectionScreen = () => {
     const getUsers = async () => {
         setLoading(true);
         try {
-            const response = await apiClient.get('/users');
-            setUsers(response.data);
+            const response = await apiClient.get('/api/users');
+            setUsers(Array.isArray(response.data) ? response.data : []);
         } catch (error: any) {
             Alert.alert('Error', error.message);
         } finally {

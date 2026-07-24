@@ -4,7 +4,34 @@
     "slug": "campusconnect",
     "version": "1.0.0",
     "sdkVersion": "57.0.0",
-    "platforms": ["ios", "android", "web"],
-    "assetBundlePatterns": ["**/*"]
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "infoPlist": {
+        "NSCameraUsageDescription": "We use your camera to verify your identity before rides."
+      }
+    },
+    "android": {
+      "permissions": [
+        "CAMERA",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.anonymous.campusconnect"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "We use your camera to verify your identity before rides."
+        }
+      ]
+    ]
   }
 }

@@ -4,7 +4,6 @@ import {
     Text,
     StyleSheet,
     TouchableOpacity,
-    ScrollView,
     ActivityIndicator,
     Alert,
 } from 'react-native';
@@ -19,7 +18,7 @@ const TestConnectionScreen = () => {
     const testConnection = async () => {
         setLoading(true);
         try {
-            const response = await apiClient.get('/api/test/connection');
+            const response = await apiClient.get('/test/connection');
             setConnectionStatus(`✅ ${response.data.status} - ${response.data.message}`);
             Alert.alert('Success', `Connected to ${response.data.database}`);
         } catch (error: any) {
@@ -33,7 +32,7 @@ const TestConnectionScreen = () => {
     const testHello = async () => {
         setLoading(true);
         try {
-            const response = await apiClient.get('/api/test/hello');
+            const response = await apiClient.get('/hello');
             setBackendMessage(response.data);
         } catch (error: any) {
             Alert.alert('Error', error.message);
@@ -45,7 +44,7 @@ const TestConnectionScreen = () => {
     const getUsers = async () => {
         setLoading(true);
         try {
-            const response = await apiClient.get('/api/users');
+            const response = await apiClient.get('/users');
             setUsers(Array.isArray(response.data) ? response.data : []);
         } catch (error: any) {
             Alert.alert('Error', error.message);
@@ -55,7 +54,7 @@ const TestConnectionScreen = () => {
     };
 
     return (
-        <ScrollView style={styles.container}>
+        <View style={styles.container}>
             <Text style={styles.title}>🔗 Backend Connection Test</Text>
 
             {/* Connection Status */}
@@ -121,7 +120,7 @@ const TestConnectionScreen = () => {
                 Make sure your backend is running at: {'\n'}
                 http://10.0.2.2:8080 (Android Emulator)
             </Text>
-        </ScrollView>
+        </View>
     );
 };
 

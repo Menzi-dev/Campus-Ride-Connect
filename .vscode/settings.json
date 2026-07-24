@@ -4,5 +4,6 @@
     "backend/src/test/java"
   ],
   "java.project.outputPath": "backend/target/classes",
-  "java.configuration.updateBuildConfiguration": "automatic"
+  "java.configuration.updateBuildConfiguration": "automatic",
+  "java.compile.nullAnalysis.mode": "automatic"
 }

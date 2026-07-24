@@ -1,78 +1,94 @@
-import axios from 'axios';
-import type { AxiosInstance } from 'axios';
+import axios, { AxiosRequestHeaders } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-// =============================================
-// AUTO-DETECT API URL BASED ON PLATFORM
-// =============================================
+// ---------------------------------------------------------------------------
+// IMPORTANT: point this at wherever your Spring Boot backend is running.
+//
+// - Android emulator     -> 10.0.2.2 maps to your computer's localhost
+// - iOS simulator / web  -> localhost works directly
+// - Physical phone        -> use your computer's LAN IP, e.g. 10.3.0.116
+//   (run `ipconfig` on Windows / `ifconfig` on Mac to find it; phone and
+//   laptop must be on the same Wi-Fi network)
+// ---------------------------------------------------------------------------
+const LOCAL_IP: string = ''; // Set this only for a real physical device. Leave empty for emulators.
+const PORT = 8080;
 
-const getApiBaseUrl = (): string => {
-    // Web browser should use localhost so the browser can reach the local backend.
-    if (typeof window !== 'undefined' && typeof window.location !== 'undefined') {
-        return 'http://localhost:8080/api';
-    }
+const getHostChoices = () => {
+  if (LOCAL_IP) {
+    return [LOCAL_IP];
+  }
 
-    // React Native - Android Emulator
-    if (Platform.OS === 'android') {
-        return 'http://10.0.2.2:8080/api';
-    }
+  if (Platform.OS === 'android') {
+    return ['10.0.2.2', 'localhost', '127.0.0.1'];
+  }
 
-    // React Native - iOS Simulator
-    if (Platform.OS === 'ios') {
-        return 'http://localhost:8080/api';
-    }
+  if (Platform.OS === 'web') {
+    const webHost = typeof window !== 'undefined' && window.location.hostname
+      ? window.location.hostname
+      : 'localhost';
+    return [webHost, 'localhost', '127.0.0.1', '10.0.2.2'];
+  }
 
-    // Fallback (physical device - you need to set your IP)
-    // return 'http://192.168.1.100:8080/api';
-    return 'http://localhost:8080/api';
+  // iOS simulator uses localhost; a real iPhone should use LOCAL_IP.
+  return ['localhost', '127.0.0.1'];
 };
 
-// =============================================
-// AXIOS CLIENT CONFIGURATION
-// =============================================
+const hostChoices = getHostChoices();
+const baseURL = `http://${hostChoices[0]}:${PORT}/api`;
+console.log('[ApiClient] primary baseURL =', baseURL);
+console.log('[ApiClient] host choices =', hostChoices.join(', '));
 
-const API_BASE_URL = getApiBaseUrl();
-
-const apiClient: AxiosInstance = axios.create({
-    baseURL: API_BASE_URL,
-    headers: {
-        'Content-Type': 'application/json',
-    },
-    timeout: 10000,
+const apiClient = axios.create({
+  baseURL,
+  timeout: 10000,
 });
 
-// Add token to every request (for authenticated endpoints)
-apiClient.interceptors.request.use(
-    async (config) => {
-        try {
-            const token = await AsyncStorage.getItem('authToken');
-            if (token) {
-                config.headers.Authorization = `Bearer ${token}`;
-            }
-            return config;
-        } catch (error) {
-            console.error('Error adding token:', error);
-            return config;
-        }
-    },
-    (error) => Promise.reject(error)
-);
+const isNetworkError = (error: any) => {
+  return !error.response && error.request;
+};
 
-// Handle response errors
 apiClient.interceptors.response.use(
-    (response) => response,
-    async (error) => {
-        if (error.response?.status === 401) {
-            // Token expired - redirect to login
-            await AsyncStorage.removeItem('authToken');
-            // Navigate to login (handled in App.tsx)
-        }
-        return Promise.reject(error);
+  (response) => response,
+  async (error) => {
+    const config = error.config;
+    if (config && isNetworkError(error)) {
+      config.__retryCount = config.__retryCount || 0;
+
+      if (config.__retryCount < hostChoices.length - 1) {
+        config.__retryCount += 1;
+        const nextHost = hostChoices[config.__retryCount];
+        config.baseURL = `http://${nextHost}:${PORT}/api`;
+        console.log(`[ApiClient] retrying request with host: ${nextHost}`);
+        return apiClient.request(config);
+      }
     }
+
+    if (error.response?.status === 401) {
+      await AsyncStorage.multiRemove(['authToken', 'user']);
+    }
+    return Promise.reject(error);
+  }
 );
 
-// Log the API URL being used (helpful for debugging)
-console.log(`🌐 API Client using base URL: ${API_BASE_URL}`);
+// Attach the JWT to every request automatically once the user is logged in
+apiClient.interceptors.request.use(async (config) => {
+  const token = await AsyncStorage.getItem('authToken');
+  
+  // Don't set Content-Type for FormData; let axios/the FormData API handle it
+  if (!(config.data instanceof FormData)) {
+    if (!config.headers['Content-Type']) {
+      config.headers['Content-Type'] = 'application/json';
+    }
+  }
+  
+  if (token) {
+    config.headers = {
+      ...(config.headers ?? {}),
+      Authorization: `Bearer ${token}`,
+    } as AxiosRequestHeaders;
+  }
+  return config;
+});
 
 export default apiClient;

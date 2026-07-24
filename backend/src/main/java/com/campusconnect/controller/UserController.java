@@ -24,13 +24,13 @@ public class UserController {
     @GetMapping
     public ResponseEntity<List<Map<String, Object>>> getAllUsers() {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
-            "SELECT user_id, full_name, email, role, status FROM users"
+            "SELECT id, full_name, email, role, status FROM users"
         );
 
         List<Map<String, Object>> users = new ArrayList<>();
         for (Map<String, Object> row : rows) {
             Map<String, Object> user = new LinkedHashMap<>();
-            user.put("id", row.get("user_id"));
+            user.put("id", row.get("id"));
             user.put("fullName", row.get("full_name"));
             user.put("email", row.get("email"));
             user.put("role", row.get("role"));

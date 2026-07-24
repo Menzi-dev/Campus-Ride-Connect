@@ -17,5 +17,8 @@
     "App.tsx",
     "index.js"
   ],
+  "exclude": [
+    "node_modules"
+  ],
   "extends": "expo/tsconfig.base"
 }

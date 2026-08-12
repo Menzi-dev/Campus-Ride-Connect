@@ -91,11 +91,18 @@ export default function LoginScreen() {
       return;
     }
 
+    const normalizedEmail = trimmedEmail.toLowerCase();
+    const isAdminEmail = normalizedEmail === 'admin@spu.ac.za';
+
+    if (isAdminEmail && password !== 'admin12345') {
+      showToast('Admin must sign in with admin@spu.ac.za and password admin12345', 'red');
+      return;
+    }
+
     setLoading(true);
     try {
-      // Real call to your backend — adjust path/payload if your controller differs.
       const response = await apiClient.post('/auth/login', {
-        email: trimmedEmail.toLowerCase(),
+        email: normalizedEmail,
         password,
       });
 

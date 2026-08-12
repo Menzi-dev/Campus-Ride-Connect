@@ -61,6 +61,9 @@ type RootStackParamList = {
   Landing: undefined;
   Login: undefined;
   CreateAccount: undefined;
+  AdminDashboard: undefined;
+  DriverDashboard: undefined;
+  SecurityDashboard: undefined;
   Home: undefined;
 };
 
@@ -574,7 +577,20 @@ export default function CreateAccountScreen() {
 
       showToast('Account created and verified!', 'green');
       setTimeout(() => {
-        navigation.replace(response.data?.token ? 'Home' : 'Login');
+        const role = response.data?.user?.role;
+        switch (role) {
+          case 'ADMIN':
+            navigation.replace('AdminDashboard');
+            break;
+          case 'DRIVER':
+            navigation.replace('DriverDashboard');
+            break;
+          case 'SECURITY':
+            navigation.replace('SecurityDashboard');
+            break;
+          default:
+            navigation.replace(response.data?.token ? 'Home' : 'Login');
+        }
       }, 600);
     } catch (error: any) {
       console.error('Registration error details:', {

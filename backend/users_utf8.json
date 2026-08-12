@@ -1,0 +1,118 @@
+﻿{
+    "value":  [
+                  {
+                      "id":  1,
+                      "fullName":  "Admin User",
+                      "email":  "admin@campusconnect.com",
+                      "role":  "ADMIN",
+                      "status":  "ACTIVE"
+                  },
+                  {
+                      "id":  2,
+                      "fullName":  "Security Officer",
+                      "email":  "security@campusconnect.com",
+                      "role":  "SECURITY",
+                      "status":  "ACTIVE"
+                  },
+                  {
+                      "id":  3,
+                      "fullName":  "Thabo Nkosi",
+                      "email":  "thabo.nkosi@spu.ac.za",
+                      "role":  "RIDER",
+                      "status":  "ACTIVE"
+                  },
+                  {
+                      "id":  4,
+                      "fullName":  "Sanele Dlomo",
+                      "email":  "sanele.dlomo@spu.ac.za",
+                      "role":  "RIDER",
+                      "status":  "ACTIVE"
+                  },
+                  {
+                      "id":  5,
+                      "fullName":  "Zanele Mthembu",
+                      "email":  "zanele.mthembu@spu.ac.za",
+                      "role":  "RIDER",
+                      "status":  "ACTIVE"
+                  },
+                  {
+                      "id":  6,
+                      "fullName":  "Menzi Sigwebela",
+                      "email":  "menzi.sigwebela@spu.ac.za",
+                      "role":  "DRIVER",
+                      "status":  "ACTIVE"
+                  },
+                  {
+                      "id":  7,
+                      "fullName":  "Brilliant Sifunda",
+                      "email":  "brilliant.sifunda@spu.ac.za",
+                      "role":  "DRIVER",
+                      "status":  "ACTIVE"
+                  },
+                  {
+                      "id":  8,
+                      "fullName":  "Khumbudzo Munzhelele",
+                      "email":  "khumbudzo.munzhelele@spu.ac.za",
+                      "role":  "DRIVER",
+                      "status":  "ACTIVE"
+                  },
+                  {
+                      "id":  9,
+                      "fullName":  "Dola Nondaba",
+                      "email":  "dola.Nondaba@spu.ac.za",
+                      "role":  "DRIVER",
+                      "status":  "ACTIVE"
+                  },
+                  {
+                      "id":  10,
+                      "fullName":  "Live Test User 2",
+                      "email":  "livetest2@spu.ac.za",
+                      "role":  "RIDER",
+                      "status":  "ACTIVE"
+                  },
+                  {
+                      "id":  11,
+                      "fullName":  "Test",
+                      "email":  "test@spu.ac.za",
+                      "role":  "RIDER",
+                      "status":  "ACTIVE"
+                  },
+                  {
+                      "id":  12,
+                      "fullName":  "TestDriver",
+                      "email":  "testdriver@spu.ac.za",
+                      "role":  "DRIVER",
+                      "status":  "ACTIVE"
+                  },
+                  {
+                      "id":  13,
+                      "fullName":  "sanele",
+                      "email":  "sanele@spu.ac.za",
+                      "role":  "RIDER",
+                      "status":  "ACTIVE"
+                  },
+                  {
+                      "id":  14,
+                      "fullName":  "Menzi Nondaba",
+                      "email":  "menzi@spu.ac.za",
+                      "role":  "RIDER",
+                      "status":  "ACTIVE"
+                  },
+                  {
+                      "id":  15,
+                      "fullName":  "Dollar",
+                      "email":  "dollar@spu.ac.za",
+                      "role":  "RIDER",
+                      "status":  "ACTIVE"
+                  },
+                  {
+                      "id":  16,
+                      "fullName":  "University Admin",
+                      "email":  "admin@spu.ac.za",
+                      "role":  "ADMIN",
+                      "status":  "ACTIVE"
+                  }
+              ],
+    "Count":  16
+}
+

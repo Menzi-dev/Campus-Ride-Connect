@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS rides (
     distance_km         DECIMAL(5,2),
     status              ENUM('PENDING', 'ACTIVE', 'COMPLETED', 'CANCELLED') DEFAULT 'PENDING',
     created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_rides_rider FOREIGN KEY (rider_id) REFERENCES users(id)
+    CONSTRAINT fk_rides_rider FOREIGN KEY (rider_id) REFERENCES users(user_id)
 );
 
 -- No seed users here on purpose: BCrypt hashes are salted per-generation, so

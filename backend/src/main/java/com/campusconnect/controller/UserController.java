@@ -24,7 +24,7 @@ public class UserController {
     @GetMapping
     public ResponseEntity<List<Map<String, Object>>> getAllUsers() {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
-            "SELECT id, full_name, email, role, status FROM users"
+            "SELECT user_id AS id, full_name, email, role, status FROM users"
         );
 
         List<Map<String, Object>> users = new ArrayList<>();

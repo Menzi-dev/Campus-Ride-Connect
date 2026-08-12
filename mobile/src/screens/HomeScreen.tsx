@@ -65,7 +65,7 @@ if (Platform.OS === 'web') {
     Polyline = ReactLeaflet.Polyline;
     useMap = ReactLeaflet.useMap;
     ZoomControl = ReactLeaflet.ZoomControl;
-    
+
     delete L.Icon.Default.prototype._getIconUrl;
     L.Icon.Default.mergeOptions({
       iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
@@ -92,111 +92,60 @@ type CampusLocation = {
   category?: string;
 };
 
-// SPU Kimberley Campus locations with categories
+// SPU Kimberley Campus locations (internal building presets - not available on
+// public map data, so these stay curated). Double-check these coordinates
+// against the actual campus building GPS pins when you get a chance.
 const CAMPUS_LOCATIONS: CampusLocation[] = [
-  { 
-    name: 'Library Complex', 
+  {
+    name: 'Library Complex',
     coords: { latitude: -28.7411, longitude: 24.7685 },
     address: 'Library Road, Kimberley',
-    category: 'Academic'
+    category: 'Academic',
   },
-  { 
-    name: 'Main Lecture Block', 
+  {
+    name: 'Main Lecture Block',
     coords: { latitude: -28.7420, longitude: 24.7695 },
     address: 'Academic Avenue, Kimberley',
-    category: 'Academic'
+    category: 'Academic',
   },
-  { 
-    name: 'Residence Block D', 
+  {
+    name: 'Residence Block D',
     coords: { latitude: -28.7435, longitude: 24.7705 },
     address: 'Residence Street, Kimberley',
-    category: 'Residence'
+    category: 'Residence',
   },
-  { 
-    name: 'Sports Complex', 
+  {
+    name: 'Sports Complex',
     coords: { latitude: -28.7445, longitude: 24.7715 },
     address: 'Sports Road, Kimberley',
-    category: 'Recreation'
+    category: 'Recreation',
   },
-  { 
-    name: 'Student Village', 
+  {
+    name: 'Student Village',
     coords: { latitude: -28.7455, longitude: 24.7725 },
     address: 'Village Drive, Kimberley',
-    category: 'Residence'
+    category: 'Residence',
   },
-  { 
-    name: 'Cafeteria', 
+  {
+    name: 'Cafeteria',
     coords: { latitude: -28.7465, longitude: 24.7735 },
     address: 'Food Court Lane, Kimberley',
-    category: 'Dining'
+    category: 'Dining',
   },
-  { 
-    name: 'Main Gate', 
+  {
+    name: 'Main Gate',
     coords: { latitude: -28.7480, longitude: 24.7750 },
     address: 'Entrance Road, Kimberley',
-    category: 'Entrance'
+    category: 'Entrance',
   },
 ];
-
-// Additional places around Kimberley
-const KIMBERLEY_PLACES: CampusLocation[] = [
-  {
-    name: 'Kimberley City Mall',
-    coords: { latitude: -28.7350, longitude: 24.7650 },
-    address: 'Kimberley, 8301',
-    category: 'Shopping'
-  },
-  {
-    name: 'Kimberley Airport',
-    coords: { latitude: -28.8028, longitude: 24.7656 },
-    address: 'Kimberley, 8301',
-    category: 'Transport'
-  },
-  {
-    name: 'Kimberley Hospital',
-    coords: { latitude: -28.7500, longitude: 24.7700 },
-    address: 'Kimberley, 8301',
-    category: 'Medical'
-  },
-  {
-    name: 'Big Hole Museum',
-    coords: { latitude: -28.7383, longitude: 24.7657 },
-    address: 'Kimberley, 8301',
-    category: 'Tourism'
-  },
-  {
-    name: 'McGregor Museum',
-    coords: { latitude: -28.7425, longitude: 24.7625 },
-    address: 'Kimberley, 8301',
-    category: 'Tourism'
-  },
-  {
-    name: 'Flamingo Casino',
-    coords: { latitude: -28.7400, longitude: 24.7600 },
-    address: 'Kimberley, 8301',
-    category: 'Entertainment'
-  },
-  {
-    name: 'Kimberley Golf Club',
-    coords: { latitude: -28.7550, longitude: 24.7750 },
-    address: 'Kimberley, 8301',
-    category: 'Recreation'
-  },
-  {
-    name: 'North Cape Mall',
-    coords: { latitude: -28.7320, longitude: 24.7620 },
-    address: 'Kimberley, 8301',
-    category: 'Shopping'
-  },
-];
-
-// Combine all locations
-const ALL_LOCATIONS = [...CAMPUS_LOCATIONS, ...KIMBERLEY_PLACES];
 
 const FALLBACK_REGION: Coords = { latitude: -28.7440, longitude: 24.7720 };
 
-const ORS_API_KEY = '5b3ce3597851110001cf62481363dc8ac1b647038392e5667a381499';
-const ORS_BASE_URL = 'https://api.openrouteservice.org/v2';
+// Public, keyless routing/geocoding endpoints
+const OSRM_ROUTE_URL = 'https://router.project-osrm.org/route/v1/driving';
+const PHOTON_SEARCH_URL = 'https://photon.komoot.io/api/';
+const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 
 function distanceKm(a: Coords, b: Coords): number {
   const R = 6371;
@@ -209,43 +158,127 @@ function distanceKm(a: Coords, b: Coords): number {
   return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
+function capitalize(s: string): string {
+  if (!s) return '';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function formatOsmCategory(tags: Record<string, string>): string {
+  if (tags.amenity) return capitalize(tags.amenity.replace(/_/g, ' '));
+  if (tags.shop) return capitalize(tags.shop.replace(/_/g, ' '));
+  if (tags.tourism) return capitalize(tags.tourism.replace(/_/g, ' '));
+  if (tags.aeroway) return 'Airport';
+  return 'Place';
+}
+
+// Live text search for any real place (used while typing in the destination box).
+// Backed by Photon (OpenStreetMap data), biased toward the user's current location.
+async function searchPlacesByText(query: string, bias: Coords): Promise<CampusLocation[]> {
+  try {
+    const url = `${PHOTON_SEARCH_URL}?q=${encodeURIComponent(query)}&lat=${bias.latitude}&lon=${bias.longitude}&limit=12`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Search request failed');
+    const data = await response.json();
+
+    const seen = new Set<string>();
+    const results: CampusLocation[] = [];
+
+    for (const feature of data.features || []) {
+      const props = feature.properties || {};
+      const name = props.name;
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+
+      const [lon, lat] = feature.geometry.coordinates;
+      const addressParts = [props.street, props.district, props.city, props.state].filter(Boolean);
+
+      results.push({
+        name,
+        coords: { latitude: lat, longitude: lon },
+        address: addressParts.length ? addressParts.join(', ') : (props.country || 'South Africa'),
+        category: props.osm_value
+          ? capitalize(String(props.osm_value).replace(/_/g, ' '))
+          : (props.type ? capitalize(String(props.type)) : 'Place'),
+      });
+    }
+
+    return results;
+  } catch (error) {
+    console.error('Place search error:', error);
+    return [];
+  }
+}
+
+// Real nearby points of interest around a location (used for the default
+// "suggested near you" list before the user types anything).
+// Backed by Overpass (OpenStreetMap data).
+async function fetchNearbyPlaces(center: Coords, radiusMeters = 6000): Promise<CampusLocation[]> {
+  const query = `[out:json][timeout:25];(node["amenity"](around:${radiusMeters},${center.latitude},${center.longitude});node["shop"](around:${radiusMeters},${center.latitude},${center.longitude});node["tourism"](around:${radiusMeters},${center.latitude},${center.longitude});node["aeroway"="aerodrome"](around:${radiusMeters},${center.latitude},${center.longitude}););out body 80;`;
+
+  try {
+    const response = await fetch(OVERPASS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: query,
+    });
+    if (!response.ok) throw new Error('Overpass request failed');
+    const data = await response.json();
+
+    const seen = new Set<string>();
+    const places: (CampusLocation & { distance: number })[] = [];
+
+    for (const el of data.elements || []) {
+      const name = el.tags?.name;
+      if (!name || seen.has(name)) continue;
+      if (typeof el.lat !== 'number' || typeof el.lon !== 'number') continue;
+      seen.add(name);
+
+      const coords = { latitude: el.lat, longitude: el.lon };
+      places.push({
+        name,
+        coords,
+        address: el.tags['addr:street']
+          ? `${el.tags['addr:housenumber'] ? el.tags['addr:housenumber'] + ' ' : ''}${el.tags['addr:street']}, Kimberley`
+          : 'Kimberley, Northern Cape',
+        category: formatOsmCategory(el.tags),
+        distance: distanceKm(center, coords),
+      });
+    }
+
+    return places.sort((a, b) => a.distance - b.distance).slice(0, 25);
+  } catch (error) {
+    console.error('Nearby places error:', error);
+    return [];
+  }
+}
+
+// Real road-following route (fastest driving route) via OSRM's public routing
+// engine. No API key needed. "overview=full" returns every bend in the road
+// as a coordinate, so the line on the map curves exactly where the road curves.
 async function getRoute(start: Coords, end: Coords): Promise<{
   coordinates: RoutePoint[];
   distance: number;
   duration: number;
 }> {
   try {
-    const response = await fetch(
-      `${ORS_BASE_URL}/directions/driving-car/geojson`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': ORS_API_KEY,
-        },
-        body: JSON.stringify({
-          coordinates: [
-            [start.longitude, start.latitude],
-            [end.longitude, end.latitude]
-          ],
-          geometry: true,
-          instructions: false,
-        }),
-      }
-    );
+    const url = `${OSRM_ROUTE_URL}/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson&steps=false`;
+    const response = await fetch(url);
 
     if (!response.ok) {
       throw new Error('Failed to get route');
     }
 
     const data = await response.json();
-    const geometry = data.features[0].geometry;
-    const properties = data.features[0].properties;
-    
+    if (data.code !== 'Ok' || !data.routes?.length) {
+      throw new Error('No route found');
+    }
+
+    const route = data.routes[0];
+
     return {
-      coordinates: geometry.coordinates,
-      distance: properties.segments[0].distance / 1000,
-      duration: properties.segments[0].duration / 60,
+      coordinates: route.geometry.coordinates,
+      distance: route.distance / 1000,
+      duration: route.duration / 60,
     };
   } catch (error) {
     console.error('Routing error:', error);
@@ -280,16 +313,18 @@ function getGreeting() {
 }
 
 // Web Map Component
-const WebMap = ({ 
-  userLocation, 
-  destination, 
+const WebMap = ({
+  userLocation,
+  destination,
   routePoints,
+  places,
   onLocationSelect,
   loading,
-}: { 
-  userLocation: Coords; 
+}: {
+  userLocation: Coords;
   destination: CampusLocation | null;
   routePoints: Coords[];
+  places: CampusLocation[];
   onLocationSelect: (location: CampusLocation) => void;
   loading?: boolean;
 }) => {
@@ -396,22 +431,22 @@ const WebMap = ({
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; OpenStreetMap'
           />
-          
+
           <ZoomControl position="topright" />
-          
+
           <MapUpdater />
-          
+
           {/* User marker */}
-          <Marker 
+          <Marker
             position={[userLocation.latitude, userLocation.longitude]}
             icon={createMarkerIcon('#4CAF50', 20, '📍')}
           >
             <Popup>Your Location</Popup>
           </Marker>
-          
+
           {/* Destination marker */}
           {destination && (
-            <Marker 
+            <Marker
               position={[destination.coords.latitude, destination.coords.longitude]}
               icon={createMarkerIcon('#2196F3', 28, '🏁')}
             >
@@ -424,23 +459,26 @@ const WebMap = ({
               </Popup>
             </Marker>
           )}
-          
-          {/* Route */}
+
+          {/* Route (follows real public roads via OSRM, bends where the road bends) */}
           {routePoints.length > 1 && (
             <Polyline
               positions={routePoints.map(p => [p.latitude, p.longitude])}
               color="#2196F3"
               weight={5}
-              opacity={0.8}
+              opacity={0.85}
+              lineCap="round"
+              lineJoin="round"
+              smoothFactor={1}
             />
           )}
-          
-          {/* All location markers */}
-          {ALL_LOCATIONS.map((loc) => {
+
+          {/* Real nearby places + campus presets */}
+          {places.map((loc) => {
             const isDestination = destination?.name === loc.name;
             return (
-              <Marker 
-                key={loc.name}
+              <Marker
+                key={`${loc.name}-${loc.coords.latitude}-${loc.coords.longitude}`}
                 position={[loc.coords.latitude, loc.coords.longitude]}
                 icon={isDestination ? createMarkerIcon('#2196F3', 28, '🏁') : createMarkerIcon('#9E9E9E', 14, '•')}
                 eventHandlers={{
@@ -457,7 +495,7 @@ const WebMap = ({
               </Marker>
             );
           })}
-          
+
           {loading && (
             <div style={{
               position: 'absolute',
@@ -515,10 +553,16 @@ export default function HomeScreen() {
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
   const [routeDuration, setRouteDuration] = useState<number | null>(null);
   const [routing, setRouting] = useState(false);
+
+  // Real search + real nearby places state
   const [searchResults, setSearchResults] = useState<CampusLocation[]>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [nearbyPlaces, setNearbyPlaces] = useState<CampusLocation[]>([]);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
@@ -537,6 +581,20 @@ export default function HomeScreen() {
     detectLocation();
   }, []);
 
+  // Clean up any pending debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, []);
+
+  const loadNearbyPlaces = async (coords: Coords) => {
+    setNearbyLoading(true);
+    const places = await fetchNearbyPlaces(coords);
+    setNearbyPlaces(places);
+    setNearbyLoading(false);
+  };
+
   const detectLocation = async () => {
     setLocating(true);
     try {
@@ -544,12 +602,14 @@ export default function HomeScreen() {
       if (status !== 'granted') {
         setPickupLabel('SPU Kimberley Campus');
         showToast('Location permission denied', 'red');
+        loadNearbyPlaces(userLocation);
         return;
       }
 
       const position = await Location.getCurrentPositionAsync({});
       const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude };
       setUserLocation(coords);
+      loadNearbyPlaces(coords);
 
       try {
         const [place] = await Location.reverseGeocodeAsync(coords);
@@ -561,24 +621,36 @@ export default function HomeScreen() {
     } catch (err) {
       setPickupLabel('SPU Kimberley Campus');
       showToast('Could not detect your location', 'red');
+      loadNearbyPlaces(userLocation);
     } finally {
       setLocating(false);
     }
   };
 
+  // Live search-as-you-type against real place data (debounced, like Bolt/Uber)
   const handleSearch = (text: string) => {
     setSearch(text);
-    if (text.trim().length > 1) {
-      const results = ALL_LOCATIONS.filter((loc) =>
-        loc.name.toLowerCase().includes(text.toLowerCase()) ||
-        loc.category?.toLowerCase().includes(text.toLowerCase()) ||
-        loc.address?.toLowerCase().includes(text.toLowerCase())
-      );
-      setSearchResults(results);
-      setShowSearchResults(true);
-    } else {
-      setShowSearchResults(false);
+
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
     }
+
+    const trimmed = text.trim();
+    if (trimmed.length < 2) {
+      setShowSearchResults(false);
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+
+    setShowSearchResults(true);
+    setSearchLoading(true);
+
+    searchDebounceRef.current = setTimeout(async () => {
+      const results = await searchPlacesByText(trimmed, userLocation);
+      setSearchResults(results);
+      setSearchLoading(false);
+    }, 400);
   };
 
   const handleLocationSelect = async (location: CampusLocation) => {
@@ -586,7 +658,8 @@ export default function HomeScreen() {
     setDestSheetVisible(false);
     setSearch('');
     setShowSearchResults(false);
-    
+    setSearchResults([]);
+
     setRouting(true);
     try {
       const route = await getRoute(userLocation, location.coords);
@@ -604,21 +677,30 @@ export default function HomeScreen() {
     }
   };
 
-  const filteredLocations = useMemo(() => {
-    if (showSearchResults && search.trim().length > 1) {
-      return searchResults;
-    }
-    
-    const list = ALL_LOCATIONS.map((loc) => ({
-      ...loc,
-      distance: distanceKm(userLocation, loc.coords),
-    })).sort((a, b) => a.distance - b.distance);
+  // Places shown as pins on the map: campus presets + real nearby POIs
+  const mapPlaces = useMemo(() => {
+    return [...CAMPUS_LOCATIONS, ...nearbyPlaces];
+  }, [nearbyPlaces]);
 
-    if (!search.trim()) return list.slice(0, 10);
-    return list.filter((loc) => 
-      loc.name.toLowerCase().includes(search.trim().toLowerCase())
-    );
-  }, [search, userLocation, searchResults, showSearchResults]);
+  // Places shown in the "Where to?" sheet
+  const filteredLocations = useMemo(() => {
+    if (showSearchResults) {
+      const query = search.trim().toLowerCase();
+      const campusMatches = CAMPUS_LOCATIONS.filter((loc) =>
+        loc.name.toLowerCase().includes(query)
+      );
+      return [...campusMatches, ...searchResults];
+    }
+
+    const combined = [...CAMPUS_LOCATIONS, ...nearbyPlaces]
+      .map((loc) => ({
+        ...loc,
+        distance: distanceKm(userLocation, loc.coords),
+      }))
+      .sort((a, b) => a.distance - b.distance);
+
+    return combined.slice(0, 15);
+  }, [search, userLocation, searchResults, showSearchResults, nearbyPlaces]);
 
   const tripDistanceKm = routeDistance || (destination ? distanceKm(userLocation, destination.coords) : 0);
   const fare = tripDistanceKm > 0 ? estimateFare(tripDistanceKm) : 0;
@@ -651,10 +733,11 @@ export default function HomeScreen() {
   const renderMap = () => {
     if (Platform.OS === 'web') {
       return (
-        <WebMap 
-          userLocation={userLocation} 
+        <WebMap
+          userLocation={userLocation}
           destination={destination}
           routePoints={routePoints}
+          places={mapPlaces}
           onLocationSelect={handleLocationSelect}
           loading={routing}
         />
@@ -692,8 +775,8 @@ export default function HomeScreen() {
               <View style={styles.liveDot} />
               <Text style={styles.liveBadgeText}>YOUR LOCATION</Text>
             </View>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.locateButton}
               onPress={detectLocation}
             >
@@ -754,7 +837,7 @@ export default function HomeScreen() {
                 </Text>
               </View>
               <View style={styles.routeDetailItem}>
-                <DollarSign size={16} color={colors.green} strokeWidth={2} />
+                
                 <Text style={[styles.routeDetailText, { color: colors.green, fontWeight: 'bold' }]}>
                   R {fare.toFixed(2)}
                 </Text>
@@ -802,38 +885,44 @@ export default function HomeScreen() {
           setShowSearchResults(false);
         }}
         title="Where to?"
-        subtitle="Search for places in Kimberley"
+        subtitle="Search for any real place in Kimberley"
       >
         <View style={styles.searchRow}>
           <Search size={16} color={colors.gray400} strokeWidth={2} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search campus, mall, hospital..."
+            placeholder="Search any place in Kimberley..."
             placeholderTextColor={colors.gray400}
             value={search}
             onChangeText={handleSearch}
             autoCapitalize="none"
             autoFocus={true}
           />
-          {search.length > 0 && (
+          {searchLoading && (
+            <ActivityIndicator size="small" color={colors.gray400} />
+          )}
+          {search.length > 0 && !searchLoading && (
             <TouchableOpacity onPress={() => {
               setSearch('');
               setShowSearchResults(false);
+              setSearchResults([]);
             }}>
               <X size={16} color={colors.gray400} strokeWidth={2} />
             </TouchableOpacity>
           )}
         </View>
 
-        {showSearchResults && searchResults.length > 0 && (
-          <View style={styles.categoryFilter}>
-            <Text style={styles.categoryFilterText}>Search Results ({searchResults.length})</Text>
-          </View>
-        )}
+        <View style={styles.categoryFilter}>
+          <Text style={styles.categoryFilterText}>
+            {showSearchResults
+              ? (searchLoading ? 'Searching...' : `Search results (${filteredLocations.length})`)
+              : (nearbyLoading ? 'Finding places near you...' : 'Suggested near you')}
+          </Text>
+        </View>
 
         {filteredLocations.map((loc) => (
           <TouchableOpacity
-            key={loc.name}
+            key={`${loc.name}-${loc.coords.latitude}-${loc.coords.longitude}`}
             style={[
               styles.destOption,
               destination?.name === loc.name && styles.destOptionSelected
@@ -863,10 +952,10 @@ export default function HomeScreen() {
           </TouchableOpacity>
         ))}
 
-        {filteredLocations.length === 0 && search.length > 1 && (
+        {!searchLoading && showSearchResults && filteredLocations.length === 0 && search.length > 1 && (
           <View style={styles.noResultsContainer}>
             <Text style={styles.noResults}>No places found for "{search}"</Text>
-            <Text style={styles.noResultsSub}>Try searching for campus buildings, malls, or landmarks</Text>
+            <Text style={styles.noResultsSub}>Try a different spelling, or search for a landmark, mall, or street name</Text>
           </View>
         )}
       </BottomSheetModal>
@@ -913,7 +1002,7 @@ const styles = StyleSheet.create({
   mapPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   mapPlaceholderText: { fontFamily: font.semibold, fontSize: 14, color: colors.gray500, fontWeight: '600' },
   mapPlaceholderSubtext: { fontFamily: font.regular, fontSize: 12, color: colors.gray400 },
-  
+
   liveBadge: {
     position: 'absolute',
     top: 12,
@@ -930,7 +1019,7 @@ const styles = StyleSheet.create({
   },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.green },
   liveBadgeText: { fontFamily: font.bold, fontSize: 10, fontWeight: '700', color: colors.green },
-  
+
   destinationBadge: {
     position: 'absolute',
     bottom: 12,

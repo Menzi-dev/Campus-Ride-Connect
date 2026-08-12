@@ -1,3 +1,4 @@
+// mobile/src/screens/HomeScreen.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -9,9 +10,10 @@ import {
   Platform,
   ScrollView,
   Animated,
+  Easing,
   Dimensions,
   ActivityIndicator,
-  Image,
+  Modal,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -25,16 +27,19 @@ import {
   Search,
   X,
   Car,
-  CalendarClock,
   House,
   Clock,
   CalendarDays,
   CircleUserRound,
   Route,
-  DollarSign,
   Clock as ClockIcon,
   Check,
   Navigation,
+  AlertCircle,
+  Phone,
+  MessageCircle,
+  Star,
+  AlertTriangle,
 } from 'lucide-react-native';
 import Button from '../components/Button';
 import BottomSheetModal from '../components/BottomSheetModal';
@@ -92,9 +97,7 @@ type CampusLocation = {
   category?: string;
 };
 
-// SPU Kimberley Campus locations (internal building presets - not available on
-// public map data, so these stay curated). Double-check these coordinates
-// against the actual campus building GPS pins when you get a chance.
+// SPU Kimberley Campus locations
 const CAMPUS_LOCATIONS: CampusLocation[] = [
   {
     name: 'Library Complex',
@@ -171,8 +174,6 @@ function formatOsmCategory(tags: Record<string, string>): string {
   return 'Place';
 }
 
-// Live text search for any real place (used while typing in the destination box).
-// Backed by Photon (OpenStreetMap data), biased toward the user's current location.
 async function searchPlacesByText(query: string, bias: Coords): Promise<CampusLocation[]> {
   try {
     const url = `${PHOTON_SEARCH_URL}?q=${encodeURIComponent(query)}&lat=${bias.latitude}&lon=${bias.longitude}&limit=12`;
@@ -209,9 +210,6 @@ async function searchPlacesByText(query: string, bias: Coords): Promise<CampusLo
   }
 }
 
-// Real nearby points of interest around a location (used for the default
-// "suggested near you" list before the user types anything).
-// Backed by Overpass (OpenStreetMap data).
 async function fetchNearbyPlaces(center: Coords, radiusMeters = 6000): Promise<CampusLocation[]> {
   const query = `[out:json][timeout:25];(node["amenity"](around:${radiusMeters},${center.latitude},${center.longitude});node["shop"](around:${radiusMeters},${center.latitude},${center.longitude});node["tourism"](around:${radiusMeters},${center.latitude},${center.longitude});node["aeroway"="aerodrome"](around:${radiusMeters},${center.latitude},${center.longitude}););out body 80;`;
 
@@ -252,9 +250,6 @@ async function fetchNearbyPlaces(center: Coords, radiusMeters = 6000): Promise<C
   }
 }
 
-// Real road-following route (fastest driving route) via OSRM's public routing
-// engine. No API key needed. "overview=full" returns every bend in the road
-// as a coordinate, so the line on the map curves exactly where the road curves.
 async function getRoute(start: Coords, end: Coords): Promise<{
   coordinates: RoutePoint[];
   distance: number;
@@ -436,7 +431,6 @@ const WebMap = ({
 
           <MapUpdater />
 
-          {/* User marker */}
           <Marker
             position={[userLocation.latitude, userLocation.longitude]}
             icon={createMarkerIcon('#4CAF50', 20, '📍')}
@@ -444,7 +438,6 @@ const WebMap = ({
             <Popup>Your Location</Popup>
           </Marker>
 
-          {/* Destination marker */}
           {destination && (
             <Marker
               position={[destination.coords.latitude, destination.coords.longitude]}
@@ -460,7 +453,6 @@ const WebMap = ({
             </Marker>
           )}
 
-          {/* Route (follows real public roads via OSRM, bends where the road bends) */}
           {routePoints.length > 1 && (
             <Polyline
               positions={routePoints.map(p => [p.latitude, p.longitude])}
@@ -473,7 +465,6 @@ const WebMap = ({
             />
           )}
 
-          {/* Real nearby places + campus presets */}
           {places.map((loc) => {
             const isDestination = destination?.name === loc.name;
             return (
@@ -536,15 +527,47 @@ const WebMap = ({
   }
 };
 
+// Types for ride data from backend
+type RideRequest = {
+  id: string;
+  riderId: string;
+  driverId?: string;
+  pickupLat: number;
+  pickupLng: number;
+  pickupAddress: string;
+  destinationLat: number;
+  destinationLng: number;
+  destinationAddress: string;
+  fare: number;
+  distance: number;
+  duration: number;
+  status: 'pending' | 'accepted' | 'enroute' | 'arrived' | 'started' | 'completed' | 'cancelled';
+  createdAt: string;
+  updatedAt: string;
+  driver?: {
+    id: string;
+    fullName: string;
+    rating: number;
+    vehicleMake: string;
+    vehicleModel: string;
+    licencePlate: string;
+    phone?: string;
+  };
+};
+
 export default function HomeScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
 
+  // User state
   const [firstName, setFirstName] = useState('');
+  const [userId, setUserId] = useState<string>('');
   const [userLocation, setUserLocation] = useState<Coords>(FALLBACK_REGION);
   const [pickupLabel, setPickupLabel] = useState('Detecting location...');
   const [locating, setLocating] = useState(true);
+
+  // Trip state
   const [destination, setDestination] = useState<CampusLocation | null>(null);
   const [destSheetVisible, setDestSheetVisible] = useState(false);
   const [search, setSearch] = useState('');
@@ -553,6 +576,26 @@ export default function HomeScreen() {
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
   const [routeDuration, setRouteDuration] = useState<number | null>(null);
   const [routing, setRouting] = useState(false);
+
+  // Real ride state
+  const [currentRideId, setCurrentRideId] = useState<string | null>(null);
+  const [currentRide, setCurrentRide] = useState<RideRequest | null>(null);
+
+  // Finding Drivers overlay state
+  const [findingDriversVisible, setFindingDriversVisible] = useState(false);
+  const [searchingForDriver, setSearchingForDriver] = useState(true);
+  const [driverFound, setDriverFound] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [cancelling, setCancelling] = useState(false);
+  const [driverName, setDriverName] = useState('');
+  const [driverRating, setDriverRating] = useState(0);
+  const [driverCar, setDriverCar] = useState('');
+  const [driverPlate, setDriverPlate] = useState('');
+  const [driverPhone, setDriverPhone] = useState('');
+  const [tripStatus, setTripStatus] = useState<'enroute' | 'arrived' | 'started' | 'completed'>('enroute');
+  const [timeRemaining, setTimeRemaining] = useState(0);
+  const [showActiveTrip, setShowActiveTrip] = useState(false);
+  const [pollingInterval, setPollingInterval] = useState<ReturnType<typeof setInterval> | null>(null);
 
   // Real search + real nearby places state
   const [searchResults, setSearchResults] = useState<CampusLocation[]>([]);
@@ -564,10 +607,15 @@ export default function HomeScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-  }, []);
+  // Finding drivers animations
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const driverFadeAnim = useRef(new Animated.Value(0)).current;
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const rotateLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
+  // Load user data
   useEffect(() => {
     (async () => {
       try {
@@ -575,18 +623,110 @@ export default function HomeScreen() {
         if (raw) {
           const user = JSON.parse(raw);
           if (user?.fullName) setFirstName(user.fullName.split(' ')[0]);
+          if (user?.id) setUserId(user.id);
         }
       } catch (e) {}
     })();
     detectLocation();
+    checkForActiveRide();
+    
+    // Fade in animation
+    Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
   }, []);
 
-  // Clean up any pending debounce timer on unmount
+  // Check if user has an active ride
+  const checkForActiveRide = async () => {
+    try {
+      const response = await apiClient.get('/rides/active');
+      if (response.data && response.data.id) {
+        setCurrentRide(response.data);
+        setCurrentRideId(response.data.id);
+        
+        if (['accepted', 'enroute', 'arrived', 'started'].includes(response.data.status)) {
+          setFindingDriversVisible(true);
+          setShowActiveTrip(true);
+          setSearchingForDriver(false);
+          setDriverFound(true);
+          
+          if (response.data.driver) {
+            setDriverName(response.data.driver.fullName);
+            setDriverRating(response.data.driver.rating || 0);
+            setDriverCar(`${response.data.driver.vehicleMake} ${response.data.driver.vehicleModel}`);
+            setDriverPlate(response.data.driver.licencePlate);
+            setDriverPhone(response.data.driver.phone || '');
+          }
+          
+          startRidePolling(response.data.id);
+        }
+      }
+    } catch (error) {
+      console.log('No active ride found');
+    }
+  };
+
+  // Poll for ride updates
+  const startRidePolling = (rideId: string) => {
+    if (pollingInterval) clearInterval(pollingInterval);
+    
+    const interval = setInterval(async () => {
+      try {
+        const response = await apiClient.get(`/rides/${rideId}/status`);
+        const ride = response.data;
+        setCurrentRide(ride);
+        
+        const status = ride.status;
+        if (status === 'enroute' || status === 'arrived' || status === 'started') {
+          setTripStatus(status as 'enroute' | 'arrived' | 'started' | 'completed');
+          setShowActiveTrip(true);
+          setSearchingForDriver(false);
+          setDriverFound(true);
+          
+          if (ride.driver) {
+            setDriverName(ride.driver.fullName);
+            setDriverRating(ride.driver.rating || 0);
+            setDriverCar(`${ride.driver.vehicleMake} ${ride.driver.vehicleModel}`);
+            setDriverPlate(ride.driver.licencePlate);
+            setDriverPhone(ride.driver.phone || '');
+          }
+          
+          if (ride.duration) {
+            setTimeRemaining(Math.min(100, ride.duration));
+          }
+        } else if (status === 'completed') {
+          setTripStatus('completed');
+          setShowActiveTrip(true);
+          clearInterval(interval);
+          setPollingInterval(null);
+          showToast('Trip completed!', 'green');
+        } else if (status === 'cancelled') {
+          clearInterval(interval);
+          setPollingInterval(null);
+          closeFindingDrivers();
+          showToast('Trip was cancelled', 'red');
+        }
+      } catch (error) {
+        console.error('Error polling ride:', error);
+      }
+    }, 3000);
+    
+    setPollingInterval(interval);
+  };
+
+  // Cleanup polling on unmount
   useEffect(() => {
     return () => {
-      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+        setPollingInterval(null);
+      }
+      stopFindingDriversAnimations();
     };
   }, []);
+
+  const stopFindingDriversAnimations = () => {
+    pulseLoopRef.current?.stop();
+    rotateLoopRef.current?.stop();
+  };
 
   const loadNearbyPlaces = async (coords: Coords) => {
     setNearbyLoading(true);
@@ -603,6 +743,7 @@ export default function HomeScreen() {
         setPickupLabel('SPU Kimberley Campus');
         showToast('Location permission denied', 'red');
         loadNearbyPlaces(userLocation);
+        setLocating(false);
         return;
       }
 
@@ -627,7 +768,6 @@ export default function HomeScreen() {
     }
   };
 
-  // Live search-as-you-type against real place data (debounced, like Bolt/Uber)
   const handleSearch = (text: string) => {
     setSearch(text);
 
@@ -677,12 +817,10 @@ export default function HomeScreen() {
     }
   };
 
-  // Places shown as pins on the map: campus presets + real nearby POIs
   const mapPlaces = useMemo(() => {
     return [...CAMPUS_LOCATIONS, ...nearbyPlaces];
   }, [nearbyPlaces]);
 
-  // Places shown in the "Where to?" sheet
   const filteredLocations = useMemo(() => {
     if (showSearchResults) {
       const query = search.trim().toLowerCase();
@@ -706,28 +844,273 @@ export default function HomeScreen() {
   const fare = tripDistanceKm > 0 ? estimateFare(tripDistanceKm) : 0;
   const etaMinutes = routeDuration || (destination ? (tripDistanceKm / 25) * 60 : 0);
 
+  // REAL: Request ride from backend with detailed error logging
   const handleRequestRide = async () => {
-    if (!destination) return;
+    if (!destination) {
+      showToast('Please select a destination first', 'red');
+      return;
+    }
+
+    if (!userId) {
+      showToast('Please login again', 'red');
+      return;
+    }
+    
     setRequesting(true);
+
     try {
-      await apiClient.post('/rides/request', {
-        pickup: { label: pickupLabel, ...userLocation },
-        destination: { label: destination.name, ...destination.coords },
-        estimatedFare: fare,
-        estimatedDistanceKm: Number(tripDistanceKm.toFixed(2)),
-        estimatedDuration: Math.round(etaMinutes),
-        route: routePoints,
-      });
-      showToast('Ride requested! Looking for a driver', 'green');
+      const token = await AsyncStorage.getItem('authToken');
+      
+      if (!token) {
+        showToast('Please login again', 'red');
+        setRequesting(false);
+        return;
+      }
+
+      // Create ride request on backend
+      const rideData = {
+        riderId: userId,
+        pickupLat: userLocation.latitude,
+        pickupLng: userLocation.longitude,
+        pickupAddress: pickupLabel,
+        destinationLat: destination.coords.latitude,
+        destinationLng: destination.coords.longitude,
+        destinationAddress: destination.name,
+        fare: fare,
+        distance: tripDistanceKm,
+        duration: etaMinutes,
+      };
+
+      console.log('=== RIDE REQUEST ===');
+      console.log('URL:', '/rides/request');
+      console.log('Data:', JSON.stringify(rideData, null, 2));
+      console.log('Token exists:', !!token);
+      console.log('====================');
+      
+      const response = await apiClient.post('/rides/request', rideData);
+      console.log('Ride request response:', response.data);
+      
+      const newRide = response.data;
+      setCurrentRideId(newRide.id);
+      setCurrentRide(newRide);
+
+      showToast('Ride requested! Waiting for driver...', 'blue');
+      
+      // Start the finding drivers flow
+      startFindingDriversFlow();
+
     } catch (error: any) {
-      showToast('Could not request ride. Please try again.', 'red');
+      console.error('=== RIDE REQUEST ERROR ===');
+      console.error('Error status:', error?.response?.status);
+      console.error('Error data:', error?.response?.data);
+      console.error('Error message:', error?.message);
+      console.error('Full error:', error);
+      console.error('===========================');
+      
+      // Handle specific error cases with detailed messages
+      if (error?.response?.status === 401 || error?.response?.status === 403) {
+        showToast('Session expired. Please login again.', 'red');
+        await AsyncStorage.multiRemove(['authToken', 'user']);
+        setTimeout(() => {
+          navigation.replace('Login');
+        }, 1000);
+      } else if (error?.response?.status === 400) {
+        const message = error?.response?.data?.message || 
+                       error?.response?.data?.error || 
+                       'Invalid ride request. Please check your details.';
+        showToast(message, 'red');
+      } else if (error?.response?.status === 404) {
+        showToast('Ride service not available. Please try again later.', 'red');
+      } else if (error?.message === 'Network Error') {
+        showToast('Network error. Please check your internet connection.', 'red');
+      } else if (error?.response?.data?.message) {
+        showToast(error.response.data.message, 'red');
+      } else {
+        showToast('Could not request ride. Please try again.', 'red');
+      }
     } finally {
       setRequesting(false);
     }
   };
 
+  // Start finding drivers flow
+  const startFindingDriversFlow = () => {
+    setFindingDriversVisible(true);
+    setSearchingForDriver(true);
+    setDriverFound(false);
+    setShowActiveTrip(false);
+    setElapsedSeconds(0);
+
+    // Start animations
+    startFindingDriversAnimations();
+
+    // Start timer
+    const timerInterval = setInterval(() => {
+      setElapsedSeconds(prev => prev + 1);
+    }, 1000);
+
+    // Real mode - start polling for driver
+    if (currentRideId) {
+      startRidePolling(currentRideId);
+    }
+
+    return () => clearInterval(timerInterval);
+  };
+
+  const startFindingDriversAnimations = () => {
+    pulseLoopRef.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.15,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulseLoopRef.current.start();
+
+    rotateLoopRef.current = Animated.loop(
+      Animated.timing(rotateAnim, {
+        toValue: 1,
+        duration: 2000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+    rotateLoopRef.current.start();
+
+    Animated.timing(driverFadeAnim, {
+      toValue: 0,
+      duration: 0,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  // Cancel ride search
+  const handleCancelSearch = async () => {
+    if (cancelling) return;
+    setCancelling(true);
+
+    try {
+      if (currentRideId) {
+        await apiClient.post(`/rides/${currentRideId}/cancel`);
+      }
+      showToast('Ride search cancelled', 'blue');
+      
+      setTimeout(() => {
+        closeFindingDrivers();
+      }, 500);
+    } catch (error) {
+      showToast('Could not cancel ride', 'red');
+      setCancelling(false);
+    }
+  };
+
+  const closeFindingDrivers = () => {
+    setFindingDriversVisible(false);
+    setShowActiveTrip(false);
+    setCancelling(false);
+    setCurrentRideId(null);
+    setCurrentRide(null);
+    stopFindingDriversAnimations();
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      setPollingInterval(null);
+    }
+  };
+
+  const handleCallDriver = () => {
+    if (driverPhone) {
+      showToast(`Calling ${driverName}...`, 'blue');
+    } else {
+      showToast('Driver phone number not available', 'red');
+    }
+  };
+
+  const handleMessageDriver = () => {
+    showToast(`Messaging ${driverName}...`, 'blue');
+  };
+
+  const handleSOS = async () => {
+    try {
+      if (currentRideId) {
+        await apiClient.post(`/rides/${currentRideId}/sos`);
+        showToast('SOS alert sent! Emergency services notified.', 'red');
+      } else {
+        showToast('SOS alert sent!', 'red');
+      }
+    } catch (error) {
+      showToast('Could not send SOS alert', 'red');
+    }
+  };
+
+  const handleCancelTrip = async () => {
+    try {
+      if (currentRideId) {
+        await apiClient.post(`/rides/${currentRideId}/cancel`);
+      }
+      showToast('Trip cancelled', 'red');
+      closeFindingDrivers();
+    } catch (error) {
+      showToast('Could not cancel trip', 'red');
+    }
+  };
+
+  const handleCompleteTrip = async () => {
+    try {
+      if (currentRideId) {
+        await apiClient.post(`/rides/${currentRideId}/complete`);
+      }
+      showToast('Trip completed!', 'green');
+      closeFindingDrivers();
+    } catch (error) {
+      showToast('Could not complete trip', 'red');
+    }
+  };
+
   const handleComingSoon = (feature: string) => {
     showToast(`${feature} is coming soon`, 'blue');
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins > 0) {
+      return `${mins}m ${secs}s`;
+    }
+    return `${secs}s`;
+  };
+
+  const spin = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  const getStatusText = () => {
+    switch (tripStatus) {
+      case 'enroute': return 'Driver is en route to you';
+      case 'arrived': return 'Driver has arrived';
+      case 'started': return 'Trip in progress';
+      case 'completed': return 'Trip completed';
+      default: return 'Trip in progress';
+    }
+  };
+
+  const getStatusColor = () => {
+    switch (tripStatus) {
+      case 'enroute': return colors.blue;
+      case 'arrived': return colors.green;
+      case 'started': return colors.orange;
+      case 'completed': return colors.green;
+      default: return colors.blue;
+    }
   };
 
   const renderMap = () => {
@@ -747,9 +1130,306 @@ export default function HomeScreen() {
     return (
       <View style={styles.mapPlaceholder}>
         <ActivityIndicator size="large" color={colors.green} />
-        <Text style={styles.mapPlaceholderText}>Map available on mobile</Text>
+        <Text style={styles.mapPlaceholderText}>Loading map...</Text>
         <Text style={styles.mapPlaceholderSubtext}>Please use the app on iOS or Android</Text>
       </View>
+    );
+  };
+
+  // Render Finding Drivers Overlay
+  const renderFindingDriversOverlay = () => {
+    if (!findingDriversVisible) return null;
+
+    const isDriverAssigned = currentRide?.driver && ['accepted', 'enroute', 'arrived', 'started'].includes(currentRide.status);
+
+    return (
+      <Modal
+        visible={findingDriversVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.overlayContainer}>
+          <StatusBar barStyle="light-content" backgroundColor="#1a1a2e" />
+
+          <View style={[styles.overlayHeader, { paddingTop: insets.top + 14 }]}>
+            <TouchableOpacity 
+              onPress={handleCancelSearch} 
+              style={styles.closeButton}
+              disabled={cancelling || isDriverAssigned || showActiveTrip}
+            >
+              <X size={24} color={colors.white} strokeWidth={2} />
+            </TouchableOpacity>
+            <Text style={styles.overlayTitle}>
+              {showActiveTrip ? 'Active Trip' : 'Finding Drivers'}
+            </Text>
+            <View style={styles.headerRight} />
+          </View>
+
+          <ScrollView 
+            style={styles.overlayContent}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+            showsVerticalScrollIndicator={false}
+          >
+            {!showActiveTrip ? (
+              <>
+                <View style={styles.searchContainer}>
+                  <View style={styles.searchCircle}>
+                    {searchingForDriver ? (
+                      <>
+                        <Animated.View 
+                          style={[
+                            styles.pulseRing,
+                            { transform: [{ scale: pulseAnim }] }
+                          ]} 
+                        />
+                        <Animated.View 
+                          style={[
+                            styles.loadingRing,
+                            { transform: [{ rotate: spin }] }
+                          ]} 
+                        />
+                        <View style={styles.carIconContainer}>
+                          <Car size={40} color={colors.white} strokeWidth={1.8} />
+                        </View>
+                      </>
+                    ) : driverFound ? (
+                      <View style={styles.foundContainer}>
+                        <View style={styles.foundCircle}>
+                          <Check size={50} color={colors.green} strokeWidth={1.5} />
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  <Text style={styles.searchStatus}>
+                    {searchingForDriver ? 'Searching nearby...' : 'Driver Found!'}
+                  </Text>
+                  <Text style={styles.searchSubStatus}>
+                    {searchingForDriver 
+                      ? `Looking for available drivers near you (${formatTime(elapsedSeconds)})`
+                      : 'A driver has been assigned to your ride'}
+                  </Text>
+                </View>
+
+                {isDriverAssigned && currentRide?.driver && (
+                  <Animated.View style={[styles.driverInfo, { opacity: driverFadeAnim }]}>
+                    <View style={styles.driverAvatar}>
+                      <Text style={styles.driverAvatarText}>
+                        {currentRide.driver.fullName.split(' ').map(n => n[0]).join('')}
+                      </Text>
+                    </View>
+                    <View style={styles.driverDetails}>
+                      <Text style={styles.driverName}>{currentRide.driver.fullName}</Text>
+                      <View style={styles.driverRatingContainer}>
+                        <Star size={14} color={colors.orange} strokeWidth={2} fill={colors.orange} />
+                        <Text style={styles.driverRating}>{currentRide.driver.rating || 0}</Text>
+                      </View>
+                      <Text style={styles.driverCar}>
+                        {currentRide.driver.vehicleMake} {currentRide.driver.vehicleModel}
+                      </Text>
+                      <Text style={styles.driverPlate}>{currentRide.driver.licencePlate}</Text>
+                    </View>
+                  </Animated.View>
+                )}
+
+                <View style={styles.tripDetails}>
+                  <View style={styles.tripRow}>
+                    <View style={styles.tripIconContainer}>
+                      <MapPin size={16} color={colors.green} strokeWidth={2} />
+                    </View>
+                    <View style={styles.tripTextContainer}>
+                      <Text style={styles.tripLabel}>Your location</Text>
+                      <Text style={styles.tripValue} numberOfLines={1}>
+                        {pickupLabel || 'Current Location'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.tripDivider} />
+
+                  <View style={styles.tripRow}>
+                    <View style={styles.tripIconContainer}>
+                      <Navigation size={16} color={colors.blue} strokeWidth={2} />
+                    </View>
+                    <View style={styles.tripTextContainer}>
+                      <Text style={styles.tripLabel}>Your destination</Text>
+                      <Text style={styles.tripValue} numberOfLines={1}>
+                        {destination?.name || 'Destination'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.rideInfo}>
+                  <View style={styles.rideInfoItem}>
+                    <Route size={16} color={colors.gray400} strokeWidth={1.8} />
+                    <Text style={styles.rideInfoText}>
+                      {tripDistanceKm.toFixed(1)} km
+                    </Text>
+                  </View>
+                  <View style={styles.rideInfoDivider} />
+                  <View style={styles.rideInfoItem}>
+                    <ClockIcon size={16} color={colors.gray400} strokeWidth={1.8} />
+                    <Text style={styles.rideInfoText}>
+                      ~{Math.round(etaMinutes)} min
+                    </Text>
+                  </View>
+                  <View style={styles.rideInfoDivider} />
+                  <View style={styles.rideInfoItem}>
+                    <Text style={styles.rideInfoFare}>
+                      R {fare.toFixed(2)}
+                    </Text>
+                  </View>
+                </View>
+
+                {searchingForDriver && (
+                  <TouchableOpacity 
+                    style={styles.cancelButton} 
+                    onPress={handleCancelSearch}
+                    disabled={cancelling}
+                  >
+                    {cancelling ? (
+                      <ActivityIndicator size="small" color={colors.red} />
+                    ) : (
+                      <Text style={styles.cancelButtonText}>Cancel Search</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : (
+              // Active Trip View
+              <>
+                <View style={styles.activeMapContainer}>
+                  <View style={styles.activeMapPlaceholder}>
+                    <View style={styles.mapOverlay}>
+                      <View style={styles.routeLine}>
+                        <View style={styles.routeDot} />
+                        <View style={styles.routeLineBar} />
+                        <View style={[styles.routeDot, styles.routeDotEnd]} />
+                      </View>
+                      <View style={styles.mapStatus}>
+                        <View style={[styles.statusDot, { backgroundColor: getStatusColor() }]} />
+                        <Text style={styles.mapStatusText}>{getStatusText()}</Text>
+                      </View>
+                      <Text style={styles.mapETA}>ETA: ~{Math.max(1, Math.round((100 - timeRemaining) / 10))} min</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {currentRide?.driver && (
+                  <View style={styles.activeDriverCard}>
+                    <View style={styles.driverHeader}>
+                      <View style={styles.driverAvatar}>
+                        <Text style={styles.driverAvatarText}>
+                          {currentRide.driver.fullName.split(' ').map(n => n[0]).join('')}
+                        </Text>
+                      </View>
+                      <View style={styles.driverInfo}>
+                        <Text style={styles.driverName}>{currentRide.driver.fullName}</Text>
+                        <View style={styles.driverRatingContainer}>
+                          <Star size={14} color={colors.orange} strokeWidth={2} fill={colors.orange} />
+                          <Text style={styles.driverRating}>{currentRide.driver.rating || 0}</Text>
+                          <Text style={styles.driverCar}>
+                            • {currentRide.driver.vehicleMake} {currentRide.driver.vehicleModel}
+                          </Text>
+                        </View>
+                        <Text style={styles.driverPlate}>{currentRide.driver.licencePlate}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.driverActions}>
+                      <TouchableOpacity style={styles.actionButton} onPress={handleCallDriver}>
+                        <Phone size={20} color={colors.blue} strokeWidth={2} />
+                        <Text style={styles.actionButtonText}>Call</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.actionButton} onPress={handleMessageDriver}>
+                        <MessageCircle size={20} color={colors.green} strokeWidth={2} />
+                        <Text style={styles.actionButtonText}>Message</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                <View style={styles.tripProgress}>
+                  <View style={styles.progressHeader}>
+                    <Text style={styles.progressTitle}>Trip Progress</Text>
+                    <Text style={styles.progressPercent}>{Math.min(100, timeRemaining)}%</Text>
+                  </View>
+                  <View style={styles.progressBar}>
+                    <Animated.View 
+                      style={[
+                        styles.progressFill,
+                        { 
+                          width: progressAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: ['0%', '100%'],
+                          }),
+                          backgroundColor: getStatusColor(),
+                        }
+                      ]} 
+                    />
+                  </View>
+                  <View style={styles.progressSteps}>
+                    <View style={[styles.progressStep, tripStatus !== 'enroute' && styles.progressStepActive]}>
+                      <View style={[styles.progressStepDot, tripStatus !== 'enroute' && styles.progressStepDotActive]} />
+                      <Text style={[styles.progressStepText, tripStatus !== 'enroute' && styles.progressStepTextActive]}>
+                        En Route
+                      </Text>
+                    </View>
+                    <View style={styles.progressStepLine} />
+                    <View style={[styles.progressStep, (tripStatus === 'arrived' || tripStatus === 'started' || tripStatus === 'completed') && styles.progressStepActive]}>
+                      <View style={[styles.progressStepDot, (tripStatus === 'arrived' || tripStatus === 'started' || tripStatus === 'completed') && styles.progressStepDotActive]} />
+                      <Text style={[styles.progressStepText, (tripStatus === 'arrived' || tripStatus === 'started' || tripStatus === 'completed') && styles.progressStepTextActive]}>
+                        Arrived
+                      </Text>
+                    </View>
+                    <View style={styles.progressStepLine} />
+                    <View style={[styles.progressStep, (tripStatus === 'started' || tripStatus === 'completed') && styles.progressStepActive]}>
+                      <View style={[styles.progressStepDot, (tripStatus === 'started' || tripStatus === 'completed') && styles.progressStepDotActive]} />
+                      <Text style={[styles.progressStepText, (tripStatus === 'started' || tripStatus === 'completed') && styles.progressStepTextActive]}>
+                        Started
+                      </Text>
+                    </View>
+                    <View style={styles.progressStepLine} />
+                    <View style={[styles.progressStep, tripStatus === 'completed' && styles.progressStepActive]}>
+                      <View style={[styles.progressStepDot, tripStatus === 'completed' && styles.progressStepDotActive]} />
+                      <Text style={[styles.progressStepText, tripStatus === 'completed' && styles.progressStepTextActive]}>
+                        Complete
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <TouchableOpacity style={styles.sosButton} onPress={handleSOS}>
+                  <AlertTriangle size={24} color={colors.white} strokeWidth={2} />
+                  <Text style={styles.sosButtonText}>SOS</Text>
+                </TouchableOpacity>
+
+                <View style={styles.bottomActions}>
+                  {tripStatus !== 'completed' && (
+                    <TouchableOpacity 
+                      style={[styles.bottomAction, styles.cancelAction]}
+                      onPress={handleCancelTrip}
+                    >
+                      <Text style={styles.cancelActionText}>Cancel Trip</Text>
+                    </TouchableOpacity>
+                  )}
+                  
+                  {tripStatus === 'completed' && (
+                    <TouchableOpacity 
+                      style={[styles.bottomAction, styles.completeAction]}
+                      onPress={handleCompleteTrip}
+                    >
+                      <Text style={styles.completeActionText}>Done</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
     );
   };
 
@@ -837,7 +1517,6 @@ export default function HomeScreen() {
                 </Text>
               </View>
               <View style={styles.routeDetailItem}>
-                
                 <Text style={[styles.routeDetailText, { color: colors.green, fontWeight: 'bold' }]}>
                   R {fare.toFixed(2)}
                 </Text>
@@ -849,7 +1528,7 @@ export default function HomeScreen() {
             <Button
               label="Request Ride"
               onPress={handleRequestRide}
-              disabled={!destination || routing}
+              disabled={!destination || routing || requesting}
               loading={requesting}
               icon={<Car size={18} color={colors.white} strokeWidth={2} />}
             />
@@ -959,6 +1638,9 @@ export default function HomeScreen() {
           </View>
         )}
       </BottomSheetModal>
+
+      {/* Finding Drivers Overlay */}
+      {renderFindingDriversOverlay()}
     </View>
   );
 }
@@ -1191,5 +1873,493 @@ const styles = StyleSheet.create({
     color: colors.gray400,
     textAlign: 'center',
     marginTop: 4,
+  },
+
+  // Overlay styles
+  overlayContainer: {
+    flex: 1,
+    backgroundColor: '#1a1a2e',
+  },
+  overlayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+  },
+  overlayTitle: {
+    fontFamily: font.bold,
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.white,
+  },
+  headerRight: {
+    width: 40,
+  },
+  closeButton: {
+    padding: 8,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  overlayContent: {
+    flex: 1,
+    paddingHorizontal: spacing.xl,
+  },
+
+  // Finding Drivers styles
+  searchContainer: {
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
+  searchCircle: {
+    width: 120,
+    height: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+    position: 'relative',
+  },
+  pulseRing: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(76, 175, 80, 0.15)',
+  },
+  loadingRing: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 3,
+    borderColor: 'rgba(76, 175, 80, 0.3)',
+    borderTopColor: colors.green,
+  },
+  carIconContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: colors.green,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  foundContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  foundCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchStatus: {
+    fontFamily: font.bold,
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.white,
+    marginBottom: 4,
+  },
+  searchSubStatus: {
+    fontFamily: font.regular,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.6)',
+    textAlign: 'center',
+  },
+
+  // Driver Info
+  driverInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: 'rgba(76, 175, 80, 0.3)',
+  },
+  driverAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.blue,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
+  },
+  driverAvatarText: {
+    fontFamily: font.bold,
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.white,
+  },
+  driverDetails: {
+    flex: 1,
+  },
+  driverName: {
+    fontFamily: font.bold,
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.white,
+  },
+  driverRatingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  driverRating: {
+    fontFamily: font.semibold,
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.orange,
+  },
+  driverCar: {
+    fontFamily: font.regular,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.6)',
+    marginTop: 2,
+  },
+  driverPlate: {
+    fontFamily: font.semibold,
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.4)',
+    letterSpacing: 0.5,
+  },
+
+  // Trip Details
+  tripDetails: {
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  tripRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 6,
+  },
+  tripIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tripTextContainer: {
+    flex: 1,
+  },
+  tripLabel: {
+    fontFamily: font.medium,
+    fontSize: 10,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.4)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  tripValue: {
+    fontFamily: font.semibold,
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.white,
+  },
+  tripDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginLeft: 44,
+  },
+
+  // Ride Info
+  rideInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+    marginBottom: spacing.xl,
+    width: '100%',
+  },
+  rideInfoItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  rideInfoText: {
+    fontFamily: font.medium,
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.7)',
+  },
+  rideInfoFare: {
+    fontFamily: font.bold,
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.green,
+  },
+  rideInfoDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+
+  cancelButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: radius.full,
+    borderWidth: 1.5,
+    borderColor: colors.red,
+    marginTop: spacing.md,
+    alignSelf: 'center',
+  },
+  cancelButtonText: {
+    fontFamily: font.semibold,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.red,
+  },
+
+  waitingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(76, 175, 80, 0.15)',
+    marginTop: spacing.md,
+    alignSelf: 'center',
+  },
+  waitingText: {
+    fontFamily: font.medium,
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.green,
+  },
+
+  // Active Trip styles
+  activeMapContainer: {
+    height: Math.min(SCREEN_HEIGHT * 0.28, 230),
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    backgroundColor: '#2d2d44',
+    marginBottom: spacing.md,
+  },
+  activeMapPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.md,
+  },
+  mapOverlay: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  routeLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '80%',
+    marginBottom: spacing.md,
+  },
+  routeDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.green,
+    borderWidth: 2,
+    borderColor: colors.white,
+  },
+  routeDotEnd: {
+    backgroundColor: colors.blue,
+  },
+  routeLineBar: {
+    flex: 1,
+    height: 3,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    marginHorizontal: 4,
+  },
+  mapStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  mapStatusText: {
+    fontFamily: font.semibold,
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.white,
+  },
+  mapETA: {
+    fontFamily: font.medium,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.6)',
+  },
+
+  activeDriverCard: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  driverHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  driverActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: radius.sm,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  actionButtonText: {
+    fontFamily: font.medium,
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.7)',
+  },
+
+  tripProgress: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  progressTitle: {
+    fontFamily: font.medium,
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.6)',
+  },
+  progressPercent: {
+    fontFamily: font.bold,
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.green,
+  },
+  progressBar: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    overflow: 'hidden',
+    marginBottom: spacing.md,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  progressSteps: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  progressStep: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  progressStepActive: {
+    opacity: 1,
+  },
+  progressStepDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  progressStepDotActive: {
+    backgroundColor: colors.green,
+  },
+  progressStepText: {
+    fontFamily: font.regular,
+    fontSize: 8,
+    color: 'rgba(255,255,255,0.3)',
+    textTransform: 'uppercase',
+  },
+  progressStepTextActive: {
+    color: colors.white,
+  },
+  progressStepLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+
+  sosButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: radius.lg,
+    backgroundColor: colors.red,
+    marginBottom: spacing.md,
+  },
+  sosButtonText: {
+    fontFamily: font.bold,
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.white,
+  },
+
+  bottomActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  bottomAction: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+  },
+  cancelAction: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  cancelActionText: {
+    fontFamily: font.semibold,
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.6)',
+  },
+  completeAction: {
+    backgroundColor: colors.green,
+  },
+  completeActionText: {
+    fontFamily: font.bold,
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.white,
   },
 });

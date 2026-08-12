@@ -21,7 +21,14 @@ public class Ride {
     @Column(name = "pickup_location")
     private String pickupLocation;
 
+    @Column(name = "pickup_address")
+    private String pickupAddress;
+
+    @Column(name = "destination")
     private String destination;
+
+    @Column(name = "destination_address")
+    private String destinationAddress;
 
     @Column(name = "pickup_lat")
     private Double pickupLat;
@@ -35,23 +42,30 @@ public class Ride {
     @Column(name = "dest_lng")
     private Double destLng;
 
+    @Column(name = "fare")
     private BigDecimal fare;
 
     @Column(name = "distance_km")
     private Double distanceKm;
 
+    @Column(name = "duration_minutes")
+    private Double durationMinutes;
+
     @Enumerated(EnumType.STRING)
+    @Column(name = "status")
     private RideStatus status;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
     public enum RideStatus {
-        PENDING, ACTIVE, COMPLETED, CANCELLED
+        PENDING, ACCEPTED, ENROUTE, ARRIVED, STARTED, COMPLETED, CANCELLED
     }
 
     // Getters and setters
-
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -64,8 +78,14 @@ public class Ride {
     public String getPickupLocation() { return pickupLocation; }
     public void setPickupLocation(String pickupLocation) { this.pickupLocation = pickupLocation; }
 
+    public String getPickupAddress() { return pickupAddress; }
+    public void setPickupAddress(String pickupAddress) { this.pickupAddress = pickupAddress; }
+
     public String getDestination() { return destination; }
     public void setDestination(String destination) { this.destination = destination; }
+
+    public String getDestinationAddress() { return destinationAddress; }
+    public void setDestinationAddress(String destinationAddress) { this.destinationAddress = destinationAddress; }
 
     public Double getPickupLat() { return pickupLat; }
     public void setPickupLat(Double pickupLat) { this.pickupLat = pickupLat; }
@@ -85,9 +105,15 @@ public class Ride {
     public Double getDistanceKm() { return distanceKm; }
     public void setDistanceKm(Double distanceKm) { this.distanceKm = distanceKm; }
 
+    public Double getDurationMinutes() { return durationMinutes; }
+    public void setDurationMinutes(Double durationMinutes) { this.durationMinutes = durationMinutes; }
+
     public RideStatus getStatus() { return status; }
     public void setStatus(RideStatus status) { this.status = status; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }

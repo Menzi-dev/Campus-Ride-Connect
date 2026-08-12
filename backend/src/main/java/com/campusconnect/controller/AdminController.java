@@ -86,6 +86,11 @@ public class AdminController {
         return ResponseEntity.ok(body);
     }
 
+    @GetMapping("/dashboard/stats")
+    public ResponseEntity<Map<String, Object>> getDashboardStatsLegacy() {
+        return getStats();
+    }
+
     private Map<String, Object> buildStats() {
         try {
             long totalUsers = userRepository.count();
@@ -125,7 +130,8 @@ public class AdminController {
     }
 
     private List<Map<String, Object>> buildPendingApprovals(Driver.ApprovalStatus approvalStatus) {
-        String sql = "SELECT d.driver_id AS driver_id, u.full_name, u.email, d.licence_plate, u.created_at " +
+        String sql = "SELECT d.driver_id AS driver_id, d.user_id AS user_id, u.full_name, u.email, u.student_number, u.phone, u.year_of_study, " +
+                "d.licence_plate, d.vehicle_make, d.vehicle_year, u.created_at " +
                 "FROM drivers d " +
                 "LEFT JOIN users u ON u.user_id = d.user_id " +
                 "WHERE d.approval_status = ? " +
@@ -138,10 +144,22 @@ public class AdminController {
             for (Map<String, Object> row : rows) {
                 Map<String, Object> approval = new LinkedHashMap<>();
                 approval.put("id", String.valueOf(row.get("driver_id")));
+                approval.put("userId", row.get("user_id") != null ? String.valueOf(row.get("user_id")) : "");
                 approval.put("fullName", row.get("full_name"));
                 approval.put("email", row.get("email"));
-                approval.put("licenceNumber", row.get("licence_plate"));
+                approval.put("studentNumber", row.get("student_number"));
+                approval.put("phone", row.get("phone"));
+                approval.put("yearOfStudy", row.get("year_of_study"));
+                approval.put("licencePlate", row.get("licence_plate"));
+                approval.put("vehicleMake", row.get("vehicle_make"));
+                approval.put("vehicleYear", row.get("vehicle_year"));
+                approval.put("selfieUrl", null);
+                approval.put("licenceDocUrl", null);
+                approval.put("proofDocUrl", null);
+                approval.put("vehicleDocUrl", null);
                 approval.put("submittedAt", row.get("created_at") != null ? row.get("created_at").toString() : LocalDateTime.now().toString());
+                approval.put("status", approvalStatus.name());
+                approval.put("role", "DRIVER");
                 approvals.add(approval);
             }
 
@@ -163,26 +181,12 @@ public class AdminController {
             approvalStatus = Driver.ApprovalStatus.PENDING;
         }
 
-        String sql = "SELECT d.driver_id AS driver_id, u.full_name, u.email, d.licence_plate, u.created_at " +
-                "FROM drivers d " +
-                "LEFT JOIN users u ON u.user_id = d.user_id " +
-                "WHERE d.approval_status = ? " +
-                "ORDER BY u.created_at DESC";
+        return ResponseEntity.ok(buildPendingApprovals(approvalStatus));
+    }
 
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, approvalStatus.name());
-        List<Map<String, Object>> approvals = new ArrayList<>();
-
-        for (Map<String, Object> row : rows) {
-            Map<String, Object> approval = new LinkedHashMap<>();
-            approval.put("id", String.valueOf(row.get("driver_id")));
-            approval.put("fullName", row.get("full_name"));
-            approval.put("email", row.get("email"));
-            approval.put("licenceNumber", row.get("licence_plate"));
-            approval.put("submittedAt", row.get("created_at") != null ? row.get("created_at").toString() : LocalDateTime.now().toString());
-            approvals.add(approval);
-        }
-
-        return ResponseEntity.ok(approvals);
+    @GetMapping("/driver-approvals/pending")
+    public ResponseEntity<List<Map<String, Object>>> getPendingDriverApprovalsLegacy() {
+        return ResponseEntity.ok(buildPendingApprovals(Driver.ApprovalStatus.PENDING));
     }
 
     @PostMapping("/driver-approvals/{id}/approve")
@@ -200,6 +204,15 @@ public class AdminController {
                 .map(driver -> {
                     driver.setApprovalStatus(status);
                     driverRepository.save(driver);
+
+                    User user = userRepository.findById(driver.getUserId()).orElse(null);
+                    if (user != null) {
+                        user.setStatus(status == Driver.ApprovalStatus.APPROVED
+                                ? User.UserStatus.ACTIVE
+                                : User.UserStatus.SUSPENDED);
+                        userRepository.save(user);
+                    }
+
                     Map<String, String> response = Map.of("status", status.name());
                     return ResponseEntity.ok(response);
                 })

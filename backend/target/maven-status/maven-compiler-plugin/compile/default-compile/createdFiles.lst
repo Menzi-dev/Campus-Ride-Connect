@@ -4,6 +4,7 @@ com\campusconnect\controller\AuthController.class
 com\campusconnect\controller\UserController.class
 com\campusconnect\service\RideService.class
 com\campusconnect\repository\RideRepository.class
+com\campusconnect\controller\DriverController.class
 com\campusconnect\entity\Driver$ApprovalStatus.class
 com\campusconnect\repository\DriverRepository.class
 com\campusconnect\dto\AuthRequest.class
@@ -17,6 +18,7 @@ com\campusconnect\config\JwtAuthenticationFilter.class
 com\campusconnect\controller\TestController.class
 com\campusconnect\entity\User$Role.class
 com\campusconnect\dto\AuthResponse.class
+com\campusconnect\controller\AdminController.class
 com\campusconnect\CampusConnectApplication.class
 com\campusconnect\security\JwtTokenProvider.class
 com\campusconnect\entity\User$UserStatus.class

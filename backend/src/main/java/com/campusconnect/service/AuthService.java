@@ -3,7 +3,9 @@ package com.campusconnect.service;
 import com.campusconnect.dto.AuthRequest;
 import com.campusconnect.dto.AuthResponse;
 import com.campusconnect.dto.RegisterRequest;
+import com.campusconnect.entity.Driver;
 import com.campusconnect.entity.User;
+import com.campusconnect.repository.DriverRepository;
 import com.campusconnect.repository.UserRepository;
 import com.campusconnect.security.JwtTokenProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +26,9 @@ public class AuthService {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private DriverRepository driverRepository;
 
     @Autowired
     private JwtTokenProvider jwtTokenProvider;
@@ -83,7 +88,7 @@ public class AuthService {
                 logger.info("Face embedding size: " + request.getFaceEmbedding().length());
                 user.setFaceEmbedding(request.getFaceEmbedding());
             }
-            user.setStatus(User.UserStatus.ACTIVE);
+            user.setStatus(role == User.Role.DRIVER ? User.UserStatus.PENDING : User.UserStatus.ACTIVE);
             user.setCreatedAt(LocalDateTime.now());
 
             User savedUser = userRepository.save(user);
@@ -94,7 +99,15 @@ public class AuthService {
                 savedUser.setVehicleMake(request.getVehicleMake());
                 savedUser.setVehicleYear(request.getVehicleYear());
                 savedUser = userRepository.save(savedUser);
-                logger.info("Driver info saved");
+
+                Driver driver = new Driver();
+                driver.setUserId(savedUser.getId());
+                driver.setLicencePlate(request.getLicencePlate());
+                driver.setVehicleMake(request.getVehicleMake());
+                driver.setVehicleYear(request.getVehicleYear());
+                driver.setApprovalStatus(Driver.ApprovalStatus.PENDING);
+                driverRepository.save(driver);
+                logger.info("Driver approval record created with PENDING status");
             }
 
             return savedUser;

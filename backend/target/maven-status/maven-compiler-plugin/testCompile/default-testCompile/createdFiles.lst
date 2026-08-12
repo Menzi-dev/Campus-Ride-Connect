@@ -1,1 +1,7 @@
 com\campusconnect\service\AuthServiceTest.class
+com\campusconnect\controller\CreateAdminAccountTest.class
+com\campusconnect\controller\AdminControllerPendingDriversTest.class
+com\campusconnect\controller\AdminControllerRouteTest.class
+com\campusconnect\controller\AdminControllerWithAuthenticationTest.class
+com\campusconnect\controller\AdminControllerRouteTest$1.class
+com\campusconnect\controller\AdminDashboardCompleteWorkflowTest.class

@@ -1,3 +1,4 @@
+// mobile/src/screens/CreateAccountScreen.tsx
 import React, { useRef, useState, useEffect, useLayoutEffect } from 'react';
 import {
   View,
@@ -91,22 +92,6 @@ const CAMPUS_EMAIL_DOMAIN = '@spu.ac.za';
 const MAX_ATTEMPTS_PER_STEP = 3;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-/**
- * BACKEND CONTRACT for face verification (implement server-side):
- *
- * POST /auth/face/verify-direction   (multipart/form-data)
- *   fields: direction ('center'|'left'|'right'|'up'|'down'), image (jpg)
- *   response: { success: boolean, message?: string }
- *   The server should run real face/head-pose detection (e.g. ML Kit,
- *   MediaPipe, or a hosted vision API) against the uploaded frame and
- *   confirm the detected yaw/pitch actually matches the requested
- *   direction. Returning success:true unconditionally defeats the
- *   purpose of liveness checking.
- *
- * The final "center" selfie captured after all steps pass is the one
- * sent along with account registration as the profile/identity photo.
- */
-
 export default function CreateAccountScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const { showToast } = useToast();
@@ -158,8 +143,8 @@ export default function CreateAccountScreen() {
   const [loading, setLoading] = useState(false);
 
   // Live session state
-  const [scanActive, setScanActive] = useState(false); // a verification session is in progress
-  const [verifying, setVerifying] = useState(false); // waiting on backend response for the current capture
+  const [scanActive, setScanActive] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [stepError, setStepError] = useState<string | null>(null);
   const [attempts, setAttempts] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
@@ -195,8 +180,6 @@ export default function CreateAccountScreen() {
       showToast('Could not open document picker', 'red');
     }
   };
-
-  // ---- Face verification flow -------------------------------------------
 
   const startFaceVerification = () => {
     setVerificationProgress(0);
@@ -260,7 +243,6 @@ export default function CreateAccountScreen() {
       setAttempts(0);
       setStepError(null);
     } else {
-      // All directional checks passed — take the final confirmation selfie.
       setScanActive(false);
       pulseLoopRef.current?.stop();
       captureFinalSelfie();
@@ -283,7 +265,6 @@ export default function CreateAccountScreen() {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.6, skipProcessing: true });
       triggerFlash();
 
-      // Convert Expo image URI to blob for multipart upload
       const response = await fetch(photo.uri);
       const blob = await response.blob();
 
@@ -341,7 +322,7 @@ export default function CreateAccountScreen() {
       showToast('Face verification complete!', 'green');
     } catch (err) {
       setStepError('Could not capture the final photo. Please try again.');
-      setScanActive(true); // let them retry the final capture
+      setScanActive(true);
     } finally {
       setVerifying(false);
     }
@@ -368,8 +349,6 @@ export default function CreateAccountScreen() {
       pulseLoopRef.current?.stop();
     };
   }, []);
-
-  // ---- misc ---------------------------------------------------------------
 
   const getPasswordStrength = (val: string) => {
     let score = 0;
@@ -573,6 +552,18 @@ export default function CreateAccountScreen() {
       }
       if (response.data?.user) {
         await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
+        
+        // Check if driver needs approval - navigate to DriverDashboard which handles pending state
+        if (role === 'DRIVER') {
+          const isApproved = response.data.user.approved === true;
+          if (!isApproved) {
+            showToast('Registration submitted! Waiting for admin approval.', 'blue');
+            setTimeout(() => {
+              navigation.replace('DriverDashboard');
+            }, 600);
+            return;
+          }
+        }
       }
 
       showToast('Account created and verified!', 'green');

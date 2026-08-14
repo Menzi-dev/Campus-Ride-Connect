@@ -644,7 +644,6 @@ export default function HomeScreen() {
         
         if (['accepted', 'enroute', 'arrived', 'started'].includes(response.data.status)) {
           setFindingDriversVisible(true);
-          setShowActiveTrip(true);
           setSearchingForDriver(false);
           setDriverFound(true);
           
@@ -654,6 +653,18 @@ export default function HomeScreen() {
             setDriverCar(`${response.data.driver.vehicleMake} ${response.data.driver.vehicleModel}`);
             setDriverPlate(response.data.driver.licencePlate);
             setDriverPhone(response.data.driver.phone || '');
+            
+            // Show driver info immediately for active rides
+            Animated.timing(driverFadeAnim, {
+              toValue: 1,
+              duration: 0,
+              useNativeDriver: true,
+            }).start();
+          }
+          
+          if (['enroute', 'arrived', 'started'].includes(response.data.status)) {
+            setShowActiveTrip(true);
+            setTripStatus(response.data.status as 'enroute' | 'arrived' | 'started' | 'completed');
           }
           
           startRidePolling(response.data.id);
@@ -675,9 +686,8 @@ export default function HomeScreen() {
         setCurrentRide(ride);
         
         const status = ride.status;
-        if (status === 'enroute' || status === 'arrived' || status === 'started') {
-          setTripStatus(status as 'enroute' | 'arrived' | 'started' | 'completed');
-          setShowActiveTrip(true);
+        if (status === 'accepted' || status === 'enroute' || status === 'arrived' || status === 'started') {
+          // Driver accepted the ride - show driver info
           setSearchingForDriver(false);
           setDriverFound(true);
           
@@ -687,6 +697,24 @@ export default function HomeScreen() {
             setDriverCar(`${ride.driver.vehicleMake} ${ride.driver.vehicleModel}`);
             setDriverPlate(ride.driver.licencePlate);
             setDriverPhone(ride.driver.phone || '');
+            
+            // Animate driver card appearance
+            Animated.timing(driverFadeAnim, {
+              toValue: 1,
+              duration: 600,
+              useNativeDriver: true,
+            }).start();
+          }
+          
+          // If not accepted yet, stay on the finding drivers view
+          // Once enroute/arrived/started, switch to active trip view
+          if (status === 'enroute' || status === 'arrived' || status === 'started') {
+            setTripStatus(status as 'enroute' | 'arrived' | 'started' | 'completed');
+            
+            // Brief delay before showing active trip view
+            setTimeout(() => {
+              setShowActiveTrip(true);
+            }, 1000);
           }
           
           if (ride.duration) {
@@ -1150,15 +1178,15 @@ export default function HomeScreen() {
         onRequestClose={() => {}}
       >
         <View style={styles.overlayContainer}>
-          <StatusBar barStyle="light-content" backgroundColor="#1a1a2e" />
+          <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
           <View style={[styles.overlayHeader, { paddingTop: insets.top + 14 }]}>
             <TouchableOpacity 
               onPress={handleCancelSearch} 
               style={styles.closeButton}
-              disabled={cancelling || isDriverAssigned || showActiveTrip}
+              disabled={cancelling || searchingForDriver || isDriverAssigned || showActiveTrip}
             >
-              <X size={24} color={colors.white} strokeWidth={2} />
+              <X size={24} color={colors.gray700} strokeWidth={2} />
             </TouchableOpacity>
             <Text style={styles.overlayTitle}>
               {showActiveTrip ? 'Active Trip' : 'Finding Drivers'}
@@ -1263,14 +1291,14 @@ export default function HomeScreen() {
 
                 <View style={styles.rideInfo}>
                   <View style={styles.rideInfoItem}>
-                    <Route size={16} color={colors.gray400} strokeWidth={1.8} />
+                    <Route size={16} color={colors.green} strokeWidth={1.8} />
                     <Text style={styles.rideInfoText}>
                       {tripDistanceKm.toFixed(1)} km
                     </Text>
                   </View>
                   <View style={styles.rideInfoDivider} />
                   <View style={styles.rideInfoItem}>
-                    <ClockIcon size={16} color={colors.gray400} strokeWidth={1.8} />
+                    <ClockIcon size={16} color={colors.green} strokeWidth={1.8} />
                     <Text style={styles.rideInfoText}>
                       ~{Math.round(etaMinutes)} min
                     </Text>
@@ -1878,28 +1906,29 @@ const styles = StyleSheet.create({
   // Overlay styles
   overlayContainer: {
     flex: 1,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#ffffff',
   },
   overlayHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.lg,
   },
   overlayTitle: {
     fontFamily: font.bold,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
-    color: colors.white,
+    color: colors.gray900,
+    letterSpacing: 0.2,
   },
   headerRight: {
     width: 40,
   },
   closeButton: {
-    padding: 8,
+    padding: 10,
     borderRadius: radius.full,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: colors.gray100,
   },
   overlayContent: {
     flex: 1,
@@ -1910,89 +1939,107 @@ const styles = StyleSheet.create({
   searchContainer: {
     alignItems: 'center',
     marginBottom: spacing.xl,
+    paddingTop: spacing.xl,
   },
   searchCircle: {
-    width: 120,
-    height: 120,
+    width: 140,
+    height: 140,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.md,
+    marginBottom: spacing.xl,
     position: 'relative',
   },
   pulseRing: {
     position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: 'rgba(76, 175, 80, 0.15)',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(76, 175, 80, 0.12)',
+    borderWidth: 2,
+    borderColor: 'rgba(76, 175, 80, 0.25)',
   },
   loadingRing: {
     position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 3,
-    borderColor: 'rgba(76, 175, 80, 0.3)',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 2.5,
+    borderColor: 'rgba(76, 175, 80, 0.2)',
     borderTopColor: colors.green,
+    borderRightColor: colors.green,
   },
   carIconContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: colors.green,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: colors.green,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 12,
   },
   foundContainer: {
     alignItems: 'center',
     justifyContent: 'center',
   },
   foundCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     backgroundColor: 'rgba(76, 175, 80, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.green,
   },
   searchStatus: {
     fontFamily: font.bold,
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '700',
-    color: colors.white,
-    marginBottom: 4,
+    color: colors.gray900,
+    marginBottom: 8,
+    letterSpacing: 0.3,
   },
   searchSubStatus: {
     fontFamily: font.regular,
     fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
+    color: colors.gray600,
     textAlign: 'center',
+    lineHeight: 20,
   },
 
   // Driver Info
   driverInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(76, 175, 80, 0.06)',
     borderRadius: radius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
     width: '100%',
     borderWidth: 1,
-    borderColor: 'rgba(76, 175, 80, 0.3)',
+    borderColor: 'rgba(76, 175, 80, 0.25)',
   },
   driverAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: colors.blue,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.md,
+    marginRight: spacing.lg,
+    shadowColor: colors.blue,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   driverAvatarText: {
     fontFamily: font.bold,
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
     color: colors.white,
   },
@@ -2003,53 +2050,58 @@ const styles = StyleSheet.create({
     fontFamily: font.bold,
     fontSize: 16,
     fontWeight: '700',
-    color: colors.white,
+    color: colors.gray900,
+    marginBottom: 4,
   },
   driverRatingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     marginTop: 2,
+    marginBottom: 3,
   },
   driverRating: {
     fontFamily: font.semibold,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.orange,
   },
   driverCar: {
     fontFamily: font.regular,
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.6)',
+    fontSize: 13,
+    color: colors.gray700,
     marginTop: 2,
   },
   driverPlate: {
     fontFamily: font.semibold,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.4)',
-    letterSpacing: 0.5,
+    color: colors.gray600,
+    letterSpacing: 0.8,
+    marginTop: 1,
   },
 
   // Trip Details
   tripDetails: {
     width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: colors.gray50,
     borderRadius: radius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.gray200,
   },
   tripRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 6,
+    gap: 14,
+    paddingVertical: 10,
   },
   tripIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.gray100,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2058,74 +2110,79 @@ const styles = StyleSheet.create({
   },
   tripLabel: {
     fontFamily: font.medium,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '500',
-    color: 'rgba(255,255,255,0.4)',
+    color: colors.gray500,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
   tripValue: {
     fontFamily: font.semibold,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-    color: colors.white,
+    color: colors.gray900,
+    marginTop: 3,
+    lineHeight: 21,
   },
   tripDivider: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    marginLeft: 44,
+    backgroundColor: colors.gray200,
+    marginLeft: 54,
   },
 
   // Ride Info
   rideInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(76, 175, 80, 0.08)',
     borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 8,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 12,
     marginBottom: spacing.xl,
     width: '100%',
+    borderWidth: 1,
+    borderColor: 'rgba(76, 175, 80, 0.2)',
   },
   rideInfoItem: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 7,
   },
   rideInfoText: {
     fontFamily: font.medium,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '500',
-    color: 'rgba(255,255,255,0.7)',
+    color: colors.gray700,
   },
   rideInfoFare: {
     fontFamily: font.bold,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.green,
   },
   rideInfoDivider: {
     width: 1,
-    height: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    height: 22,
+    backgroundColor: 'rgba(76, 175, 80, 0.25)',
   },
 
   cancelButton: {
     paddingVertical: 14,
-    paddingHorizontal: 40,
+    paddingHorizontal: 48,
     borderRadius: radius.full,
     borderWidth: 1.5,
-    borderColor: colors.red,
-    marginTop: spacing.md,
+    borderColor: '#f44336',
+    marginTop: spacing.lg,
     alignSelf: 'center',
+    backgroundColor: 'rgba(244, 67, 54, 0.08)',
   },
   cancelButtonText: {
     fontFamily: font.semibold,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    color: colors.red,
+    color: '#f44336',
   },
 
   waitingContainer: {
@@ -2151,8 +2208,10 @@ const styles = StyleSheet.create({
     height: Math.min(SCREEN_HEIGHT * 0.28, 230),
     borderRadius: radius.lg,
     overflow: 'hidden',
-    backgroundColor: '#2d2d44',
+    backgroundColor: colors.gray100,
     marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.gray200,
   },
   activeMapPlaceholder: {
     flex: 1,
@@ -2176,7 +2235,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: colors.green,
     borderWidth: 2,
-    borderColor: colors.white,
+    borderColor: colors.gray100,
   },
   routeDotEnd: {
     backgroundColor: colors.blue,
@@ -2184,7 +2243,7 @@ const styles = StyleSheet.create({
   routeLineBar: {
     flex: 1,
     height: 3,
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: colors.gray300,
     marginHorizontal: 4,
   },
   mapStatus: {
@@ -2202,19 +2261,21 @@ const styles = StyleSheet.create({
     fontFamily: font.semibold,
     fontSize: 14,
     fontWeight: '600',
-    color: colors.white,
+    color: colors.gray900,
   },
   mapETA: {
     fontFamily: font.medium,
     fontSize: 12,
-    color: 'rgba(255,255,255,0.6)',
+    color: colors.gray600,
   },
 
   activeDriverCard: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: colors.gray50,
     borderRadius: radius.lg,
     padding: spacing.md,
     marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.gray200,
   },
   driverHeader: {
     flexDirection: 'row',
@@ -2233,22 +2294,24 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 10,
     borderRadius: radius.sm,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: colors.gray100,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: colors.gray200,
   },
   actionButtonText: {
     fontFamily: font.medium,
     fontSize: 12,
     fontWeight: '500',
-    color: 'rgba(255,255,255,0.7)',
+    color: colors.gray700,
   },
 
   tripProgress: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: colors.gray50,
     borderRadius: radius.lg,
     padding: spacing.md,
     marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.gray200,
   },
   progressHeader: {
     flexDirection: 'row',
@@ -2260,7 +2323,7 @@ const styles = StyleSheet.create({
     fontFamily: font.medium,
     fontSize: 12,
     fontWeight: '500',
-    color: 'rgba(255,255,255,0.6)',
+    color: colors.gray600,
   },
   progressPercent: {
     fontFamily: font.bold,
@@ -2271,7 +2334,7 @@ const styles = StyleSheet.create({
   progressBar: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: colors.gray200,
     overflow: 'hidden',
     marginBottom: spacing.md,
   },
@@ -2295,7 +2358,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: colors.gray300,
   },
   progressStepDotActive: {
     backgroundColor: colors.green,
@@ -2303,16 +2366,16 @@ const styles = StyleSheet.create({
   progressStepText: {
     fontFamily: font.regular,
     fontSize: 8,
-    color: 'rgba(255,255,255,0.3)',
+    color: colors.gray400,
     textTransform: 'uppercase',
   },
   progressStepTextActive: {
-    color: colors.white,
+    color: colors.gray900,
   },
   progressStepLine: {
     flex: 1,
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: colors.gray200,
   },
 
   sosButton: {

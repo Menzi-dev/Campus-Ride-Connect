@@ -38,6 +38,7 @@ type RootStackParamList = {
   Login: undefined;
   DriverDashboard: undefined;
   ActiveTrip: { requestId: string } | undefined;
+  DriverActiveRide: { requestId: string };
   TripHistory: undefined;
   DriverVerification: undefined;
   Profile: undefined;
@@ -282,7 +283,7 @@ export default function DriverDashboardScreen() {
       const interval = setInterval(() => {
         console.log('Polling approval status...');
         checkApprovalStatus(true);
-      }, 30000);
+      }, 5000);
 
       return () => clearInterval(interval);
     }
@@ -357,16 +358,17 @@ export default function DriverDashboardScreen() {
       setRequests(prev => prev.filter(r => r.id !== requestId));
       if (action === 'accept') {
         showToast('Ride accepted!', 'green');
-        navigation.navigate('ActiveTrip', { requestId });
+        navigation.navigate('DriverActiveRide', { requestId });
       } else {
         showToast('Ride declined', 'blue');
       }
     } catch (err: any) {
       console.error('Error handling request:', err);
+      const serverMessage = err?.response?.data?.error || err?.response?.data?.message;
       showToast(
-        action === 'accept' 
-          ? 'Failed to accept ride' 
-          : 'Failed to decline ride',
+        serverMessage || (action === 'accept'
+          ? 'Failed to accept ride'
+          : 'Failed to decline ride'),
         'red'
       );
     }

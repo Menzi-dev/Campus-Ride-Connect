@@ -48,7 +48,7 @@ public class AdminControllerWithAuthenticationTest {
         RegisterRequest driverRequest = new RegisterRequest();
         driverRequest.setFullName("Test Driver Auth");
         driverRequest.setEmail(testDriverEmail);
-        driverRequest.setPassword("Test@123456");
+        driverRequest.setPassword("S1fund@24");
         driverRequest.setRole("DRIVER");
         driverRequest.setPhone("0700000000");
         driverRequest.setStudentNumber("20240999");
@@ -67,7 +67,7 @@ public class AdminControllerWithAuthenticationTest {
         RegisterRequest adminRequest = new RegisterRequest();
         adminRequest.setFullName("Test Admin");
         adminRequest.setEmail(adminEmail);
-        adminRequest.setPassword("Admin@123456");
+        adminRequest.setPassword("S1fund@24");
         adminRequest.setRole("ADMIN");
         adminRequest.setPhone("0700000000");
         adminRequest.setStudentNumber("00000000");
@@ -80,7 +80,7 @@ public class AdminControllerWithAuthenticationTest {
         // Login as admin to get token
         AuthRequest loginRequest = new AuthRequest();
         loginRequest.setEmail(adminEmail);
-        loginRequest.setPassword("Admin@123456");
+        loginRequest.setPassword("S1fund@24");
         
         AuthResponse loginResponse = authService.login(loginRequest);
         adminToken = loginResponse.getToken();
@@ -149,7 +149,7 @@ public class AdminControllerWithAuthenticationTest {
         String driverEmail = "driver_nonadmin_" + System.currentTimeMillis() + "@spu.ac.za";
         driverRequest.setFullName("Non-Admin Driver");
         driverRequest.setEmail(driverEmail);
-        driverRequest.setPassword("Driver@123456");
+        driverRequest.setPassword("S1fund@24");
         driverRequest.setRole("DRIVER");
         driverRequest.setPhone("0700000000");
         driverRequest.setStudentNumber("20240888");
@@ -164,7 +164,7 @@ public class AdminControllerWithAuthenticationTest {
         // Get token for driver
         AuthRequest loginRequest = new AuthRequest();
         loginRequest.setEmail(driverEmail);
-        loginRequest.setPassword("Driver@123456");
+        loginRequest.setPassword("S1fund@24");
         AuthResponse loginResponse = authService.login(loginRequest);
         String driverToken = loginResponse.getToken();
         

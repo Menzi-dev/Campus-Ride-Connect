@@ -23,11 +23,9 @@ public class RideService {
         Ride ride = new Ride();
         ride.setRiderId(riderId);
         ride.setPickupLocation(request.getPickupLocation() != null ? request.getPickupLocation() : request.getPickupAddress());
-        ride.setPickupAddress(request.getPickupAddress());
+        ride.setDestination(request.getDestination() != null ? request.getDestination() : request.getDestinationAddress());
         ride.setPickupLat(request.getPickupLat());
         ride.setPickupLng(request.getPickupLng());
-        ride.setDestination(request.getDestination() != null ? request.getDestination() : request.getDestinationAddress());
-        ride.setDestinationAddress(request.getDestinationAddress());
         ride.setDestLat(request.getDestLat());
         ride.setDestLng(request.getDestLng());
         ride.setDistanceKm(request.getDistanceKm());
@@ -35,7 +33,6 @@ public class RideService {
         ride.setFare(request.getFare());
         ride.setStatus(Ride.RideStatus.PENDING);
         ride.setCreatedAt(LocalDateTime.now());
-        ride.setUpdatedAt(LocalDateTime.now());
 
         return rideRepository.save(ride);
     }
@@ -80,7 +77,6 @@ public class RideService {
             Ride ride = rideOpt.get();
             ride.setDriverId(driverId);
             ride.setStatus(Ride.RideStatus.ACCEPTED);
-            ride.setUpdatedAt(LocalDateTime.now());
             return rideRepository.save(ride);
         }
         throw new RuntimeException("Ride not found");
@@ -94,7 +90,6 @@ public class RideService {
         if (rideOpt.isPresent()) {
             Ride ride = rideOpt.get();
             ride.setStatus(status);
-            ride.setUpdatedAt(LocalDateTime.now());
             return rideRepository.save(ride);
         }
         throw new RuntimeException("Ride not found");

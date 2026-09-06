@@ -27,7 +27,10 @@ const getHostChoices = () => {
     const webHost = typeof window !== 'undefined' && window.location.hostname
       ? window.location.hostname
       : 'localhost';
-    return [webHost, 'localhost', '127.0.0.1', '10.0.2.2'];
+    return Array.from(new Set([
+      webHost,
+      ...(webHost === 'localhost' ? ['127.0.0.1'] : ['localhost']),
+    ]));
   }
 
   // iOS simulator uses localhost; a real iPhone should use LOCAL_IP.

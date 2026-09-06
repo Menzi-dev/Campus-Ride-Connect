@@ -639,10 +639,21 @@ export default function HomeScreen() {
     try {
       const response = await apiClient.get('/rides/active');
       if (response.data && response.data.id) {
+        const status = String(response.data.status || '').toLowerCase();
         setCurrentRide(response.data);
         setCurrentRideId(response.data.id);
+
+        if (status === 'pending') {
+          setFindingDriversVisible(true);
+          setSearchingForDriver(true);
+          setDriverFound(false);
+          setShowActiveTrip(false);
+          startFindingDriversAnimations();
+          startRidePolling(String(response.data.id));
+          return;
+        }
         
-        if (['accepted', 'enroute', 'arrived', 'started'].includes(response.data.status)) {
+        if (['accepted', 'enroute', 'arrived', 'started'].includes(status)) {
           setFindingDriversVisible(true);
           setSearchingForDriver(false);
           setDriverFound(true);
@@ -662,9 +673,9 @@ export default function HomeScreen() {
             }).start();
           }
           
-          if (['enroute', 'arrived', 'started'].includes(response.data.status)) {
+          if (['accepted', 'enroute', 'arrived', 'started'].includes(status)) {
             setShowActiveTrip(true);
-            setTripStatus(response.data.status as 'enroute' | 'arrived' | 'started' | 'completed');
+            setTripStatus(status === 'accepted' ? 'enroute' : status as 'enroute' | 'arrived' | 'started' | 'completed');
           }
           
           startRidePolling(response.data.id);
@@ -685,7 +696,7 @@ export default function HomeScreen() {
         const ride = response.data;
         setCurrentRide(ride);
         
-        const status = ride.status;
+        const status = String(ride.status || '').toLowerCase();
         if (status === 'accepted' || status === 'enroute' || status === 'arrived' || status === 'started') {
           // Driver accepted the ride - show driver info
           setSearchingForDriver(false);
@@ -706,15 +717,10 @@ export default function HomeScreen() {
             }).start();
           }
           
-          // If not accepted yet, stay on the finding drivers view
-          // Once enroute/arrived/started, switch to active trip view
-          if (status === 'enroute' || status === 'arrived' || status === 'started') {
-            setTripStatus(status as 'enroute' | 'arrived' | 'started' | 'completed');
-            
-            // Brief delay before showing active trip view
-            setTimeout(() => {
-              setShowActiveTrip(true);
-            }, 1000);
+          // Once a driver accepts, show the rider's trip screen immediately.
+          if (status === 'accepted' || status === 'enroute' || status === 'arrived' || status === 'started') {
+            setTripStatus(status === 'accepted' ? 'enroute' : status as 'enroute' | 'arrived' | 'started' | 'completed');
+            setShowActiveTrip(true);
           }
           
           if (ride.duration) {
@@ -925,7 +931,7 @@ export default function HomeScreen() {
       showToast('Ride requested! Waiting for driver...', 'blue');
       
       // Start the finding drivers flow
-      startFindingDriversFlow();
+      startFindingDriversFlow(String(newRide.id));
 
     } catch (error: any) {
       console.error('=== RIDE REQUEST ERROR ===');
@@ -962,7 +968,7 @@ export default function HomeScreen() {
   };
 
   // Start finding drivers flow
-  const startFindingDriversFlow = () => {
+  const startFindingDriversFlow = (rideId: string) => {
     setFindingDriversVisible(true);
     setSearchingForDriver(true);
     setDriverFound(false);
@@ -978,9 +984,7 @@ export default function HomeScreen() {
     }, 1000);
 
     // Real mode - start polling for driver
-    if (currentRideId) {
-      startRidePolling(currentRideId);
-    }
+    startRidePolling(rideId);
 
     return () => clearInterval(timerInterval);
   };

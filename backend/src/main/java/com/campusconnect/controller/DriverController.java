@@ -128,7 +128,7 @@ public class DriverController {
             Long driverId = currentUserId();
 
             // Get all PENDING rides that haven't been assigned to a driver
-            String sql = "SELECT r.id, r.rider_id, r.pickup_location, r.destination, r.fare, r.distance_km, " +
+            String sql = "SELECT r.ride_id AS id, r.rider_id, r.pickup_location, r.destination, r.fare, r.distance_km, " +
                     "r.created_at, u.full_name, u.phone " +
                     "FROM rides r " +
                     "LEFT JOIN users u ON u.user_id = r.rider_id " +
@@ -167,6 +167,56 @@ public class DriverController {
         } catch (Exception e) {
             LOGGER.error("Error getting driver requests", e);
             return ResponseEntity.ok(new ArrayList<>());
+        }
+    }
+
+    @GetMapping("/rides/{id}")
+    public ResponseEntity<?> getAssignedRide(@PathVariable("id") Long rideId) {
+        try {
+            Long driverId = currentUserId();
+            Optional<Ride> rideOpt = rideRepository.findById(rideId);
+            if (rideOpt.isEmpty() || !driverId.equals(rideOpt.get().getDriverId())) {
+                return ResponseEntity.status(404).body(Map.of("error", "Assigned ride not found"));
+            }
+            return ResponseEntity.ok(rideOpt.get());
+        } catch (Exception e) {
+            LOGGER.error("Error loading assigned ride", e);
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/rides/{id}/status")
+    public ResponseEntity<?> updateAssignedRideStatus(
+            @PathVariable("id") Long rideId,
+            @RequestBody Map<String, String> request) {
+        try {
+            Long driverId = currentUserId();
+            Optional<Ride> rideOpt = rideRepository.findById(rideId);
+            if (rideOpt.isEmpty() || !driverId.equals(rideOpt.get().getDriverId())) {
+                return ResponseEntity.status(404).body(Map.of("error", "Assigned ride not found"));
+            }
+
+            Ride.RideStatus nextStatus = Ride.RideStatus.valueOf(request.getOrDefault("status", "").toUpperCase());
+            if (nextStatus != Ride.RideStatus.ARRIVED
+                    && nextStatus != Ride.RideStatus.STARTED
+                    && nextStatus != Ride.RideStatus.COMPLETED) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Unsupported driver ride status"));
+            }
+
+            Ride ride = rideOpt.get();
+            ride.setStatus(nextStatus);
+            if (nextStatus == Ride.RideStatus.STARTED) {
+                ride.setStartedAt(LocalDateTime.now());
+            }
+            if (nextStatus == Ride.RideStatus.COMPLETED) {
+                ride.setCompletedAt(LocalDateTime.now());
+            }
+            return ResponseEntity.ok(rideRepository.save(ride));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid ride status"));
+        } catch (Exception e) {
+            LOGGER.error("Error updating assigned ride status", e);
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -227,7 +277,6 @@ public class DriverController {
             // Assign driver and set ride as ACCEPTED
             ride.setDriverId(driverId);
             ride.setStatus(Ride.RideStatus.ACCEPTED);
-            ride.setUpdatedAt(java.time.LocalDateTime.now());
             rideRepository.save(ride);
 
             Map<String, Object> response = new LinkedHashMap<>();

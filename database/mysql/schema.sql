@@ -29,20 +29,25 @@ CREATE TABLE IF NOT EXISTS users (
 -- SOS_Alerts, FaceVerifications, Documents follow in later phases)
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS rides (
-    id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
-    rider_id            BIGINT NOT NULL,
-    driver_id           BIGINT NULL,
-    pickup_location     VARCHAR(200),
-    destination         VARCHAR(200),
-    pickup_lat          DECIMAL(10,7),
-    pickup_lng          DECIMAL(10,7),
-    dest_lat            DECIMAL(10,7),
-    dest_lng            DECIMAL(10,7),
-    fare                DECIMAL(6,2),
-    distance_km         DECIMAL(5,2),
-    status              ENUM('PENDING', 'ACTIVE', 'COMPLETED', 'CANCELLED') DEFAULT 'PENDING',
-    created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_rides_rider FOREIGN KEY (rider_id) REFERENCES users(user_id)
+    id                      BIGINT AUTO_INCREMENT PRIMARY KEY,
+    rider_id                BIGINT NOT NULL,
+    driver_id               BIGINT NULL,
+    pickup_location         VARCHAR(200),
+    pickup_address          VARCHAR(255),
+    destination             VARCHAR(200),
+    destination_address     VARCHAR(255),
+    pickup_lat              DECIMAL(10,7),
+    pickup_lng              DECIMAL(10,7),
+    dest_lat                DECIMAL(10,7),
+    dest_lng                DECIMAL(10,7),
+    fare                    DECIMAL(6,2),
+    distance_km             DECIMAL(5,2),
+    duration_minutes        DOUBLE,
+    status                  ENUM('PENDING', 'ACCEPTED', 'ENROUTE', 'ARRIVED', 'STARTED', 'COMPLETED', 'CANCELLED') DEFAULT 'PENDING',
+    created_at              DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at              DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_rides_rider FOREIGN KEY (rider_id) REFERENCES users(user_id),
+    CONSTRAINT fk_rides_driver FOREIGN KEY (driver_id) REFERENCES users(user_id)
 );
 
 -- No seed users here on purpose: BCrypt hashes are salted per-generation, so

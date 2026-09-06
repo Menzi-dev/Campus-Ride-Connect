@@ -10,25 +10,20 @@ public class Ride {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "ride_id")
     private Long id;
 
     @Column(name = "rider_id", nullable = false)
     private Long riderId;
 
     @Column(name = "driver_id")
-    private Long driverId; // nullable until a driver accepts (future phase)
+    private Long driverId; // nullable until a driver accepts
 
     @Column(name = "pickup_location")
     private String pickupLocation;
 
-    @Column(name = "pickup_address")
-    private String pickupAddress;
-
     @Column(name = "destination")
     private String destination;
-
-    @Column(name = "destination_address")
-    private String destinationAddress;
 
     @Column(name = "pickup_lat")
     private Double pickupLat;
@@ -48,18 +43,24 @@ public class Ride {
     @Column(name = "distance_km")
     private Double distanceKm;
 
-    @Column(name = "duration_minutes")
+    @Column(name = "duration_min")
     private Double durationMinutes;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
     private RideStatus status;
 
+    @Column(name = "scheduled_at")
+    private LocalDateTime scheduledAt;
+
+    @Column(name = "started_at")
+    private LocalDateTime startedAt;
+
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
-
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
 
     public enum RideStatus {
         PENDING, ACCEPTED, ENROUTE, ARRIVED, STARTED, COMPLETED, CANCELLED
@@ -78,14 +79,8 @@ public class Ride {
     public String getPickupLocation() { return pickupLocation; }
     public void setPickupLocation(String pickupLocation) { this.pickupLocation = pickupLocation; }
 
-    public String getPickupAddress() { return pickupAddress; }
-    public void setPickupAddress(String pickupAddress) { this.pickupAddress = pickupAddress; }
-
     public String getDestination() { return destination; }
     public void setDestination(String destination) { this.destination = destination; }
-
-    public String getDestinationAddress() { return destinationAddress; }
-    public void setDestinationAddress(String destinationAddress) { this.destinationAddress = destinationAddress; }
 
     public Double getPickupLat() { return pickupLat; }
     public void setPickupLat(Double pickupLat) { this.pickupLat = pickupLat; }
@@ -111,9 +106,15 @@ public class Ride {
     public RideStatus getStatus() { return status; }
     public void setStatus(RideStatus status) { this.status = status; }
 
+    public LocalDateTime getScheduledAt() { return scheduledAt; }
+    public void setScheduledAt(LocalDateTime scheduledAt) { this.scheduledAt = scheduledAt; }
+
+    public LocalDateTime getStartedAt() { return startedAt; }
+    public void setStartedAt(LocalDateTime startedAt) { this.startedAt = startedAt; }
+
+    public LocalDateTime getCompletedAt() { return completedAt; }
+    public void setCompletedAt(LocalDateTime completedAt) { this.completedAt = completedAt; }
+
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
-
-    public LocalDateTime getUpdatedAt() { return updatedAt; }
-    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }

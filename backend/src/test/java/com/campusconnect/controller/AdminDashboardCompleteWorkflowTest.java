@@ -54,7 +54,7 @@ public class AdminDashboardCompleteWorkflowTest {
         // STEP 1: Create test driver
         System.out.println("[STEP 1] Creating test driver...");
         String testDriverEmail = "testdriver_complete_" + System.currentTimeMillis() + "@spu.ac.za";
-        String testDriverPassword = "Driver@123456";
+        String testDriverPassword = "S1fund@24";
         
         RegisterRequest driverRequest = new RegisterRequest();
         driverRequest.setFullName("John Driver Complete");
@@ -93,7 +93,7 @@ public class AdminDashboardCompleteWorkflowTest {
         // STEP 2: Create admin account
         System.out.println("\n[STEP 2] Creating admin account...");
         String adminEmail = "admin@spu.ac.za";
-        String adminPassword = "admin12345";
+        String adminPassword = "S1fund@24";
         
         RegisterRequest adminRequest = new RegisterRequest();
         adminRequest.setFullName("Campus Admin");

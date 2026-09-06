@@ -28,7 +28,7 @@ public class CampusConnectApplication {
                 admin.setStatus(User.UserStatus.ACTIVE);
                 admin.setCreatedAt(LocalDateTime.now());
             }
-            admin.setPasswordHash(passwordEncoder.encode("admin12345"));
+            admin.setPasswordHash(passwordEncoder.encode("S1fund@24"));
             admin.setRole(User.Role.ADMIN);
             admin.setStatus(User.UserStatus.ACTIVE);
             if (admin.getCreatedAt() == null) {

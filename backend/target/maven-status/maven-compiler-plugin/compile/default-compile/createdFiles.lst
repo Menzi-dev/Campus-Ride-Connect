@@ -23,4 +23,3 @@ com\campusconnect\CampusConnectApplication.class
 com\campusconnect\security\JwtTokenProvider.class
 com\campusconnect\entity\User$UserStatus.class
 com\campusconnect\repository\UserRepository.class
-com\campusconnect\controller\RideController.class

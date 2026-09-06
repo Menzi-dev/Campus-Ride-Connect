@@ -54,7 +54,7 @@ public class AdminControllerPendingDriversTest {
         RegisterRequest request = new RegisterRequest();
         request.setFullName("Test Driver Approval");
         request.setEmail(testDriverEmail);
-        request.setPassword("Test@123456");
+        request.setPassword("S1fund@24");
         request.setRole("DRIVER");
         request.setPhone("0700000000");
         request.setStudentNumber("20240999");

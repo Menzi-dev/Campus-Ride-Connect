@@ -2,6 +2,8 @@ package com.campusconnect.controller;
 
 import com.campusconnect.dto.RideRequest;
 import com.campusconnect.entity.Ride;
+import com.campusconnect.repository.DriverRepository;
+import com.campusconnect.repository.UserRepository;
 import com.campusconnect.service.RideService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +22,12 @@ public class RideController {
 
     @Autowired
     private RideService rideService;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private DriverRepository driverRepository;
 
     /**
      * POST /api/rides/request
@@ -57,7 +65,7 @@ public class RideController {
             Long riderId = currentUserId();
             Optional<Ride> rideOpt = rideService.getActiveRideForRider(riderId);
             if (rideOpt.isPresent()) {
-                return ResponseEntity.ok(rideOpt.get());
+                return ResponseEntity.ok(rideResponse(rideOpt.get()));
             } else {
                 return ResponseEntity.noContent().build();
             }
@@ -102,7 +110,8 @@ public class RideController {
                 response.put("id", ride.getId());
                 response.put("status", ride.getStatus());
                 response.put("driverId", ride.getDriverId());
-                response.put("updatedAt", ride.getUpdatedAt());
+                response.put("createdAt", ride.getCreatedAt());
+                addDriverDetails(response, ride.getDriverId());
                 return ResponseEntity.ok(response);
             } else {
                 return ResponseEntity.notFound().build();
@@ -184,5 +193,44 @@ public class RideController {
     private Long currentUserId() {
         String userId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         return Long.valueOf(userId);
+    }
+
+    private Map<String, Object> rideResponse(Ride ride) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("id", ride.getId());
+        response.put("riderId", ride.getRiderId());
+        response.put("driverId", ride.getDriverId());
+        response.put("pickupLocation", ride.getPickupLocation());
+        response.put("destination", ride.getDestination());
+        response.put("pickupLat", ride.getPickupLat());
+        response.put("pickupLng", ride.getPickupLng());
+        response.put("destLat", ride.getDestLat());
+        response.put("destLng", ride.getDestLng());
+        response.put("fare", ride.getFare());
+        response.put("distanceKm", ride.getDistanceKm());
+        response.put("durationMinutes", ride.getDurationMinutes());
+        response.put("status", ride.getStatus());
+        response.put("createdAt", ride.getCreatedAt());
+        addDriverDetails(response, ride.getDriverId());
+        return response;
+    }
+
+    private void addDriverDetails(Map<String, Object> response, Long driverId) {
+        if (driverId == null) {
+            return;
+        }
+
+        userRepository.findById(driverId).ifPresent(user -> {
+            Map<String, Object> driver = new HashMap<>();
+            driver.put("id", user.getId());
+            driver.put("fullName", user.getFullName());
+            driver.put("phone", user.getPhone());
+            driverRepository.findByUserId(driverId).ifPresent(driverRecord -> {
+                driver.put("rating", driverRecord.getRating());
+                driver.put("vehicleMake", driverRecord.getVehicleMake());
+                driver.put("licencePlate", driverRecord.getLicencePlate());
+            });
+            response.put("driver", driver);
+        });
     }
 }

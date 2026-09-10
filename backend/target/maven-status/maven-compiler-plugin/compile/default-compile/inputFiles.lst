@@ -7,7 +7,9 @@ C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campuscon
 C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\controller\AuthController.java
 C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\controller\DocumentController.java
 C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\controller\DriverController.java
+C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\controller\MessageController.java
 C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\controller\NotificationController.java
+C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\controller\PaymentController.java
 C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\controller\RideController.java
 C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\controller\SecurityController.java
 C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\controller\SosController.java
@@ -23,6 +25,7 @@ C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campuscon
 C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\dto\RideRequest.java
 C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\dto\SosAlertRequest.java
 C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\entity\AuditLog.java
+C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\entity\ChatMessage.java
 C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\entity\Document.java
 C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\entity\Driver.java
 C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\entity\FaceVerification.java
@@ -39,6 +42,7 @@ C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campuscon
 C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\mapper\DriverMapper.java
 C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\mapper\RideMapper.java
 C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\mapper\UserMapper.java
+C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\repository\ChatMessageRepository.java
 C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\repository\DocumentRepository.java
 C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\repository\DriverRepository.java
 C:\Users\Admin\Downloads\Campus-Ride-Connect\backend\src\main\java\com\campusconnect\repository\FaceVerificationRepository.java

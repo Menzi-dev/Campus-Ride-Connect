@@ -12,5 +12,6 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
     int countByCreatedAtAfter(LocalDateTime after);
     List<Ride> findByStatusOrderByCreatedAtDesc(Ride.RideStatus status);
     List<Ride> findByDriverIdAndStatusIn(Long driverId, List<Ride.RideStatus> statuses);
+    List<Ride> findByDriverIdAndStatus(Long driverId, Ride.RideStatus status);
     Optional<Ride> findByRiderIdAndStatusIn(Long riderId, List<Ride.RideStatus> statuses);
 }

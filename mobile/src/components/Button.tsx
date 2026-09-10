@@ -9,7 +9,7 @@ type ButtonProps = {
   loading?: boolean;
   icon?: React.ReactNode;
   disabled?: boolean;
-  variant?: 'green' | 'red' | 'white';
+  variant?: 'green' | 'red' | 'white' | 'secondary';
 };
 
 export default function Button({ label, onPress, style, loading = false, icon, disabled, variant }: ButtonProps) {
@@ -17,6 +17,7 @@ export default function Button({ label, onPress, style, loading = false, icon, d
     <TouchableOpacity
       style={[
         styles.button,
+        variant === 'secondary' && styles.secondaryButton,
         variant === 'white' && styles.whiteButton,
         variant === 'red' && styles.redButton,
         variant === 'green' && styles.greenButton,
@@ -28,10 +29,10 @@ export default function Button({ label, onPress, style, loading = false, icon, d
       disabled={disabled || loading}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'white' ? colors.gray800 : colors.white} />
+        <ActivityIndicator color={variant === 'white' || variant === 'secondary' ? colors.gray800 : colors.white} />
       ) : (
         <>
-          <Text style={[styles.label, variant === 'white' && styles.labelDark]}>{label}</Text>
+          <Text style={[styles.label, (variant === 'white' || variant === 'secondary') && styles.labelDark]}>{label}</Text>
           {icon ? <View style={styles.icon}>{icon}</View> : null}
         </>
       )}
@@ -57,6 +58,11 @@ const styles = StyleSheet.create({
   },
   whiteButton: {
     backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+  },
+  secondaryButton: {
+    backgroundColor: colors.gray100,
     borderWidth: 1,
     borderColor: colors.gray200,
   },

@@ -54,7 +54,7 @@ public class DriverController {
             Long userId = currentUserId();
             
             // Get driver info
-            Optional<Driver> driverOpt = driverRepository.findByUserId(userId);
+            Optional<Driver> driverOpt = findOrCreateDriverProfile(userId);
             if (driverOpt.isEmpty()) {
                 Map<String, Object> stats = new LinkedHashMap<>();
                 stats.put("todayRides", 0);
@@ -66,44 +66,55 @@ public class DriverController {
             }
 
             Driver driver = driverOpt.get();
+            // rides.driver_id stores users.user_id, not drivers.driver_id.
+            Long driverId = userId;
 
-            // Get today's completed rides
             LocalDateTime startOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MIN);
             LocalDateTime endOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MAX);
-            
-            String todayRidesSql = "SELECT COUNT(*) FROM rides WHERE driver_id = ? AND status = 'COMPLETED' AND created_at BETWEEN ? AND ?";
-            Integer todayRides = jdbcTemplate.queryForObject(
-                todayRidesSql,
-                new Object[]{userId, startOfDay, endOfDay},
-                Integer.class
-            );
-
-            // Get today's earnings
-            String earningsSql = "SELECT COALESCE(SUM(fare), 0) FROM rides WHERE driver_id = ? AND status = 'COMPLETED' AND created_at BETWEEN ? AND ?";
-            BigDecimal earnings = jdbcTemplate.queryForObject(
-                earningsSql,
-                new Object[]{userId, startOfDay, endOfDay},
-                BigDecimal.class
-            );
-
-            // Get total rides
-            String totalRidesSql = "SELECT COUNT(*) FROM rides WHERE driver_id = ? AND status = 'COMPLETED'";
-            Integer totalRides = jdbcTemplate.queryForObject(
-                totalRidesSql,
-                new Object[]{userId},
-                Integer.class
-            );
-
-            // Get user's online status (if stored in users table)
-            Optional<User> userOpt = userRepository.findById(userId);
-            boolean isOnline = userOpt.isPresent() && userOpt.get().getFaceVerified() != null; // placeholder
+                    Long todayRides = 0L;
+                    BigDecimal earnings = BigDecimal.ZERO;
+                    Long completedRideCount = 0L;
+                    try {
+                    todayRides = jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM rides WHERE driver_id = ? AND status = 'COMPLETED' "
+                            + "AND updated_at BETWEEN ? AND ?",
+                        Long.class, driverId, startOfDay, endOfDay);
+                    } catch (Exception e) {
+                    LOGGER.warn("Could not calculate today's completed rides using updated_at; falling back to created_at", e);
+                        try {
+                            todayRides = jdbcTemplate.queryForObject(
+                                "SELECT COUNT(*) FROM rides WHERE driver_id = ? AND status = 'COMPLETED' "
+                                    + "AND created_at BETWEEN ? AND ?",
+                                Long.class, driverId, startOfDay, endOfDay);
+                        } catch (Exception fallback) {
+                            LOGGER.warn("Could not calculate today's completed rides using created_at", fallback);
+                            todayRides = 0L;
+                        }
+                    }
+                    try {
+                    earnings = jdbcTemplate.queryForObject(
+                        "SELECT COALESCE(SUM(fare), 0) FROM rides WHERE driver_id = ? AND status = 'COMPLETED'",
+                        BigDecimal.class, driverId);
+                    } catch (Exception e) {
+                    LOGGER.warn("Could not calculate driver earnings", e);
+                    }
+                    try {
+                    completedRideCount = jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM rides WHERE driver_id = ? AND status = 'COMPLETED'",
+                        Long.class, driverId);
+                    } catch (Exception e) {
+                    LOGGER.warn("Could not calculate total completed rides", e);
+                    }
+                int totalRides = Math.max(
+                    completedRideCount == null ? 0 : completedRideCount.intValue(),
+                    driver.getTotalTrips() == null ? 0 : driver.getTotalTrips());
 
             Map<String, Object> stats = new LinkedHashMap<>();
-            stats.put("todayRides", todayRides != null ? todayRides : 0);
-            stats.put("earnings", earnings != null ? earnings.doubleValue() : 0.0);
-            stats.put("rating", 4.9); // TODO: Calculate from ride ratings
-            stats.put("totalRides", totalRides != null ? totalRides : 0);
-            stats.put("online", isOnline);
+            stats.put("todayRides", todayRides == null ? 0 : todayRides);
+            stats.put("earnings", earnings == null ? 0.0 : earnings.doubleValue());
+            stats.put("rating", driver.getRating() != null ? driver.getRating().doubleValue() : 0.0);
+            stats.put("totalRides", totalRides);
+            stats.put("online", driver.isOnline());
 
             return ResponseEntity.ok(stats);
         } catch (Exception e) {
@@ -133,6 +144,7 @@ public class DriverController {
                     "FROM rides r " +
                     "LEFT JOIN users u ON u.user_id = r.rider_id " +
                     "WHERE r.status = 'PENDING' AND r.driver_id IS NULL " +
+                    "AND EXISTS (SELECT 1 FROM payments p WHERE p.ride_id = r.ride_id AND p.status IN ('PENDING', 'COMPLETED')) " +
                     "ORDER BY r.created_at DESC";
 
             List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
@@ -170,6 +182,64 @@ public class DriverController {
         }
     }
 
+    /**
+     * GET /api/driver/requests/{id}
+     * Returns details of a specific PENDING ride request (before driver accepts it)
+     */
+    @GetMapping("/requests/{id}")
+    public ResponseEntity<?> getRideRequestDetails(@PathVariable("id") Long rideId) {
+        try {
+            Optional<Ride> rideOpt = rideRepository.findById(rideId);
+            
+            if (rideOpt.isEmpty()) {
+                return ResponseEntity.status(404).body(Map.of("error", "Ride request not found"));
+            }
+
+            Ride ride = rideOpt.get();
+            
+            // Only return details if ride is PENDING (hasn't been accepted yet)
+            if (!ride.getStatus().equals(Ride.RideStatus.PENDING)) {
+                return ResponseEntity.status(404).body(Map.of("error", "This ride request is no longer available"));
+            }
+
+            // Get rider information
+            Optional<User> riderOpt = userRepository.findById(ride.getRiderId());
+            if (riderOpt.isEmpty()) {
+                return ResponseEntity.status(404).body(Map.of("error", "Rider not found"));
+            }
+
+            User rider = riderOpt.get();
+            String fullName = rider.getFullName() != null ? rider.getFullName() : "Unknown";
+            String[] names = fullName.split(" ");
+            String initials = String.valueOf(names.length > 0 ? names[0].charAt(0) : '?') +
+                             (names.length > 1 ? names[names.length - 1].charAt(0) : "");
+
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("id", ride.getId());
+            response.put("riderName", fullName);
+            response.put("riderInitials", initials);
+            response.put("riderRating", 4.8); // TODO: Calculate from ride ratings
+            response.put("riderPhone", rider.getPhone());
+            response.put("pickup", ride.getPickupLocation());
+            response.put("destination", ride.getDestination());
+            response.put("pickupLat", ride.getPickupLat() != null ? ride.getPickupLat() : -28.7587766);
+            response.put("pickupLng", ride.getPickupLng() != null ? ride.getPickupLng() : 24.759741);
+            response.put("destLat", ride.getDestLat() != null ? ride.getDestLat() : -28.7600000);
+            response.put("destLng", ride.getDestLng() != null ? ride.getDestLng() : 24.7600000);
+            response.put("fare", ride.getFare() != null ? "R " + ride.getFare().setScale(2, java.math.RoundingMode.HALF_UP) : "R 0.00");
+            response.put("distance", ride.getDistanceKm() != null ? String.format("%.1f km", ride.getDistanceKm()) : "N/A");
+            response.put("estimatedTime", ride.getDurationMinutes() != null ? String.format("%.0f mins", ride.getDurationMinutes()) : "N/A");
+            response.put("notes", "");
+            response.put("status", "pending");
+
+            LOGGER.info("Fetching ride request details for ride " + rideId);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            LOGGER.error("Error fetching ride request details", e);
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @GetMapping("/rides/{id}")
     public ResponseEntity<?> getAssignedRide(@PathVariable("id") Long rideId) {
         try {
@@ -178,7 +248,23 @@ public class DriverController {
             if (rideOpt.isEmpty() || !driverId.equals(rideOpt.get().getDriverId())) {
                 return ResponseEntity.status(404).body(Map.of("error", "Assigned ride not found"));
             }
-            return ResponseEntity.ok(rideOpt.get());
+            Ride ride = rideOpt.get();
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("id", ride.getId());
+            response.put("status", ride.getStatus());
+            response.put("pickupLocation", ride.getPickupLocation());
+            response.put("destination", ride.getDestination());
+            response.put("pickupLat", ride.getPickupLat());
+            response.put("pickupLng", ride.getPickupLng());
+            response.put("destLat", ride.getDestLat());
+            response.put("destLng", ride.getDestLng());
+            response.put("fare", ride.getFare());
+            userRepository.findById(ride.getRiderId()).ifPresent(rider -> {
+                response.put("riderId", rider.getId());
+                response.put("riderName", rider.getFullName());
+                response.put("riderPhone", rider.getPhone());
+            });
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             LOGGER.error("Error loading assigned ride", e);
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -204,12 +290,31 @@ public class DriverController {
             }
 
             Ride ride = rideOpt.get();
+
+            Ride.RideStatus currentStatus = ride.getStatus();
+            boolean validTransition = (currentStatus == Ride.RideStatus.ACCEPTED || currentStatus == Ride.RideStatus.ENROUTE)
+                    && nextStatus == Ride.RideStatus.ARRIVED
+                || currentStatus == Ride.RideStatus.ARRIVED && nextStatus == Ride.RideStatus.STARTED
+                || currentStatus == Ride.RideStatus.STARTED && nextStatus == Ride.RideStatus.COMPLETED;
+            if (!validTransition) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Invalid ride transition",
+                    "currentStatus", currentStatus.name(),
+                    "requestedStatus", nextStatus.name()
+                ));
+            }
+
             ride.setStatus(nextStatus);
             if (nextStatus == Ride.RideStatus.STARTED) {
                 ride.setStartedAt(LocalDateTime.now());
             }
             if (nextStatus == Ride.RideStatus.COMPLETED) {
                 ride.setCompletedAt(LocalDateTime.now());
+                Driver driver = driverRepository.findByUserId(driverId).orElse(null);
+                if (driver != null) {
+                    driver.setTotalTrips((driver.getTotalTrips() == null ? 0 : driver.getTotalTrips()) + 1);
+                    driverRepository.save(driver);
+                }
             }
             return ResponseEntity.ok(rideRepository.save(ride));
         } catch (IllegalArgumentException e) {
@@ -230,8 +335,13 @@ public class DriverController {
             Long userId = currentUserId();
             boolean online = request.getOrDefault("online", false);
 
-            // TODO: Store online status in database (add column to users or drivers table)
-            // For now, just return success
+            Optional<Driver> driverOpt = findOrCreateDriverProfile(userId);
+            if (driverOpt.isEmpty()) {
+                return ResponseEntity.status(404).body(Map.of("error", "Driver profile not found"));
+            }
+            Driver driver = driverOpt.get();
+            driver.setOnline(online);
+            driverRepository.save(driver);
 
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("success", true);
@@ -247,6 +357,32 @@ public class DriverController {
             error.put("error", e.getMessage());
             return ResponseEntity.badRequest().body(error);
         }
+    }
+
+    private Optional<Driver> findOrCreateDriverProfile(Long userId) {
+        Optional<Driver> existing = driverRepository.findByUserId(userId);
+        if (existing.isPresent()) {
+            return existing;
+        }
+
+        Optional<User> userOpt = userRepository.findById(userId);
+        if (userOpt.isEmpty() || userOpt.get().getRole() != User.Role.DRIVER) {
+            return Optional.empty();
+        }
+
+        User user = userOpt.get();
+        Driver driver = new Driver();
+        driver.setUserId(userId);
+        driver.setLicencePlate(user.getLicencePlate());
+        driver.setVehicleMake(user.getVehicleMake());
+        driver.setVehicleYear(user.getVehicleYear());
+        driver.setOnline(false);
+        driver.setTotalTrips(0);
+        driver.setApprovalStatus(user.getStatus() == User.UserStatus.ACTIVE
+                ? Driver.ApprovalStatus.APPROVED
+                : Driver.ApprovalStatus.PENDING);
+        LOGGER.warn("Repaired missing driver profile for user {}", userId);
+        return Optional.of(driverRepository.save(driver));
     }
 
     /**

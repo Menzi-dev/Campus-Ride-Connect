@@ -4,7 +4,7 @@
 
 $baseUrl = "http://localhost:8080"
 $adminEmail = "admin@spu.ac.za"
-$adminPassword = "Admin@123456"
+$adminPassword = "SANELEDLOMO@2005"
 
 Write-Host "=== Campus Connect Admin API Test ===" -ForegroundColor Cyan
 

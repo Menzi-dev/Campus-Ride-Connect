@@ -6,6 +6,7 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
@@ -28,7 +29,7 @@ public class CampusConnectApplication {
                 admin.setStatus(User.UserStatus.ACTIVE);
                 admin.setCreatedAt(LocalDateTime.now());
             }
-            admin.setPasswordHash(passwordEncoder.encode("S1fund@24"));
+            admin.setPasswordHash(passwordEncoder.encode("SANELEDLOMO@2005"));
             admin.setRole(User.Role.ADMIN);
             admin.setStatus(User.UserStatus.ACTIVE);
             if (admin.getCreatedAt() == null) {
@@ -36,5 +37,35 @@ public class CampusConnectApplication {
             }
             userRepository.save(admin);
         };
+    }
+
+    @Bean
+    public CommandLineRunner repairRideSchema(JdbcTemplate jdbcTemplate) {
+        return args -> {
+            ensureRideColumn(jdbcTemplate, "rider_rating", "INT NULL");
+            ensureRideColumn(jdbcTemplate, "rider_rating_comment", "VARCHAR(500) NULL");
+            ensureCashPaymentMethod(jdbcTemplate);
+        };
+    }
+
+    private void ensureCashPaymentMethod(JdbcTemplate jdbcTemplate) {
+        try {
+            jdbcTemplate.execute("ALTER TABLE payments MODIFY COLUMN method "
+                    + "ENUM('CAMPUS_WALLET','CARD','MOBILE_MONEY','CASH') NOT NULL");
+        } catch (Exception ignored) {
+            // The payments table may not exist in a fresh database yet.
+        }
+    }
+
+    private void ensureRideColumn(JdbcTemplate jdbcTemplate, String columnName, String definition) {
+        Integer count = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM information_schema.columns "
+                + "WHERE table_schema = DATABASE() AND table_name = 'rides' AND column_name = ?",
+            Integer.class,
+            columnName
+        );
+        if (count != null && count == 0) {
+            jdbcTemplate.execute("ALTER TABLE rides ADD COLUMN " + columnName + " " + definition);
+        }
     }
 }

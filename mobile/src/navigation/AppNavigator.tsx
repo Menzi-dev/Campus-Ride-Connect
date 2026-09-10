@@ -13,6 +13,10 @@ import ProfileScreen from '../screens/ProfileScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import DriverDashboardScreen from '../screens/DriverDashboardScreen';
 import SecurityCentreDashboardScreen from '../screens/SecurityCentreDashboardScreen';
+import ViewRideDetailsScreen from '../screens/ViewRideDetailsScreen';
+import DriverActiveRideScreen from '../screens/DriverActiveRideScreen';
+import RatingDriverScreen from '../screens/RatingDriverScreen';
+import ChatScreen from '../screens/ChatScreen';
 
 type RootStackParamList = {
   Landing: undefined;
@@ -26,6 +30,10 @@ type RootStackParamList = {
   TripHistory: undefined;
   Schedule: undefined;
   Profile: undefined;
+  ViewRideDetails: { requestId: string };
+  DriverActiveRide: { requestId: string };
+  RatingDriver: { rideId: string; driverName?: string };
+  Chat: { rideId: string; otherPartyName?: string };
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -48,6 +56,10 @@ export default function AppNavigator() {
         />
         <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
         <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} />
+        <Stack.Screen name="ViewRideDetails" component={ViewRideDetailsScreen} />
+        <Stack.Screen name="DriverActiveRide" component={DriverActiveRideScreen} />
+        <Stack.Screen name="RatingDriver" component={RatingDriverScreen} />
+        <Stack.Screen name="Chat" component={ChatScreen} />
         <Stack.Screen name="SecurityDashboard" component={SecurityCentreDashboardScreen} />
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="TripHistory" component={TripHistoryScreen} />

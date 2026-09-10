@@ -37,11 +37,13 @@ import apiClient from '../services/ApiClient';
 type RootStackParamList = {
   Login: undefined;
   DriverDashboard: undefined;
+  ViewRideDetails: { requestId: string };
   ActiveTrip: { requestId: string } | undefined;
   DriverActiveRide: { requestId: string };
   TripHistory: undefined;
   DriverVerification: undefined;
   Profile: undefined;
+  Chat: { rideId: string; otherPartyName?: string };
 };
 
 type DriverStats = {
@@ -170,7 +172,7 @@ export default function DriverDashboardScreen() {
           stopPulseAnimation();
           await loadDashboardData();
           if (showApprovalMessage) {
-            showToast('Your account has been approved! 🎉', 'green');
+            showToast('Your account has been approved', 'green');
             setShowApprovalMessage(false);
           }
         } else {
@@ -216,9 +218,19 @@ export default function DriverDashboardScreen() {
     try {
       console.log('Loading dashboard data...');
       
+      // Verify token is available
+      const token = await AsyncStorage.getItem('authToken');
+      const user = await AsyncStorage.getItem('user');
+      console.log('🔐 Auth Check - Token present:', !!token, 'User present:', !!user);
+      if (user) {
+        const userData = JSON.parse(user);
+        console.log('📋 Current user role:', userData.role);
+      }
+      
       // Get driver stats
+      console.log('📡 Fetching /driver/stats...');
       const statsResponse = await apiClient.get('/driver/stats');
-      console.log('Stats loaded:', statsResponse.data);
+      console.log('✓ Stats loaded:', statsResponse.data);
       
       setStats(prev => ({
         ...prev,
@@ -233,9 +245,12 @@ export default function DriverDashboardScreen() {
       // Get pending ride requests
       const requestsResponse = await apiClient.get('/driver/requests');
       setRequests(requestsResponse.data || []);
-      console.log('Requests loaded:', requestsResponse.data?.length || 0);
+      console.log('✓ Requests loaded:', requestsResponse.data?.length || 0);
     } catch (err: any) {
-      console.error('Load dashboard error:', err);
+      console.error('❌ Load dashboard error:', err?.message);
+      console.error('❌ Error response status:', err?.response?.status);
+      console.error('❌ Error response data:', err?.response?.data);
+      console.error('❌ Full error:', err);
       showToast('Failed to load dashboard data', 'red');
       // Clear data on error instead of falling back to mock
       setStats({
@@ -352,25 +367,24 @@ export default function DriverDashboardScreen() {
   };
 
   // Handle ride request
-  const handleRequestAction = async (requestId: string, action: 'accept' | 'decline') => {
-    try {
-      await apiClient.post(`/driver/requests/${requestId}/${action}`);
-      setRequests(prev => prev.filter(r => r.id !== requestId));
-      if (action === 'accept') {
-        showToast('Ride accepted!', 'green');
-        navigation.navigate('DriverActiveRide', { requestId });
-      } else {
+  const handleRequestAction = async (requestId: string, action: 'view' | 'decline') => {
+    if (action === 'view') {
+      // Navigate to view ride details
+      navigation.navigate('ViewRideDetails', { requestId });
+    } else if (action === 'decline') {
+      // Decline the ride
+      try {
+        await apiClient.post(`/driver/requests/${requestId}/decline`);
+        setRequests(prev => prev.filter(r => r.id !== requestId));
         showToast('Ride declined', 'blue');
+      } catch (err: any) {
+        console.error('Error declining ride:', err);
+        const serverMessage = err?.response?.data?.error || err?.response?.data?.message;
+        showToast(
+          serverMessage || 'Failed to decline ride',
+          'red'
+        );
       }
-    } catch (err: any) {
-      console.error('Error handling request:', err);
-      const serverMessage = err?.response?.data?.error || err?.response?.data?.message;
-      showToast(
-        serverMessage || (action === 'accept'
-          ? 'Failed to accept ride'
-          : 'Failed to decline ride'),
-        'red'
-      );
     }
   };
 
@@ -535,7 +549,7 @@ export default function DriverDashboardScreen() {
             <RideRequestCard
               key={request.id}
               request={request}
-              onAccept={() => handleRequestAction(request.id, 'accept')}
+              onViewRequest={() => handleRequestAction(request.id, 'view')}
               onDecline={() => handleRequestAction(request.id, 'decline')}
             />
           ))
@@ -594,11 +608,11 @@ function StatCard({
 // Ride Request Card Component
 function RideRequestCard({
   request,
-  onAccept,
+  onViewRequest,
   onDecline,
 }: {
   request: RideRequest;
-  onAccept: () => void;
+  onViewRequest: () => void;
   onDecline: () => void;
 }) {
   return (
@@ -619,7 +633,7 @@ function RideRequestCard({
         <TouchableOpacity style={styles.declineButton} onPress={onDecline}>
           <Text style={styles.declineText}>Decline</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.acceptButton} onPress={onAccept}>
+        <TouchableOpacity style={styles.acceptButton} onPress={onViewRequest}>
           <Text style={styles.acceptText}>View Request</Text>
           <ChevronRight size={14} color={colors.white} strokeWidth={2} />
         </TouchableOpacity>

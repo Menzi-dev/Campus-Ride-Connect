@@ -16,6 +16,8 @@ export const colors = {
   blue: '#2563EB',
   blueLight: '#EFF6FF',
 
+  purple: '#8B5CF6',
+
   yellow: '#EAB308',
   yellowLight: '#FEFCE8',
   yellowText: '#854D0E', // used for the "top rated" / yellow badge text in the HTML

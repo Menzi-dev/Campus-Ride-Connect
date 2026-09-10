@@ -29,6 +29,9 @@ public class Driver {
     @Column(name = "total_trips")
     private Integer totalTrips;
 
+    @Column(name = "online", nullable = false)
+    private boolean online;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "approval_status")
     private ApprovalStatus approvalStatus;
@@ -93,6 +96,14 @@ public class Driver {
 
     public void setTotalTrips(Integer totalTrips) {
         this.totalTrips = totalTrips;
+    }
+
+    public boolean isOnline() {
+        return online;
+    }
+
+    public void setOnline(boolean online) {
+        this.online = online;
     }
 
     public ApprovalStatus getApprovalStatus() {

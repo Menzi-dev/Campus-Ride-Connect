@@ -58,6 +58,10 @@ public class RideService {
         return rideRepository.findById(rideId);
     }
 
+    public Ride saveRide(Ride ride) {
+        return rideRepository.save(ride);
+    }
+
     /**
      * Get active ride for a rider (not completed or cancelled)
      */
@@ -90,6 +94,12 @@ public class RideService {
         if (rideOpt.isPresent()) {
             Ride ride = rideOpt.get();
             ride.setStatus(status);
+            if (status == Ride.RideStatus.STARTED && ride.getStartedAt() == null) {
+                ride.setStartedAt(LocalDateTime.now());
+            }
+            if (status == Ride.RideStatus.COMPLETED && ride.getCompletedAt() == null) {
+                ride.setCompletedAt(LocalDateTime.now());
+            }
             return rideRepository.save(ride);
         }
         throw new RuntimeException("Ride not found");

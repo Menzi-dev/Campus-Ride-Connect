@@ -94,8 +94,8 @@ export default function LoginScreen() {
     const normalizedEmail = trimmedEmail.toLowerCase();
     const isAdminEmail = normalizedEmail === 'admin@spu.ac.za';
 
-    if (isAdminEmail && password !== 'admin12345') {
-      showToast('Admin must sign in with admin@spu.ac.za and password admin12345', 'red');
+    if (isAdminEmail && password !== 'SANELEDLOMO@2005') {
+      showToast('Admin must sign in with admin@spu.ac.za and password SANELEDLOMO@2005', 'red');
       return;
     }
 

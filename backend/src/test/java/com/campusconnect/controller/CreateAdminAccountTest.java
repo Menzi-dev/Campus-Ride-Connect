@@ -24,7 +24,7 @@ public class CreateAdminAccountTest {
         /**
          * This test creates the admin account that the mobile app expects:
          * Email: admin@spu.ac.za
-         * Password: admin12345 (note: mobile app checks this hardcoded password)
+         * Password: SANELEDLOMO@2005 (note: mobile app checks this hardcoded password)
          * 
          * Once this test runs successfully, the admin can:
          * 1. Login to mobile app with these credentials
@@ -34,7 +34,7 @@ public class CreateAdminAccountTest {
          */
         
         String adminEmail = "admin@spu.ac.za";
-        String adminPassword = "admin12345";
+        String adminPassword = "SANELEDLOMO@2005";
         
         System.out.println("\n" + "=".repeat(80));
         System.out.println("CREATING DEFAULT ADMIN ACCOUNT FOR MOBILE APP");

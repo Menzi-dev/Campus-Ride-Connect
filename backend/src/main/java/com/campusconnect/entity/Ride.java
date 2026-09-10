@@ -59,6 +59,12 @@ public class Ride {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Column(name = "rider_rating")
+    private Integer riderRating;
+
+    @Column(name = "rider_rating_comment", length = 500)
+    private String riderRatingComment;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -69,6 +75,10 @@ public class Ride {
     // Getters and setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
+    
+    // Alias for getId() for consistency with other entities
+    public Long getRideId() { return id; }
+    public void setRideId(Long id) { this.id = id; }
 
     public Long getRiderId() { return riderId; }
     public void setRiderId(Long riderId) { this.riderId = riderId; }
@@ -114,6 +124,12 @@ public class Ride {
 
     public LocalDateTime getCompletedAt() { return completedAt; }
     public void setCompletedAt(LocalDateTime completedAt) { this.completedAt = completedAt; }
+
+    public Integer getRiderRating() { return riderRating; }
+    public void setRiderRating(Integer riderRating) { this.riderRating = riderRating; }
+
+    public String getRiderRatingComment() { return riderRatingComment; }
+    public void setRiderRatingComment(String riderRatingComment) { this.riderRatingComment = riderRatingComment; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

@@ -23,6 +23,8 @@ import TripHistoryScreen from './src/screens/TripHistoryScreen';
 import ScheduleScreen from './src/screens/ScheduleRideScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import DriverActiveRideScreen from './src/screens/DriverActiveRideScreen';
+import ViewRideDetailsScreen from './src/screens/ViewRideDetailsScreen';
+import RatingDriverScreen from './src/screens/RatingDriverScreen';
 import { ArrowLeft, ArrowRight } from 'lucide-react-native';
 
 type RootStackParamList = {
@@ -38,7 +40,9 @@ type RootStackParamList = {
   TripHistory: undefined;
   Schedule: undefined;
   Profile: undefined;
+  ViewRideDetails: { requestId: string };
   DriverActiveRide: { requestId: string };
+  RatingDriver: { rideId: string; driverName?: string };
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -47,39 +51,15 @@ export default function App() {
   const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
 
   useEffect(() => {
-    const restoreSession = async () => {
+    const requireLoginOnStartup = async () => {
       try {
-        const [token, rawUser] = await Promise.all([
-          AsyncStorage.getItem('authToken'),
-          AsyncStorage.getItem('user'),
-        ]);
-
-        if (!token || !rawUser) {
-          setInitialRoute('Landing');
-          return;
-        }
-
-        const user = JSON.parse(rawUser);
-        switch (user?.role) {
-          case 'ADMIN':
-            setInitialRoute('AdminDashboard');
-            break;
-          case 'DRIVER':
-            setInitialRoute('DriverDashboard');
-            break;
-          case 'SECURITY':
-            setInitialRoute('SecurityDashboard');
-            break;
-          default:
-            setInitialRoute('Home');
-        }
-      } catch {
         await AsyncStorage.multiRemove(['authToken', 'user']);
-        setInitialRoute('Landing');
+      } catch {
       }
+      setInitialRoute('Landing');
     };
 
-    restoreSession();
+    requireLoginOnStartup();
   }, []);
 
   if (!initialRoute) {
@@ -139,7 +119,9 @@ export default function App() {
               <Stack.Screen name="TripHistory" component={TripHistoryScreen} />
               <Stack.Screen name="Schedule" component={ScheduleScreen} />
               <Stack.Screen name="Profile" component={ProfileScreen} />
+              <Stack.Screen name="ViewRideDetails" component={ViewRideDetailsScreen} />
               <Stack.Screen name="DriverActiveRide" component={DriverActiveRideScreen} />
+              <Stack.Screen name="RatingDriver" component={RatingDriverScreen} />
             </Stack.Navigator>
           </NavigationContainer>
         </ToastProvider>

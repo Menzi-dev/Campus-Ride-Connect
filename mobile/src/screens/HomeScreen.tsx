@@ -14,6 +14,9 @@ import {
   Dimensions,
   ActivityIndicator,
   Modal,
+  Pressable,
+  Linking,
+  Share,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -29,10 +32,10 @@ import {
   Car,
   House,
   Clock,
+  Clock as ClockIcon,
   CalendarDays,
   CircleUserRound,
   Route,
-  Clock as ClockIcon,
   Check,
   Navigation,
   AlertCircle,
@@ -40,6 +43,14 @@ import {
   MessageCircle,
   Star,
   AlertTriangle,
+  CreditCard,
+  Banknote,
+  Circle,
+  CheckCircle2,
+  Link,
+  Copy,
+  MessageSquare,
+  ArrowLeft,
 } from 'lucide-react-native';
 import Button from '../components/Button';
 import BottomSheetModal from '../components/BottomSheetModal';
@@ -85,6 +96,11 @@ if (Platform.OS === 'web') {
 type RootStackParamList = {
   Home: undefined;
   Login: undefined;
+  TripHistory: undefined;
+  Schedule: undefined;
+  Profile: undefined;
+  RatingDriver: { rideId: string; driverName?: string };
+  Chat: { rideId: string; otherPartyName?: string };
 };
 
 type Coords = { latitude: number; longitude: number };
@@ -292,8 +308,15 @@ function routeToMapCoords(routeCoords: RoutePoint[]): Coords[] {
   return routeCoords.map(([lng, lat]) => ({ latitude: lat, longitude: lng }));
 }
 
+function interpolateRoute(route: Coords[], progress: number): Coords {
+  if (!route.length) return FALLBACK_REGION;
+  const index = Math.min(route.length - 1, Math.max(0, Math.floor(progress * route.length)));
+  return route[index] || route[0];
+}
+
 const BASE_FARE = 5;
 const RATE_PER_KM = 4;
+const DRIVER_START_POINT: Coords = { latitude: -28.7587766, longitude: 24.759741 };
 
 function estimateFare(km: number) {
   const fare = BASE_FARE + km * RATE_PER_KM;
@@ -315,6 +338,8 @@ const WebMap = ({
   places,
   onLocationSelect,
   loading,
+  driverPosition,
+  driverMarker,
 }: {
   userLocation: Coords;
   destination: CampusLocation | null;
@@ -322,6 +347,9 @@ const WebMap = ({
   places: CampusLocation[];
   onLocationSelect: (location: CampusLocation) => void;
   loading?: boolean;
+  driverPosition?: Coords;
+  driverDestination?: Coords;
+  driverMarker?: boolean;
 }) => {
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState(false);
@@ -382,7 +410,14 @@ const WebMap = ({
       try {
         setTimeout(() => {
           map.invalidateSize();
-          if (destination) {
+          // If we have a driver route, fit to the whole route
+          if (routePoints && routePoints.length > 1) {
+            const L = require('leaflet');
+            const bounds = L.latLngBounds(
+              routePoints.map((p) => [p.latitude, p.longitude])
+            );
+            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+          } else if (destination) {
             const L = require('leaflet');
             const bounds = L.latLngBounds(
               [userLocation.latitude, userLocation.longitude],
@@ -396,7 +431,7 @@ const WebMap = ({
       } catch (e) {
         console.warn('Map update error:', e);
       }
-    }, [map, destination, userLocation]);
+    }, [map, destination, userLocation, routePoints]);
     return null;
   };
 
@@ -453,12 +488,22 @@ const WebMap = ({
             </Marker>
           )}
 
+          {driverMarker && driverPosition && (
+            <Marker
+              position={[driverPosition.latitude, driverPosition.longitude]}
+              icon={createMarkerIcon('#1F2937', 38, '🚗')}
+              zIndexOffset={1000}
+            >
+              <Popup>Driver location</Popup>
+            </Marker>
+          )}
+
           {routePoints.length > 1 && (
             <Polyline
               positions={routePoints.map(p => [p.latitude, p.longitude])}
               color="#2196F3"
-              weight={5}
-              opacity={0.85}
+              weight={6}
+              opacity={0.9}
               lineCap="round"
               lineJoin="round"
               smoothFactor={1}
@@ -566,6 +611,10 @@ export default function HomeScreen() {
   const [userLocation, setUserLocation] = useState<Coords>(FALLBACK_REGION);
   const [pickupLabel, setPickupLabel] = useState('Detecting location...');
   const [locating, setLocating] = useState(true);
+  const [pickupSheetVisible, setPickupSheetVisible] = useState(false);
+  const [pickupSearch, setPickupSearch] = useState('');
+  const [pickupSearchResults, setPickupSearchResults] = useState<CampusLocation[]>([]);
+  const [pickupSearchLoading, setPickupSearchLoading] = useState(false);
 
   // Trip state
   const [destination, setDestination] = useState<CampusLocation | null>(null);
@@ -595,6 +644,16 @@ export default function HomeScreen() {
   const [tripStatus, setTripStatus] = useState<'enroute' | 'arrived' | 'started' | 'completed'>('enroute');
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [showActiveTrip, setShowActiveTrip] = useState(false);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [selectedRating, setSelectedRating] = useState(0);
+  const [submittingRating, setSubmittingRating] = useState(false);
+  const [showRatingThankYou, setShowRatingThankYou] = useState(false);
+  const [shareRideVisible, setShareRideVisible] = useState(false);
+  const shareSheetAnim = useRef(new Animated.Value(0)).current;
+  const [paymentVisible, setPaymentVisible] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD'>('CASH');
+  const [selectedCard, setSelectedCard] = useState('4242');
+  const [paymentRide, setPaymentRide] = useState<RideRequest | null>(null);
   const [pollingInterval, setPollingInterval] = useState<ReturnType<typeof setInterval> | null>(null);
 
   // Real search + real nearby places state
@@ -604,8 +663,16 @@ export default function HomeScreen() {
   const [nearbyPlaces, setNearbyPlaces] = useState<CampusLocation[]>([]);
   const [nearbyLoading, setNearbyLoading] = useState(false);
 
+  // ===== DRIVER NAVIGATION STATE (mirrors DriverActiveRideScreen) =====
+  const [driverRoutePoints, setDriverRoutePoints] = useState<Coords[]>([]);
+  const [driverCarPosition, setDriverCarPosition] = useState<Coords>(DRIVER_START_POINT);
+  const [driverProgress, setDriverProgress] = useState(0);
+  const driverAnimationRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const driverRouteRequestRef = useRef(0);
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pickupSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Finding drivers animations
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -614,6 +681,20 @@ export default function HomeScreen() {
   const progressAnim = useRef(new Animated.Value(0)).current;
   const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const rotateLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  // ===== CLEAR DRIVER NAVIGATION =====
+  // Wipes the route polyline, the car marker and stops the animation loop.
+  // Called when the trip is completed so nothing is left on the map.
+  const clearDriverNavigation = () => {
+    if (driverAnimationRef.current) {
+      clearInterval(driverAnimationRef.current);
+      driverAnimationRef.current = null;
+    }
+    driverRouteRequestRef.current += 1; // invalidate any in-flight route fetch
+    setDriverRoutePoints([]);
+    setDriverCarPosition(DRIVER_START_POINT);
+    setDriverProgress(0);
+  };
 
   // Load user data
   useEffect(() => {
@@ -629,10 +710,78 @@ export default function HomeScreen() {
     })();
     detectLocation();
     checkForActiveRide();
-    
+
     // Fade in animation
     Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
   }, []);
+
+  // ===== DRIVER PHASE DERIVATION (mirrors driver screen) =====
+  const driverPhase = String(currentRide?.status || tripStatus || '').toLowerCase();
+  const driverHeadingToPickup =
+    driverPhase === 'accepted' || driverPhase === 'enroute' || driverPhase === 'pending';
+  const driverIsArrivalPhase = driverPhase === 'arrived';
+  const driverIsDestinationPhase = driverPhase === 'started';
+  const tripCompleted = driverPhase === 'completed' || tripStatus === 'completed';
+
+  // ===== Defensive extraction of pickup/dest from backend (handles camelCase + snake_case) =====
+  const ridePickupLat = useMemo(() => {
+    const r: any = currentRide;
+    return Number(
+      r?.pickupLat ??
+        r?.pickup_lat ??
+        r?.pickup?.latitude ??
+        userLocation.latitude
+    );
+  }, [currentRide, userLocation.latitude]);
+
+  const ridePickupLng = useMemo(() => {
+    const r: any = currentRide;
+    return Number(
+      r?.pickupLng ??
+        r?.pickup_lng ??
+        r?.pickup?.longitude ??
+        userLocation.longitude
+    );
+  }, [currentRide, userLocation.longitude]);
+
+  const rideDestLat = useMemo(() => {
+    const r: any = currentRide;
+    return Number(
+      r?.destinationLat ??
+        r?.destLat ??
+        r?.destination_lat ??
+        r?.dest_lat ??
+        r?.destination?.latitude ??
+        destination?.coords.latitude ??
+        ridePickupLat
+    );
+  }, [currentRide, destination?.coords.latitude, ridePickupLat]);
+
+  const rideDestLng = useMemo(() => {
+    const r: any = currentRide;
+    return Number(
+      r?.destinationLng ??
+        r?.destLng ??
+        r?.destination_lng ??
+        r?.dest_lng ??
+        r?.destination?.longitude ??
+        destination?.coords.longitude ??
+        ridePickupLng
+    );
+  }, [currentRide, destination?.coords.longitude, ridePickupLng]);
+
+  // Compute driver start/end points based on phase (mirrors driver screen)
+  const driverStartPoint = useMemo<Coords>(() => {
+    if (driverHeadingToPickup) return DRIVER_START_POINT;
+    return { latitude: ridePickupLat, longitude: ridePickupLng };
+  }, [driverHeadingToPickup, ridePickupLat, ridePickupLng]);
+
+  const driverEndPoint = useMemo<Coords>(() => {
+    if (driverHeadingToPickup) {
+      return { latitude: ridePickupLat, longitude: ridePickupLng };
+    }
+    return { latitude: rideDestLat, longitude: rideDestLng };
+  }, [driverHeadingToPickup, ridePickupLat, ridePickupLng, rideDestLat, rideDestLng]);
 
   // Check if user has an active ride
   const checkForActiveRide = async () => {
@@ -652,32 +801,33 @@ export default function HomeScreen() {
           startRidePolling(String(response.data.id));
           return;
         }
-        
+
         if (['accepted', 'enroute', 'arrived', 'started'].includes(status)) {
           setFindingDriversVisible(true);
           setSearchingForDriver(false);
           setDriverFound(true);
-          
+
           if (response.data.driver) {
             setDriverName(response.data.driver.fullName);
             setDriverRating(response.data.driver.rating || 0);
             setDriverCar(`${response.data.driver.vehicleMake} ${response.data.driver.vehicleModel}`);
             setDriverPlate(response.data.driver.licencePlate);
             setDriverPhone(response.data.driver.phone || '');
-            
-            // Show driver info immediately for active rides
+
             Animated.timing(driverFadeAnim, {
               toValue: 1,
               duration: 0,
               useNativeDriver: true,
             }).start();
           }
-          
-          if (['accepted', 'enroute', 'arrived', 'started'].includes(status)) {
-            setShowActiveTrip(true);
-            setTripStatus(status === 'accepted' ? 'enroute' : status as 'enroute' | 'arrived' | 'started' | 'completed');
-          }
-          
+
+          setShowActiveTrip(true);
+          setTripStatus(
+            status === 'accepted'
+              ? 'enroute'
+              : (status as 'enroute' | 'arrived' | 'started' | 'completed')
+          );
+
           startRidePolling(response.data.id);
         }
       }
@@ -689,52 +839,71 @@ export default function HomeScreen() {
   // Poll for ride updates
   const startRidePolling = (rideId: string) => {
     if (pollingInterval) clearInterval(pollingInterval);
-    
+
     const interval = setInterval(async () => {
       try {
         const response = await apiClient.get(`/rides/${rideId}/status`);
         const ride = response.data;
+        console.log('[RiderNav] Poll ride:', ride?.status, {
+          pickupLat: ride?.pickupLat ?? ride?.pickup_lat,
+          pickupLng: ride?.pickupLng ?? ride?.pickup_lng,
+          destinationLat:
+            ride?.destinationLat ?? ride?.destLat ?? ride?.destination_lat ?? ride?.dest_lat,
+          destinationLng:
+            ride?.destinationLng ?? ride?.destLng ?? ride?.destination_lng ?? ride?.dest_lng,
+        });
         setCurrentRide(ride);
-        
+
         const status = String(ride.status || '').toLowerCase();
-        if (status === 'accepted' || status === 'enroute' || status === 'arrived' || status === 'started') {
+        if (
+          status === 'accepted' ||
+          status === 'enroute' ||
+          status === 'arrived' ||
+          status === 'started'
+        ) {
           // Driver accepted the ride - show driver info
           setSearchingForDriver(false);
           setDriverFound(true);
-          
+
           if (ride.driver) {
             setDriverName(ride.driver.fullName);
             setDriverRating(ride.driver.rating || 0);
             setDriverCar(`${ride.driver.vehicleMake} ${ride.driver.vehicleModel}`);
             setDriverPlate(ride.driver.licencePlate);
             setDriverPhone(ride.driver.phone || '');
-            
-            // Animate driver card appearance
+
             Animated.timing(driverFadeAnim, {
               toValue: 1,
               duration: 600,
               useNativeDriver: true,
             }).start();
           }
-          
-          // Once a driver accepts, show the rider's trip screen immediately.
-          if (status === 'accepted' || status === 'enroute' || status === 'arrived' || status === 'started') {
-            setTripStatus(status === 'accepted' ? 'enroute' : status as 'enroute' | 'arrived' | 'started' | 'completed');
-            setShowActiveTrip(true);
-          }
-          
+
+          setTripStatus(
+            status === 'accepted'
+              ? 'enroute'
+              : (status as 'enroute' | 'arrived' | 'started' | 'completed')
+          );
+          setShowActiveTrip(true);
+
           if (ride.duration) {
             setTimeRemaining(Math.min(100, ride.duration));
           }
         } else if (status === 'completed') {
+          // ===== TRIP COMPLETED: clear the driver navigation =====
+          clearDriverNavigation();
+          setCurrentRideId(ride.id || rideId);
+          setCurrentRide(ride);
           setTripStatus('completed');
           setShowActiveTrip(true);
+          setFindingDriversVisible(true);
           clearInterval(interval);
           setPollingInterval(null);
           showToast('Trip completed!', 'green');
         } else if (status === 'cancelled') {
           clearInterval(interval);
           setPollingInterval(null);
+          clearDriverNavigation();
           closeFindingDrivers();
           showToast('Trip was cancelled', 'red');
         }
@@ -742,9 +911,107 @@ export default function HomeScreen() {
         console.error('Error polling ride:', error);
       }
     }, 3000);
-    
+
     setPollingInterval(interval);
   };
+
+  // ===== DRIVER ROUTE LOADING (mirrors driver screen) =====
+  // Recalculate route whenever status or pickup/dest changes.
+  // Skip entirely when the trip is already completed.
+  useEffect(() => {
+    if (!currentRide || !showActiveTrip) return;
+    if (tripCompleted) return;
+    if (!driverStartPoint || !driverEndPoint) return;
+
+    const requestId = ++driverRouteRequestRef.current;
+    const waitingAtPickup = driverIsArrivalPhase;
+
+    // Reset progress + car position based on phase
+    setDriverProgress(waitingAtPickup ? 1 : 0.08);
+    setDriverCarPosition(waitingAtPickup ? driverEndPoint : driverStartPoint);
+    // Always seed at least a 2-point straight line so the polyline renders immediately
+    setDriverRoutePoints([driverStartPoint, driverEndPoint]);
+
+    console.log('[RiderNav] Loading route', {
+      phase: driverPhase,
+      headingToPickup: driverHeadingToPickup,
+      start: driverStartPoint,
+      end: driverEndPoint,
+    });
+
+    const loadRoute = async () => {
+      try {
+        const route = await getRoute(driverStartPoint, driverEndPoint);
+        const points = routeToMapCoords(route.coordinates);
+        if (requestId !== driverRouteRequestRef.current) return;
+        console.log('[RiderNav] Route loaded with', points.length, 'points');
+        setDriverRoutePoints(points.length > 1 ? points : [driverStartPoint, driverEndPoint]);
+      } catch (err) {
+        console.warn('[RiderNav] Route fetch failed, using straight line', err);
+        if (requestId !== driverRouteRequestRef.current) return;
+        setDriverRoutePoints([driverStartPoint, driverEndPoint]);
+      }
+    };
+
+    loadRoute();
+  }, [
+    currentRide?.id,
+    currentRide?.status,
+    showActiveTrip,
+    tripCompleted,
+    driverPhase,
+    driverHeadingToPickup,
+    driverIsArrivalPhase,
+    driverStartPoint,
+    driverEndPoint,
+  ]);
+
+  // ===== DRIVER ANIMATION LOOP (mirrors driver screen) =====
+  useEffect(() => {
+    const canMove = driverHeadingToPickup || driverIsDestinationPhase;
+
+    // Do not animate if the trip is completed
+    if (tripCompleted) {
+      if (driverAnimationRef.current) {
+        clearInterval(driverAnimationRef.current);
+        driverAnimationRef.current = null;
+      }
+      return;
+    }
+
+    // Always place the car somewhere visible when the route updates
+    if (driverRoutePoints.length > 0) {
+      setDriverCarPosition(interpolateRoute(driverRoutePoints, driverProgress));
+    }
+
+    if (!driverRoutePoints.length || !canMove) {
+      if (driverAnimationRef.current) {
+        clearInterval(driverAnimationRef.current);
+        driverAnimationRef.current = null;
+      }
+      return;
+    }
+
+    driverAnimationRef.current = setInterval(() => {
+      setDriverProgress((current) => {
+        const next = Math.min(1, current + 0.0125);
+        setDriverCarPosition(interpolateRoute(driverRoutePoints, next));
+        if (next >= 1 && driverAnimationRef.current) {
+          clearInterval(driverAnimationRef.current);
+          driverAnimationRef.current = null;
+        }
+        return next;
+      });
+    }, 500);
+
+    return () => {
+      if (driverAnimationRef.current) {
+        clearInterval(driverAnimationRef.current);
+        driverAnimationRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driverRoutePoints, driverHeadingToPickup, driverIsDestinationPhase, tripCompleted]);
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -752,6 +1019,10 @@ export default function HomeScreen() {
       if (pollingInterval) {
         clearInterval(pollingInterval);
         setPollingInterval(null);
+      }
+      if (driverAnimationRef.current) {
+        clearInterval(driverAnimationRef.current);
+        driverAnimationRef.current = null;
       }
       stopFindingDriversAnimations();
     };
@@ -785,6 +1056,9 @@ export default function HomeScreen() {
       const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude };
       setUserLocation(coords);
       loadNearbyPlaces(coords);
+      if (destination) {
+        updateRoute(coords, destination);
+      }
 
       try {
         const [place] = await Location.reverseGeocodeAsync(coords);
@@ -827,6 +1101,58 @@ export default function HomeScreen() {
     }, 400);
   };
 
+  const handlePickupSearch = (text: string) => {
+    setPickupSearch(text);
+
+    if (pickupSearchDebounceRef.current) {
+      clearTimeout(pickupSearchDebounceRef.current);
+    }
+
+    const trimmed = text.trim();
+    if (trimmed.length < 2) {
+      setPickupSearchResults([]);
+      setPickupSearchLoading(false);
+      return;
+    }
+
+    setPickupSearchLoading(true);
+    pickupSearchDebounceRef.current = setTimeout(async () => {
+      const results = await searchPlacesByText(trimmed, userLocation);
+      setPickupSearchResults(results);
+      setPickupSearchLoading(false);
+    }, 400);
+  };
+
+  const updateRoute = async (pickup: Coords, dropoff: CampusLocation) => {
+    setRouting(true);
+    try {
+      const route = await getRoute(pickup, dropoff.coords);
+      setRoutePoints(routeToMapCoords(route.coordinates));
+      setRouteDistance(route.distance);
+      setRouteDuration(route.duration);
+    } catch {
+      const dist = distanceKm(pickup, dropoff.coords);
+      setRoutePoints([pickup, dropoff.coords]);
+      setRouteDistance(dist);
+      setRouteDuration((dist / 25) * 60);
+    } finally {
+      setRouting(false);
+    }
+  };
+
+  const selectPickupLocation = (location: CampusLocation) => {
+    setUserLocation(location.coords);
+    setPickupLabel(location.address ? `${location.name}, ${location.address}` : location.name);
+    setPickupSheetVisible(false);
+    setPickupSearch('');
+    setPickupSearchResults([]);
+    loadNearbyPlaces(location.coords);
+    if (destination) {
+      updateRoute(location.coords, destination);
+    }
+    showToast(`Pickup set to ${location.name}`, 'green');
+  };
+
   const handleLocationSelect = async (location: CampusLocation) => {
     setDestination(location);
     setDestSheetVisible(false);
@@ -834,21 +1160,8 @@ export default function HomeScreen() {
     setShowSearchResults(false);
     setSearchResults([]);
 
-    setRouting(true);
-    try {
-      const route = await getRoute(userLocation, location.coords);
-      setRoutePoints(routeToMapCoords(route.coordinates));
-      setRouteDistance(route.distance);
-      setRouteDuration(route.duration);
-      showToast(`Route to ${location.name} - ${route.distance.toFixed(1)} km`, 'green');
-    } catch (error) {
-      const dist = distanceKm(userLocation, location.coords);
-      setRoutePoints([userLocation, location.coords]);
-      setRouteDistance(dist);
-      setRouteDuration((dist / 25) * 60);
-    } finally {
-      setRouting(false);
-    }
+    await updateRoute(userLocation, location);
+    showToast(`Route to ${location.name}`, 'green');
   };
 
   const mapPlaces = useMemo(() => {
@@ -874,11 +1187,11 @@ export default function HomeScreen() {
     return combined.slice(0, 15);
   }, [search, userLocation, searchResults, showSearchResults, nearbyPlaces]);
 
-  const tripDistanceKm = routeDistance || (destination ? distanceKm(userLocation, destination.coords) : 0);
+  const tripDistanceKm =
+    routeDistance || (destination ? distanceKm(userLocation, destination.coords) : 0);
   const fare = tripDistanceKm > 0 ? estimateFare(tripDistanceKm) : 0;
   const etaMinutes = routeDuration || (destination ? (tripDistanceKm / 25) * 60 : 0);
 
-  // REAL: Request ride from backend with detailed error logging
   const handleRequestRide = async () => {
     if (!destination) {
       showToast('Please select a destination first', 'red');
@@ -889,59 +1202,44 @@ export default function HomeScreen() {
       showToast('Please login again', 'red');
       return;
     }
-    
+
     setRequesting(true);
 
     try {
       const token = await AsyncStorage.getItem('authToken');
-      
+
       if (!token) {
         showToast('Please login again', 'red');
         setRequesting(false);
         return;
       }
 
-      // Create ride request on backend
       const rideData = {
         riderId: userId,
+        pickupLocation: pickupLabel,
         pickupLat: userLocation.latitude,
         pickupLng: userLocation.longitude,
         pickupAddress: pickupLabel,
+        destination: destination.name,
         destinationLat: destination.coords.latitude,
         destinationLng: destination.coords.longitude,
+        destLat: destination.coords.latitude,
+        destLng: destination.coords.longitude,
         destinationAddress: destination.name,
         fare: fare,
         distance: tripDistanceKm,
+        distanceKm: tripDistanceKm,
         duration: etaMinutes,
       };
 
-      console.log('=== RIDE REQUEST ===');
-      console.log('URL:', '/rides/request');
-      console.log('Data:', JSON.stringify(rideData, null, 2));
-      console.log('Token exists:', !!token);
-      console.log('====================');
-      
       const response = await apiClient.post('/rides/request', rideData);
-      console.log('Ride request response:', response.data);
-      
       const newRide = response.data;
       setCurrentRideId(newRide.id);
       setCurrentRide(newRide);
-
-      showToast('Ride requested! Waiting for driver...', 'blue');
-      
-      // Start the finding drivers flow
-      startFindingDriversFlow(String(newRide.id));
-
+      setPaymentRide(newRide);
+      setPaymentMethod('CASH');
+      setPaymentVisible(true);
     } catch (error: any) {
-      console.error('=== RIDE REQUEST ERROR ===');
-      console.error('Error status:', error?.response?.status);
-      console.error('Error data:', error?.response?.data);
-      console.error('Error message:', error?.message);
-      console.error('Full error:', error);
-      console.error('===========================');
-      
-      // Handle specific error cases with detailed messages
       if (error?.response?.status === 401 || error?.response?.status === 403) {
         showToast('Session expired. Please login again.', 'red');
         await AsyncStorage.multiRemove(['authToken', 'user']);
@@ -949,9 +1247,10 @@ export default function HomeScreen() {
           navigation.replace('Login');
         }, 1000);
       } else if (error?.response?.status === 400) {
-        const message = error?.response?.data?.message || 
-                       error?.response?.data?.error || 
-                       'Invalid ride request. Please check your details.';
+        const message =
+          error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          'Invalid ride request. Please check your details.';
         showToast(message, 'red');
       } else if (error?.response?.status === 404) {
         showToast('Ride service not available. Please try again later.', 'red');
@@ -967,23 +1266,36 @@ export default function HomeScreen() {
     }
   };
 
-  // Start finding drivers flow
+  const confirmPayment = async () => {
+    if (!paymentRide?.id) return;
+    try {
+      await apiClient.post(`/rides/${paymentRide.id}/payment`, {
+        method: paymentMethod,
+        ...(paymentMethod === 'CARD' ? { cardLastFour: selectedCard } : {}),
+      });
+      setPaymentVisible(false);
+      showToast('Payment method saved', 'green');
+      startFindingDriversFlow(String(paymentRide.id));
+    } catch (error: any) {
+      showToast(error?.response?.data?.error || 'Could not save payment method', 'red');
+    }
+  };
+
   const startFindingDriversFlow = (rideId: string) => {
     setFindingDriversVisible(true);
     setSearchingForDriver(true);
     setDriverFound(false);
     setShowActiveTrip(false);
     setElapsedSeconds(0);
+    // Ensure any prior driver nav is gone before starting a fresh flow
+    clearDriverNavigation();
 
-    // Start animations
     startFindingDriversAnimations();
 
-    // Start timer
     const timerInterval = setInterval(() => {
-      setElapsedSeconds(prev => prev + 1);
+      setElapsedSeconds((prev) => prev + 1);
     }, 1000);
 
-    // Real mode - start polling for driver
     startRidePolling(rideId);
 
     return () => clearInterval(timerInterval);
@@ -1025,7 +1337,6 @@ export default function HomeScreen() {
     }).start();
   };
 
-  // Cancel ride search
   const handleCancelSearch = async () => {
     if (cancelling) return;
     setCancelling(true);
@@ -1035,7 +1346,7 @@ export default function HomeScreen() {
         await apiClient.post(`/rides/${currentRideId}/cancel`);
       }
       showToast('Ride search cancelled', 'blue');
-      
+
       setTimeout(() => {
         closeFindingDrivers();
       }, 500);
@@ -1051,6 +1362,7 @@ export default function HomeScreen() {
     setCancelling(false);
     setCurrentRideId(null);
     setCurrentRide(null);
+    clearDriverNavigation();
     stopFindingDriversAnimations();
     if (pollingInterval) {
       clearInterval(pollingInterval);
@@ -1060,14 +1372,74 @@ export default function HomeScreen() {
 
   const handleCallDriver = () => {
     if (driverPhone) {
-      showToast(`Calling ${driverName}...`, 'blue');
+      const phoneUrl = `tel:${driverPhone.replace(/[^\d+]/g, '')}`;
+      Linking.openURL(phoneUrl).catch(() => {
+        showToast(`Could not call ${driverName || 'the driver'}`, 'red');
+      });
     } else {
       showToast('Driver phone number not available', 'red');
     }
   };
 
   const handleMessageDriver = () => {
-    showToast(`Messaging ${driverName}...`, 'blue');
+    if (currentRideId) {
+      navigation.navigate('Chat', {
+        rideId: String(currentRideId),
+        otherPartyName: driverName || 'Driver',
+      });
+    } else {
+      showToast('The active ride is not available', 'red');
+    }
+  };
+
+  const openShareRideSheet = () => {
+    setShareRideVisible(true);
+    shareSheetAnim.setValue(0);
+    Animated.timing(shareSheetAnim, {
+      toValue: 1,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const closeShareRideSheet = () => {
+    Animated.timing(shareSheetAnim, {
+      toValue: 0,
+      duration: 170,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) setShareRideVisible(false);
+    });
+  };
+
+  const shareLink = currentRideId ? `campusconnect.app/t/${currentRideId}` : '';
+
+  const handleCopyRideLink = async () => {
+    try {
+      if (Platform.OS === 'web' && navigator.clipboard) {
+        await navigator.clipboard.writeText(shareLink);
+      } else {
+        await Share.share({ message: shareLink });
+      }
+      showToast('Ride link copied', 'green');
+    } catch {
+      showToast('Could not copy ride link', 'red');
+    }
+  };
+
+  const handleShareRide = async (channel: 'whatsapp' | 'sms') => {
+    const text = `Track my CampusConnect ride: ${shareLink}`;
+    const url =
+      channel === 'whatsapp'
+        ? `https://wa.me/?text=${encodeURIComponent(text)}`
+        : `sms:?body=${encodeURIComponent(text)}`;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      showToast(`Could not open ${channel === 'whatsapp' ? 'WhatsApp' : 'SMS'}`, 'red');
+    }
   };
 
   const handleSOS = async () => {
@@ -1089,26 +1461,66 @@ export default function HomeScreen() {
         await apiClient.post(`/rides/${currentRideId}/cancel`);
       }
       showToast('Trip cancelled', 'red');
+      // Clear navigation immediately so nothing lingers on the map
+      clearDriverNavigation();
       closeFindingDrivers();
     } catch (error) {
       showToast('Could not cancel trip', 'red');
     }
   };
 
+  // ===== COMPLETE TRIP: clear nav then go to rating =====
   const handleCompleteTrip = async () => {
     try {
-      if (currentRideId) {
-        await apiClient.post(`/rides/${currentRideId}/complete`);
+      const completedRideId = currentRideId || (currentRide?.id ? String(currentRide.id) : null);
+      if (!completedRideId) {
+        showToast(
+          'The completed ride could not be found. Please refresh your dashboard.',
+          'red'
+        );
+        return;
       }
-      showToast('Trip completed!', 'green');
+
+      // Clear the map's navigation immediately so no route or car marker is left
+      clearDriverNavigation();
+
       closeFindingDrivers();
+
+      setTimeout(() => {
+        navigation.navigate('RatingDriver', {
+          rideId: completedRideId,
+          driverName: driverName || undefined,
+        });
+      }, 300);
     } catch (error) {
-      showToast('Could not complete trip', 'red');
+      console.error('Error navigating to rating:', error);
+      showToast('Could not navigate to rating screen', 'red');
     }
   };
 
-  const handleComingSoon = (feature: string) => {
-    showToast(`${feature} is coming soon`, 'blue');
+  const handleRateDriver = async () => {
+    if (!currentRideId) {
+      showToast('The completed ride could not be found. Please refresh your dashboard.', 'red');
+      return;
+    }
+    if (selectedRating < 1 || submittingRating) return;
+
+    setSubmittingRating(true);
+    try {
+      await apiClient.post(`/rides/${currentRideId}/rating`, { rating: selectedRating });
+      setShowRatingModal(false);
+      setShowRatingThankYou(true);
+      setTimeout(() => {
+        setShowRatingThankYou(false);
+        setSelectedRating(0);
+        clearDriverNavigation();
+        closeFindingDrivers();
+      }, 2200);
+    } catch (error: any) {
+      showToast(error?.response?.data?.error || 'Could not submit rating', 'red');
+    } finally {
+      setSubmittingRating(false);
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -1127,23 +1539,42 @@ export default function HomeScreen() {
 
   const getStatusText = () => {
     switch (tripStatus) {
-      case 'enroute': return 'Driver is en route to you';
-      case 'arrived': return 'Driver has arrived';
-      case 'started': return 'Trip in progress';
-      case 'completed': return 'Trip completed';
-      default: return 'Trip in progress';
+      case 'enroute':
+        return 'Driver is en route to you';
+      case 'arrived':
+        return 'Driver has arrived';
+      case 'started':
+        return 'Trip in progress';
+      case 'completed':
+        return 'Trip completed';
+      default:
+        return 'Trip in progress';
     }
   };
 
   const getStatusColor = () => {
     switch (tripStatus) {
-      case 'enroute': return colors.blue;
-      case 'arrived': return colors.green;
-      case 'started': return colors.orange;
-      case 'completed': return colors.green;
-      default: return colors.blue;
+      case 'enroute':
+        return colors.blue;
+      case 'arrived':
+        return colors.green;
+      case 'started':
+        return colors.orange;
+      case 'completed':
+        return colors.green;
+      default:
+        return colors.blue;
     }
   };
+
+  // Compute ETA display from driver progress + trip duration
+  const driverEtaDisplay = useMemo(() => {
+    if (driverIsArrivalPhase) return 'Arrived';
+    if (tripCompleted) return 'Completed';
+    const baseDuration = currentRide?.duration || routeDuration || 5;
+    const remaining = Math.max(1, Math.round(baseDuration * (1 - driverProgress)));
+    return `~${remaining} min`;
+  }, [driverProgress, driverIsArrivalPhase, tripCompleted, currentRide?.duration, routeDuration]);
 
   const renderMap = () => {
     if (Platform.OS === 'web') {
@@ -1168,11 +1599,12 @@ export default function HomeScreen() {
     );
   };
 
-  // Render Finding Drivers Overlay
   const renderFindingDriversOverlay = () => {
     if (!findingDriversVisible) return null;
 
-    const isDriverAssigned = currentRide?.driver && ['accepted', 'enroute', 'arrived', 'started'].includes(currentRide.status);
+    const isDriverAssigned =
+      currentRide?.driver &&
+      ['accepted', 'enroute', 'arrived', 'started'].includes(currentRide.status);
 
     return (
       <Modal
@@ -1185,8 +1617,8 @@ export default function HomeScreen() {
           <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
           <View style={[styles.overlayHeader, { paddingTop: insets.top + 14 }]}>
-            <TouchableOpacity 
-              onPress={handleCancelSearch} 
+            <TouchableOpacity
+              onPress={handleCancelSearch}
               style={styles.closeButton}
               disabled={cancelling || searchingForDriver || isDriverAssigned || showActiveTrip}
             >
@@ -1198,9 +1630,11 @@ export default function HomeScreen() {
             <View style={styles.headerRight} />
           </View>
 
-          <ScrollView 
+          <ScrollView
             style={styles.overlayContent}
-            contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+            contentContainerStyle={{
+              paddingBottom: showActiveTrip ? insets.bottom + 10 : insets.bottom + 20,
+            }}
             showsVerticalScrollIndicator={false}
           >
             {!showActiveTrip ? (
@@ -1209,17 +1643,11 @@ export default function HomeScreen() {
                   <View style={styles.searchCircle}>
                     {searchingForDriver ? (
                       <>
-                        <Animated.View 
-                          style={[
-                            styles.pulseRing,
-                            { transform: [{ scale: pulseAnim }] }
-                          ]} 
+                        <Animated.View
+                          style={[styles.pulseRing, { transform: [{ scale: pulseAnim }] }]}
                         />
-                        <Animated.View 
-                          style={[
-                            styles.loadingRing,
-                            { transform: [{ rotate: spin }] }
-                          ]} 
+                        <Animated.View
+                          style={[styles.loadingRing, { transform: [{ rotate: spin }] }]}
                         />
                         <View style={styles.carIconContainer}>
                           <Car size={40} color={colors.white} strokeWidth={1.8} />
@@ -1238,7 +1666,7 @@ export default function HomeScreen() {
                     {searchingForDriver ? 'Searching nearby...' : 'Driver Found!'}
                   </Text>
                   <Text style={styles.searchSubStatus}>
-                    {searchingForDriver 
+                    {searchingForDriver
                       ? `Looking for available drivers near you (${formatTime(elapsedSeconds)})`
                       : 'A driver has been assigned to your ride'}
                   </Text>
@@ -1248,19 +1676,26 @@ export default function HomeScreen() {
                   <Animated.View style={[styles.driverInfo, { opacity: driverFadeAnim }]}>
                     <View style={styles.driverAvatar}>
                       <Text style={styles.driverAvatarText}>
-                        {currentRide.driver.fullName.split(' ').map(n => n[0]).join('')}
+                        {currentRide.driver.fullName
+                          .split(' ')
+                          .map((n) => n[0])
+                          .join('')}
                       </Text>
                     </View>
                     <View style={styles.driverDetails}>
                       <Text style={styles.driverName}>{currentRide.driver.fullName}</Text>
                       <View style={styles.driverRatingContainer}>
                         <Star size={14} color={colors.orange} strokeWidth={2} fill={colors.orange} />
-                        <Text style={styles.driverRating}>{currentRide.driver.rating || 0}</Text>
+                        <Text style={styles.driverRating}>
+                          {currentRide.driver.rating || 0}
+                        </Text>
                       </View>
                       <Text style={styles.driverCar}>
                         {currentRide.driver.vehicleMake} {currentRide.driver.vehicleModel}
                       </Text>
-                      <Text style={styles.driverPlate}>{currentRide.driver.licencePlate}</Text>
+                      <Text style={styles.driverPlate}>
+                        {currentRide.driver.licencePlate}
+                      </Text>
                     </View>
                   </Animated.View>
                 )}
@@ -1296,28 +1731,22 @@ export default function HomeScreen() {
                 <View style={styles.rideInfo}>
                   <View style={styles.rideInfoItem}>
                     <Route size={16} color={colors.green} strokeWidth={1.8} />
-                    <Text style={styles.rideInfoText}>
-                      {tripDistanceKm.toFixed(1)} km
-                    </Text>
+                    <Text style={styles.rideInfoText}>{tripDistanceKm.toFixed(1)} km</Text>
                   </View>
                   <View style={styles.rideInfoDivider} />
                   <View style={styles.rideInfoItem}>
                     <ClockIcon size={16} color={colors.green} strokeWidth={1.8} />
-                    <Text style={styles.rideInfoText}>
-                      ~{Math.round(etaMinutes)} min
-                    </Text>
+                    <Text style={styles.rideInfoText}>~{Math.round(etaMinutes)} min</Text>
                   </View>
                   <View style={styles.rideInfoDivider} />
                   <View style={styles.rideInfoItem}>
-                    <Text style={styles.rideInfoFare}>
-                      R {fare.toFixed(2)}
-                    </Text>
+                    <Text style={styles.rideInfoFare}>R {fare.toFixed(2)}</Text>
                   </View>
                 </View>
 
                 {searchingForDriver && (
-                  <TouchableOpacity 
-                    style={styles.cancelButton} 
+                  <TouchableOpacity
+                    style={styles.cancelButton}
                     onPress={handleCancelSearch}
                     disabled={cancelling}
                   >
@@ -1330,136 +1759,243 @@ export default function HomeScreen() {
                 )}
               </>
             ) : (
-              // Active Trip View
+              // ===== ACTIVE TRIP VIEW (mirrors driver screen navigation) =====
               <>
                 <View style={styles.activeMapContainer}>
-                  <View style={styles.activeMapPlaceholder}>
-                    <View style={styles.mapOverlay}>
-                      <View style={styles.routeLine}>
-                        <View style={styles.routeDot} />
-                        <View style={styles.routeLineBar} />
-                        <View style={[styles.routeDot, styles.routeDotEnd]} />
-                      </View>
-                      <View style={styles.mapStatus}>
-                        <View style={[styles.statusDot, { backgroundColor: getStatusColor() }]} />
-                        <Text style={styles.mapStatusText}>{getStatusText()}</Text>
-                      </View>
-                      <Text style={styles.mapETA}>ETA: ~{Math.max(1, Math.round((100 - timeRemaining) / 10))} min</Text>
-                    </View>
+                  {/* Once the trip is completed, we do not pass any driver route/marker,
+                      so the map shows only the static pickup/destination markers. */}
+                  {!tripCompleted ? (
+                    <WebMap
+                      userLocation={userLocation}
+                      destination={destination}
+                      routePoints={
+                        driverRoutePoints.length > 1 ? driverRoutePoints : routePoints
+                      }
+                      places={[]}
+                      onLocationSelect={() => undefined}
+                      loading={false}
+                      driverPosition={driverCarPosition}
+                      driverMarker={true}
+                    />
+                  ) : (
+                    <WebMap
+                      userLocation={userLocation}
+                      destination={destination}
+                      routePoints={[]}
+                      places={[]}
+                      onLocationSelect={() => undefined}
+                      loading={false}
+                      driverMarker={false}
+                    />
+                  )}
+                  <View style={styles.activeMapStatus}>
+                    <View
+                      style={[styles.statusDot, { backgroundColor: getStatusColor() }]}
+                    />
+                    <Text style={styles.mapStatusText}>{getStatusText()}</Text>
+                    <Text style={styles.mapETA}>ETA: {driverEtaDisplay}</Text>
                   </View>
                 </View>
 
                 {currentRide?.driver && (
                   <View style={styles.activeDriverCard}>
                     <View style={styles.driverHeader}>
-                      <View style={styles.driverAvatar}>
+                      <View style={styles.referenceDriverAvatar}>
                         <Text style={styles.driverAvatarText}>
-                          {currentRide.driver.fullName.split(' ').map(n => n[0]).join('')}
+                          {currentRide.driver.fullName
+                            .split(' ')
+                            .map((n) => n[0])
+                            .join('')}
                         </Text>
                       </View>
-                      <View style={styles.driverInfo}>
-                        <Text style={styles.driverName}>{currentRide.driver.fullName}</Text>
-                        <View style={styles.driverRatingContainer}>
-                          <Star size={14} color={colors.orange} strokeWidth={2} fill={colors.orange} />
-                          <Text style={styles.driverRating}>{currentRide.driver.rating || 0}</Text>
-                          <Text style={styles.driverCar}>
-                            • {currentRide.driver.vehicleMake} {currentRide.driver.vehicleModel}
+                      <View style={styles.referenceDriverIdentity}>
+                        <Text style={styles.driverName}>
+                          {currentRide.driver.fullName}
+                        </Text>
+                        <Text style={styles.referenceDriverVehicle}>
+                          {currentRide.driver.vehicleMake || 'Vehicle'}{' '}
+                          {currentRide.driver.vehicleModel || ''}
+                        </Text>
+                        <View style={styles.referenceDriverRating}>
+                          <Star
+                            size={14}
+                            color={colors.yellow}
+                            strokeWidth={2}
+                            fill={colors.yellow}
+                          />
+                          <Text style={styles.referenceDriverRatingText}>
+                            {currentRide.driver.rating || 0} · Driver
                           </Text>
                         </View>
-                        <Text style={styles.driverPlate}>{currentRide.driver.licencePlate}</Text>
                       </View>
-                    </View>
-
-                    <View style={styles.driverActions}>
-                      <TouchableOpacity style={styles.actionButton} onPress={handleCallDriver}>
-                        <Phone size={20} color={colors.blue} strokeWidth={2} />
-                        <Text style={styles.actionButtonText}>Call</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.actionButton} onPress={handleMessageDriver}>
-                        <MessageCircle size={20} color={colors.green} strokeWidth={2} />
-                        <Text style={styles.actionButtonText}>Message</Text>
-                      </TouchableOpacity>
+                      <View style={styles.referencePlateBadge}>
+                        <Text style={styles.referencePlateText}>
+                          {currentRide.driver.licencePlate || 'No plate'}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                 )}
 
-                <View style={styles.tripProgress}>
-                  <View style={styles.progressHeader}>
-                    <Text style={styles.progressTitle}>Trip Progress</Text>
-                    <Text style={styles.progressPercent}>{Math.min(100, timeRemaining)}%</Text>
-                  </View>
-                  <View style={styles.progressBar}>
-                    <Animated.View 
-                      style={[
-                        styles.progressFill,
-                        { 
-                          width: progressAnim.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: ['0%', '100%'],
-                          }),
-                          backgroundColor: getStatusColor(),
-                        }
-                      ]} 
+                <View style={styles.referenceTripCard}>
+                  <View style={styles.referenceTripRow}>
+                    <View
+                      style={[styles.referenceTripDot, { backgroundColor: colors.green }]}
                     />
+                    <View style={styles.referenceTripText}>
+                      <Text style={styles.referenceTripLabel}>
+                        {driverHeadingToPickup ? 'DRIVER HEADING TO PICKUP' : 'PICKUP'}
+                      </Text>
+                      <Text style={styles.referenceTripValue}>
+                        {pickupLabel || 'Your location'}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.progressSteps}>
-                    <View style={[styles.progressStep, tripStatus !== 'enroute' && styles.progressStepActive]}>
-                      <View style={[styles.progressStepDot, tripStatus !== 'enroute' && styles.progressStepDotActive]} />
-                      <Text style={[styles.progressStepText, tripStatus !== 'enroute' && styles.progressStepTextActive]}>
-                        En Route
+                  <View style={styles.referenceTripConnector} />
+                  <View style={styles.referenceTripRow}>
+                    <View
+                      style={[styles.referenceTripDot, { backgroundColor: colors.gray900 }]}
+                    />
+                    <View style={styles.referenceTripText}>
+                      <Text style={styles.referenceTripLabel}>DESTINATION</Text>
+                      <Text style={styles.referenceTripValue}>
+                        {destination?.name || 'Destination'}
                       </Text>
                     </View>
-                    <View style={styles.progressStepLine} />
-                    <View style={[styles.progressStep, (tripStatus === 'arrived' || tripStatus === 'started' || tripStatus === 'completed') && styles.progressStepActive]}>
-                      <View style={[styles.progressStepDot, (tripStatus === 'arrived' || tripStatus === 'started' || tripStatus === 'completed') && styles.progressStepDotActive]} />
-                      <Text style={[styles.progressStepText, (tripStatus === 'arrived' || tripStatus === 'started' || tripStatus === 'completed') && styles.progressStepTextActive]}>
-                        Arrived
-                      </Text>
-                    </View>
-                    <View style={styles.progressStepLine} />
-                    <View style={[styles.progressStep, (tripStatus === 'started' || tripStatus === 'completed') && styles.progressStepActive]}>
-                      <View style={[styles.progressStepDot, (tripStatus === 'started' || tripStatus === 'completed') && styles.progressStepDotActive]} />
-                      <Text style={[styles.progressStepText, (tripStatus === 'started' || tripStatus === 'completed') && styles.progressStepTextActive]}>
-                        Started
-                      </Text>
-                    </View>
-                    <View style={styles.progressStepLine} />
-                    <View style={[styles.progressStep, tripStatus === 'completed' && styles.progressStepActive]}>
-                      <View style={[styles.progressStepDot, tripStatus === 'completed' && styles.progressStepDotActive]} />
-                      <Text style={[styles.progressStepText, tripStatus === 'completed' && styles.progressStepTextActive]}>
-                        Complete
-                      </Text>
-                    </View>
+                  </View>
+                  <View style={styles.referenceFareRow}>
+                    <Text style={styles.referenceFareLabel}>Fare</Text>
+                    <Text style={styles.referenceFareValue}>R {fare.toFixed(2)}</Text>
                   </View>
                 </View>
 
-                <TouchableOpacity style={styles.sosButton} onPress={handleSOS}>
-                  <AlertTriangle size={24} color={colors.white} strokeWidth={2} />
-                  <Text style={styles.sosButtonText}>SOS</Text>
-                </TouchableOpacity>
+                <View style={styles.referenceActionRow}>
+                  <TouchableOpacity style={styles.referenceSosButton} onPress={handleSOS}>
+                    <AlertTriangle size={17} color={colors.white} strokeWidth={2} />
+                    <Text style={styles.referenceActionText}>SOS</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.referenceCallButton}
+                    onPress={handleCallDriver}
+                  >
+                    <Phone size={17} color={colors.white} strokeWidth={2} />
+                    <Text style={styles.referenceActionText}>Call</Text>
+                  </TouchableOpacity>
+                </View>
 
-                <View style={styles.bottomActions}>
-                  {tripStatus !== 'completed' && (
-                    <TouchableOpacity 
-                      style={[styles.bottomAction, styles.cancelAction]}
-                      onPress={handleCancelTrip}
-                    >
-                      <Text style={styles.cancelActionText}>Cancel Trip</Text>
-                    </TouchableOpacity>
-                  )}
-                  
-                  {tripStatus === 'completed' && (
-                    <TouchableOpacity 
-                      style={[styles.bottomAction, styles.completeAction]}
-                      onPress={handleCompleteTrip}
-                    >
-                      <Text style={styles.completeActionText}>Done</Text>
-                    </TouchableOpacity>
-                  )}
+                <View style={styles.referenceContactRow}>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={handleMessageDriver}
+                  >
+                    <MessageCircle size={20} color={colors.green} strokeWidth={2} />
+                    <Text style={styles.actionButtonText}>Message</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={openShareRideSheet}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel="Share Ride Link"
+                  >
+                    <Link size={18} color={colors.gray800} strokeWidth={2} />
+                    <Text style={styles.actionButtonText}>Share Ride Link</Text>
+                  </TouchableOpacity>
                 </View>
               </>
             )}
           </ScrollView>
+
+          {showActiveTrip && (
+            <View style={styles.buttonContainer}>
+              {tripStatus === 'completed' && (
+                <View style={styles.bottomActions}>
+                  <TouchableOpacity
+                    style={[styles.bottomAction, styles.completeAction]}
+                    onPress={handleCompleteTrip}
+                  >
+                    <Star size={18} color={colors.white} fill={colors.white} />
+                    <Text style={styles.completeActionText}>Rate our driver</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
+
+          {shareRideVisible && (
+            <View style={styles.shareModalLayer}>
+              <Pressable style={styles.shareBackdrop} onPress={closeShareRideSheet}>
+                <Animated.View
+                  style={[
+                    styles.shareSheet,
+                    {
+                      opacity: shareSheetAnim,
+                      transform: [
+                        {
+                          translateY: shareSheetAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [80, 0],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                  onStartShouldSetResponder={() => true}
+                  onTouchEnd={(event) => event.stopPropagation()}
+                >
+                  <View style={styles.paymentHandle} />
+                  <Text style={styles.shareTitle}>Share Ride Link</Text>
+                  <Text style={styles.shareSubtitle}>
+                    Let your contacts follow your trip in real time.
+                  </Text>
+                  <Text style={styles.shareLabel}>TRIP PREVIEW</Text>
+                  <Text style={styles.shareRoute}>
+                    {pickupLabel} → {destination?.name || 'Destination'}
+                  </Text>
+                  <Text style={styles.shareDriver}>
+                    Driver {driverName || 'assigned'} • ETA{' '}
+                    {Math.max(1, Math.round((100 - timeRemaining) / 10))} min
+                  </Text>
+                  <View style={styles.shareLinkRow}>
+                    <Text style={styles.shareLink} numberOfLines={2}>
+                      {shareLink}
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.copyButton}
+                      onPress={handleCopyRideLink}
+                      accessibilityLabel="Copy ride link"
+                    >
+                      <Copy size={16} color={colors.white} strokeWidth={2} />
+                      <Text style={styles.copyButtonText}>Copy</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.shareChannelRow}>
+                    <TouchableOpacity
+                      style={styles.whatsappButton}
+                      onPress={() => handleShareRide('whatsapp')}
+                    >
+                      <MessageCircle size={17} color={colors.white} strokeWidth={2} />
+                      <Text style={styles.shareChannelText}>WhatsApp</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.smsButton}
+                      onPress={() => handleShareRide('sms')}
+                    >
+                      <MessageSquare size={17} color={colors.white} strokeWidth={2} />
+                      <Text style={styles.shareChannelText}>SMS</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.backToTripButton}
+                    onPress={closeShareRideSheet}
+                  >
+                    <ArrowLeft size={16} color={colors.gray800} strokeWidth={2} />
+                    <Text style={styles.backToTripText}>Back to Trip</Text>
+                  </TouchableOpacity>
+                </Animated.View>
+              </Pressable>
+            </View>
+          )}
         </View>
       </Modal>
     );
@@ -1488,10 +2024,7 @@ export default function HomeScreen() {
               <Text style={styles.liveBadgeText}>YOUR LOCATION</Text>
             </View>
 
-            <TouchableOpacity
-              style={styles.locateButton}
-              onPress={detectLocation}
-            >
+            <TouchableOpacity style={styles.locateButton} onPress={detectLocation}>
               <LocateFixed size={20} color={colors.green} strokeWidth={2} />
             </TouchableOpacity>
 
@@ -1505,7 +2038,11 @@ export default function HomeScreen() {
 
           {/* RIDE INPUT CARD */}
           <View style={styles.rideCard}>
-            <View style={styles.rideRow}>
+            <TouchableOpacity
+              style={styles.rideRow}
+              onPress={() => setPickupSheetVisible(true)}
+              activeOpacity={0.7}
+            >
               <View style={[styles.rideDot, { backgroundColor: colors.green }]} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.rideRowLabel}>PICKUP</Text>
@@ -1513,11 +2050,17 @@ export default function HomeScreen() {
                   {locating ? 'Detecting location...' : pickupLabel}
                 </Text>
               </View>
-            </View>
+              <Search size={16} color={colors.gray400} strokeWidth={2} />
+              <ChevronRight size={16} color={colors.gray300} strokeWidth={2} />
+            </TouchableOpacity>
 
             <View style={styles.rideDivider} />
 
-            <TouchableOpacity style={styles.rideRow} onPress={() => setDestSheetVisible(true)} activeOpacity={0.7}>
+            <TouchableOpacity
+              style={styles.rideRow}
+              onPress={() => setDestSheetVisible(true)}
+              activeOpacity={0.7}
+            >
               <View style={[styles.rideDot, { backgroundColor: colors.blue }]} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.rideRowLabel}>DESTINATION</Text>
@@ -1538,18 +2081,19 @@ export default function HomeScreen() {
             <View style={styles.routeDetails}>
               <View style={styles.routeDetailItem}>
                 <Route size={16} color={colors.blue} strokeWidth={2} />
-                <Text style={styles.routeDetailText}>
-                  {routeDistance.toFixed(1)} km
-                </Text>
+                <Text style={styles.routeDetailText}>{routeDistance.toFixed(1)} km</Text>
               </View>
               <View style={styles.routeDetailItem}>
                 <ClockIcon size={16} color={colors.gray600} strokeWidth={2} />
-                <Text style={styles.routeDetailText}>
-                  ~{Math.round(etaMinutes)} min
-                </Text>
+                <Text style={styles.routeDetailText}>~{Math.round(etaMinutes)} min</Text>
               </View>
               <View style={styles.routeDetailItem}>
-                <Text style={[styles.routeDetailText, { color: colors.green, fontWeight: 'bold' }]}>
+                <Text
+                  style={[
+                    styles.routeDetailText,
+                    { color: colors.green, fontWeight: 'bold' },
+                  ]}
+                >
                   R {fare.toFixed(2)}
                 </Text>
               </View>
@@ -1560,7 +2104,7 @@ export default function HomeScreen() {
             <Button
               label="Request Ride"
               onPress={handleRequestRide}
-              disabled={!destination || routing || requesting}
+              disabled={!destination || requesting}
               loading={requesting}
               icon={<Car size={18} color={colors.white} strokeWidth={2} />}
             />
@@ -1570,23 +2114,115 @@ export default function HomeScreen() {
 
       {/* BOTTOM NAV */}
       <View style={[styles.bottomNav, { paddingBottom: insets.bottom + 8 }]}>
-        <NavItem icon={<House size={20} color={colors.green} strokeWidth={2} />} label="Home" active />
+        <NavItem
+          icon={<House size={20} color={colors.green} strokeWidth={2} />}
+          label="Home"
+          active
+        />
         <NavItem
           icon={<Clock size={20} color={colors.gray400} strokeWidth={1.8} />}
           label="History"
-          onPress={() => handleComingSoon('Trip history')}
+          onPress={() => navigation.navigate('TripHistory')}
         />
         <NavItem
           icon={<CalendarDays size={20} color={colors.gray400} strokeWidth={1.8} />}
           label="Schedule"
-          onPress={() => handleComingSoon('Scheduling')}
+          onPress={() => navigation.navigate('Schedule')}
         />
         <NavItem
           icon={<CircleUserRound size={20} color={colors.gray400} strokeWidth={1.8} />}
           label="Profile"
-          onPress={() => handleComingSoon('Profile')}
+          onPress={() => navigation.navigate('Profile')}
         />
       </View>
+
+      {/* PICKUP SHEET */}
+      <BottomSheetModal
+        visible={pickupSheetVisible}
+        onClose={() => {
+          setPickupSheetVisible(false);
+          setPickupSearch('');
+          setPickupSearchResults([]);
+        }}
+        title="Choose pickup"
+        subtitle="Use your current location or search for a place"
+      >
+        <TouchableOpacity
+          style={styles.currentLocationOption}
+          onPress={detectLocation}
+          activeOpacity={0.7}
+        >
+          <View style={styles.currentLocationIcon}>
+            <LocateFixed size={18} color={colors.green} strokeWidth={2} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.destName}>Use current location</Text>
+            <Text style={styles.destAddress}>
+              {locating ? 'Detecting location...' : pickupLabel}
+            </Text>
+          </View>
+          {locating ? (
+            <ActivityIndicator size="small" color={colors.green} />
+          ) : (
+            <ChevronRight size={16} color={colors.gray300} strokeWidth={2} />
+          )}
+        </TouchableOpacity>
+
+        <View style={styles.searchRow}>
+          <Search size={16} color={colors.gray400} strokeWidth={2} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search pickup location..."
+            placeholderTextColor={colors.gray400}
+            value={pickupSearch}
+            onChangeText={handlePickupSearch}
+            autoCapitalize="none"
+            autoFocus={true}
+          />
+          {pickupSearchLoading && <ActivityIndicator size="small" color={colors.gray400} />}
+          {pickupSearch.length > 0 && !pickupSearchLoading && (
+            <TouchableOpacity
+              onPress={() => {
+                setPickupSearch('');
+                setPickupSearchResults([]);
+              }}
+            >
+              <X size={16} color={colors.gray400} strokeWidth={2} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {pickupSearchResults.map((loc) => (
+          <TouchableOpacity
+            key={`pickup-${loc.name}-${loc.coords.latitude}-${loc.coords.longitude}`}
+            style={styles.destOption}
+            onPress={() => selectPickupLocation(loc)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.destIconCircle}>
+              <MapPin size={16} color={colors.green} strokeWidth={2} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.destName}>{loc.name}</Text>
+              <Text style={styles.destAddress}>{loc.address}</Text>
+              <Text style={styles.destDistance}>
+                {distanceKm(userLocation, loc.coords).toFixed(1)} km away
+              </Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+
+        {!pickupSearchLoading &&
+          pickupSearch.trim().length > 1 &&
+          pickupSearchResults.length === 0 && (
+            <View style={styles.noResultsContainer}>
+              <Text style={styles.noResults}>No pickup places found</Text>
+              <Text style={styles.noResultsSub}>
+                Try a landmark, street, residence, or campus building
+              </Text>
+            </View>
+          )}
+      </BottomSheetModal>
 
       {/* DESTINATION SHEET */}
       <BottomSheetModal
@@ -1609,15 +2245,15 @@ export default function HomeScreen() {
             autoCapitalize="none"
             autoFocus={true}
           />
-          {searchLoading && (
-            <ActivityIndicator size="small" color={colors.gray400} />
-          )}
+          {searchLoading && <ActivityIndicator size="small" color={colors.gray400} />}
           {search.length > 0 && !searchLoading && (
-            <TouchableOpacity onPress={() => {
-              setSearch('');
-              setShowSearchResults(false);
-              setSearchResults([]);
-            }}>
+            <TouchableOpacity
+              onPress={() => {
+                setSearch('');
+                setShowSearchResults(false);
+                setSearchResults([]);
+              }}
+            >
               <X size={16} color={colors.gray400} strokeWidth={2} />
             </TouchableOpacity>
           )}
@@ -1626,8 +2262,12 @@ export default function HomeScreen() {
         <View style={styles.categoryFilter}>
           <Text style={styles.categoryFilterText}>
             {showSearchResults
-              ? (searchLoading ? 'Searching...' : `Search results (${filteredLocations.length})`)
-              : (nearbyLoading ? 'Finding places near you...' : 'Suggested near you')}
+              ? searchLoading
+                ? 'Searching...'
+                : `Search results (${filteredLocations.length})`
+              : nearbyLoading
+              ? 'Finding places near you...'
+              : 'Suggested near you'}
           </Text>
         </View>
 
@@ -1636,25 +2276,38 @@ export default function HomeScreen() {
             key={`${loc.name}-${loc.coords.latitude}-${loc.coords.longitude}`}
             style={[
               styles.destOption,
-              destination?.name === loc.name && styles.destOptionSelected
+              destination?.name === loc.name && styles.destOptionSelected,
             ]}
             onPress={() => handleLocationSelect(loc)}
             activeOpacity={0.7}
           >
-            <View style={[
-              styles.destIconCircle,
-              destination?.name === loc.name && styles.destIconCircleSelected
-            ]}>
-              <MapPin size={16} color={destination?.name === loc.name ? colors.white : colors.green} strokeWidth={2} />
+            <View
+              style={[
+                styles.destIconCircle,
+                destination?.name === loc.name && styles.destIconCircleSelected,
+              ]}
+            >
+              <MapPin
+                size={16}
+                color={destination?.name === loc.name ? colors.white : colors.green}
+                strokeWidth={2}
+              />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.destName, destination?.name === loc.name && styles.destNameSelected]}>
+              <Text
+                style={[
+                  styles.destName,
+                  destination?.name === loc.name && styles.destNameSelected,
+                ]}
+              >
                 {loc.name}
               </Text>
               <Text style={styles.destAddress}>{loc.address}</Text>
               <View style={styles.destMeta}>
                 <Text style={styles.destCategory}>{loc.category}</Text>
-                <Text style={styles.destDistance}>{distanceKm(userLocation, loc.coords).toFixed(1)} km away</Text>
+                <Text style={styles.destDistance}>
+                  {distanceKm(userLocation, loc.coords).toFixed(1)} km away
+                </Text>
               </View>
             </View>
             {destination?.name === loc.name && (
@@ -1663,16 +2316,187 @@ export default function HomeScreen() {
           </TouchableOpacity>
         ))}
 
-        {!searchLoading && showSearchResults && filteredLocations.length === 0 && search.length > 1 && (
-          <View style={styles.noResultsContainer}>
-            <Text style={styles.noResults}>No places found for "{search}"</Text>
-            <Text style={styles.noResultsSub}>Try a different spelling, or search for a landmark, mall, or street name</Text>
-          </View>
-        )}
+        {!searchLoading &&
+          showSearchResults &&
+          filteredLocations.length === 0 &&
+          search.length > 1 && (
+            <View style={styles.noResultsContainer}>
+              <Text style={styles.noResults}>No places found for "{search}"</Text>
+              <Text style={styles.noResultsSub}>
+                Try a different spelling, or search for a landmark, mall, or street name
+              </Text>
+            </View>
+          )}
       </BottomSheetModal>
 
       {/* Finding Drivers Overlay */}
       {renderFindingDriversOverlay()}
+
+      <Modal
+        visible={showRatingModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => undefined}
+      >
+        <View style={styles.ratingBackdrop}>
+          <View style={styles.ratingCard}>
+            <Text style={styles.ratingTitle}>Rate our driver</Text>
+            <Text style={styles.ratingSubtitle}>
+              How was your ride with {driverName}?
+            </Text>
+            <View style={styles.ratingStars}>
+              {[1, 2, 3, 4, 5].map((value) => (
+                <TouchableOpacity
+                  key={value}
+                  onPress={() => setSelectedRating(value)}
+                  accessibilityLabel={`${value} star rating`}
+                  style={styles.ratingStarButton}
+                >
+                  <Star
+                    size={32}
+                    color={value <= selectedRating ? colors.orange : colors.gray300}
+                    fill={value <= selectedRating ? colors.orange : 'transparent'}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.submitRatingButton,
+                selectedRating === 0 && styles.submitRatingDisabled,
+              ]}
+              onPress={handleRateDriver}
+              disabled={selectedRating === 0 || submittingRating}
+            >
+              {submittingRating ? (
+                <ActivityIndicator color={colors.white} />
+              ) : (
+                <Text style={styles.submitRatingText}>Submit rating</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showRatingThankYou} transparent animationType="fade">
+        <View style={styles.ratingBackdrop}>
+          <View style={styles.thankYouCard}>
+            <View style={styles.thankYouIcon}>
+              <Check size={30} color={colors.white} />
+            </View>
+            <Text style={styles.ratingTitle}>Thank you for rating!</Text>
+            <Text style={styles.ratingSubtitle}>
+              Your feedback helps keep CampusConnect safe.
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={paymentVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPaymentVisible(false)}
+      >
+        <View style={styles.paymentBackdrop}>
+          <View style={styles.paymentSheet}>
+            <View style={styles.paymentHandle} />
+            <Text style={styles.paymentTitle}>Choose payment</Text>
+            <Text style={styles.paymentSubtitle}>
+              Review your trip and select how you will pay.
+            </Text>
+            <View style={styles.paymentTripCard}>
+              <View style={styles.paymentTripRow}>
+                <MapPin size={16} color={colors.green} strokeWidth={2} />
+                <Text style={styles.paymentTripText} numberOfLines={1}>
+                  {pickupLabel}
+                </Text>
+              </View>
+              <View style={styles.paymentTripDivider} />
+              <View style={styles.paymentTripRow}>
+                <Navigation size={16} color={colors.blue} strokeWidth={2} />
+                <Text style={styles.paymentTripText} numberOfLines={1}>
+                  {destination?.name}
+                </Text>
+              </View>
+              <View style={styles.paymentSummaryRow}>
+                <Text style={styles.paymentSummaryLabel}>
+                  {tripDistanceKm.toFixed(1)} km  •  ~{Math.round(etaMinutes)} min
+                </Text>
+                <Text style={styles.paymentAmount}>R {fare.toFixed(2)}</Text>
+              </View>
+            </View>
+            <Text style={styles.paymentSectionTitle}>Payment method</Text>
+            <TouchableOpacity
+              style={[
+                styles.paymentOption,
+                paymentMethod === 'CASH' && styles.paymentOptionSelected,
+              ]}
+              onPress={() => setPaymentMethod('CASH')}
+            >
+              {paymentMethod === 'CASH' ? (
+                <CheckCircle2 size={21} color={colors.green} />
+              ) : (
+                <Circle size={21} color={colors.gray400} />
+              )}
+              <Banknote size={20} color={colors.gray700} />
+              <View style={styles.paymentOptionText}>
+                <Text style={styles.paymentOptionTitle}>Cash</Text>
+                <Text style={styles.paymentOptionSubtitle}>
+                  Pay the driver when the trip is complete
+                </Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.paymentOption,
+                paymentMethod === 'CARD' && styles.paymentOptionSelected,
+              ]}
+              onPress={() => setPaymentMethod('CARD')}
+            >
+              {paymentMethod === 'CARD' ? (
+                <CheckCircle2 size={21} color={colors.green} />
+              ) : (
+                <Circle size={21} color={colors.gray400} />
+              )}
+              <CreditCard size={20} color={colors.gray700} />
+              <View style={styles.paymentOptionText}>
+                <Text style={styles.paymentOptionTitle}>Card</Text>
+                <Text style={styles.paymentOptionSubtitle}>Use a saved card</Text>
+              </View>
+            </TouchableOpacity>
+            {paymentMethod === 'CARD' && (
+              <View style={styles.savedCards}>
+                <Text style={styles.savedCardsTitle}>Saved cards</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.savedCard,
+                    selectedCard === '4242' && styles.savedCardSelected,
+                  ]}
+                  onPress={() => setSelectedCard('4242')}
+                >
+                  <CreditCard size={20} color={colors.blue} />
+                  <View style={styles.paymentOptionText}>
+                    <Text style={styles.paymentOptionTitle}>Visa ending in 4242</Text>
+                    <Text style={styles.paymentOptionSubtitle}>Default card</Text>
+                  </View>
+                  <CheckCircle2 size={19} color={colors.green} />
+                </TouchableOpacity>
+              </View>
+            )}
+            <TouchableOpacity
+              style={styles.proceedPaymentButton}
+              onPress={confirmPayment}
+            >
+              <Text style={styles.proceedPaymentText}>
+                {paymentMethod === 'CASH'
+                  ? 'Proceed with cash'
+                  : `Pay R ${fare.toFixed(2)} with card`}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1691,7 +2515,9 @@ function NavItem({
   return (
     <TouchableOpacity style={styles.navItem} onPress={onPress} activeOpacity={0.6}>
       {icon}
-      <Text style={[styles.navItemLabel, active && styles.navItemLabelActive]}>{label}</Text>
+      <Text style={[styles.navItemLabel, active && styles.navItemLabelActive]}>
+        {label}
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -1699,9 +2525,23 @@ function NavItem({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.gray50 },
 
-  header: { paddingHorizontal: spacing.xxl, paddingBottom: spacing.lg, backgroundColor: colors.white },
-  greetingSmall: { fontFamily: font.medium, fontSize: 13, color: colors.gray400, fontWeight: '500' },
-  greetingName: { fontFamily: font.extrabold, fontSize: 24, color: colors.gray900, fontWeight: '800' },
+  header: {
+    paddingHorizontal: spacing.xxl,
+    paddingBottom: spacing.lg,
+    backgroundColor: colors.white,
+  },
+  greetingSmall: {
+    fontFamily: font.medium,
+    fontSize: 13,
+    color: colors.gray400,
+    fontWeight: '500',
+  },
+  greetingName: {
+    fontFamily: font.extrabold,
+    fontSize: 24,
+    color: colors.gray900,
+    fontWeight: '800',
+  },
 
   mapCard: {
     height: Math.min(SCREEN_HEIGHT * 0.35, 350),
@@ -1714,7 +2554,12 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   mapPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  mapPlaceholderText: { fontFamily: font.semibold, fontSize: 14, color: colors.gray500, fontWeight: '600' },
+  mapPlaceholderText: {
+    fontFamily: font.semibold,
+    fontSize: 14,
+    color: colors.gray500,
+    fontWeight: '600',
+  },
   mapPlaceholderSubtext: { fontFamily: font.regular, fontSize: 12, color: colors.gray400 },
 
   liveBadge: {
@@ -1732,7 +2577,12 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.green },
-  liveBadgeText: { fontFamily: font.bold, fontSize: 10, fontWeight: '700', color: colors.green },
+  liveBadgeText: {
+    fontFamily: font.bold,
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.green,
+  },
 
   destinationBadge: {
     position: 'absolute',
@@ -1783,9 +2633,20 @@ const styles = StyleSheet.create({
     color: colors.gray400,
     letterSpacing: 0.5,
   },
-  rideRowValue: { fontFamily: font.semibold, fontSize: 14.5, color: colors.gray800, fontWeight: '600', marginTop: 1 },
+  rideRowValue: {
+    fontFamily: font.semibold,
+    fontSize: 14.5,
+    color: colors.gray800,
+    fontWeight: '600',
+    marginTop: 1,
+  },
   rideRowPlaceholder: { color: colors.gray400, fontWeight: '500' },
-  rideDivider: { height: 1, backgroundColor: colors.gray100, marginLeft: 22, marginVertical: 2 },
+  rideDivider: {
+    height: 1,
+    backgroundColor: colors.gray100,
+    marginLeft: 22,
+    marginVertical: 2,
+  },
 
   routeDetails: {
     flexDirection: 'row',
@@ -1819,8 +2680,17 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   navItem: { flex: 1, alignItems: 'center', gap: 3 },
-  navItemLabel: { fontFamily: font.medium, fontSize: 10.5, color: colors.gray400, fontWeight: '500' },
-  navItemLabelActive: { color: colors.green, fontFamily: font.semibold, fontWeight: '600' },
+  navItemLabel: {
+    fontFamily: font.medium,
+    fontSize: 10.5,
+    color: colors.gray400,
+    fontWeight: '500',
+  },
+  navItemLabelActive: {
+    color: colors.green,
+    fontFamily: font.semibold,
+    fontWeight: '600',
+  },
 
   searchRow: {
     flexDirection: 'row',
@@ -1833,7 +2703,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     marginBottom: spacing.md,
   },
-  searchInput: { flex: 1, fontFamily: font.regular, fontSize: 14, color: colors.gray900, paddingVertical: 10 },
+  searchInput: {
+    flex: 1,
+    fontFamily: font.regular,
+    fontSize: 14,
+    color: colors.gray900,
+    paddingVertical: 10,
+  },
+
+  currentLocationOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    marginBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray100,
+  },
+  currentLocationIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.greenLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   categoryFilter: {
     flexDirection: 'row',
@@ -1869,9 +2763,19 @@ const styles = StyleSheet.create({
   destIconCircleSelected: {
     backgroundColor: colors.blue,
   },
-  destName: { fontFamily: font.semibold, fontSize: 14.5, color: colors.gray900, fontWeight: '600' },
+  destName: {
+    fontFamily: font.semibold,
+    fontSize: 14.5,
+    color: colors.gray900,
+    fontWeight: '600',
+  },
   destNameSelected: { color: colors.blue },
-  destAddress: { fontFamily: font.regular, fontSize: 12, color: colors.gray500, marginTop: 1 },
+  destAddress: {
+    fontFamily: font.regular,
+    fontSize: 12,
+    color: colors.gray500,
+    marginTop: 1,
+  },
   destMeta: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1910,6 +2814,7 @@ const styles = StyleSheet.create({
   // Overlay styles
   overlayContainer: {
     flex: 1,
+    flexDirection: 'column',
     backgroundColor: '#ffffff',
   },
   overlayHeader: {
@@ -1937,6 +2842,19 @@ const styles = StyleSheet.create({
   overlayContent: {
     flex: 1,
     paddingHorizontal: spacing.xl,
+  },
+
+  buttonContainer: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.white,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  shareModalLayer: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 100,
+    elevation: 100,
   },
 
   // Finding Drivers styles
@@ -2209,7 +3127,7 @@ const styles = StyleSheet.create({
 
   // Active Trip styles
   activeMapContainer: {
-    height: Math.min(SCREEN_HEIGHT * 0.28, 230),
+    height: Math.min(SCREEN_HEIGHT * 0.3, 250),
     borderRadius: radius.lg,
     overflow: 'hidden',
     backgroundColor: colors.gray100,
@@ -2222,6 +3140,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.md,
+  },
+  activeMapStatus: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: spacing.lg,
+    alignItems: 'center',
+    gap: 4,
   },
   mapOverlay: {
     alignItems: 'center',
@@ -2274,21 +3200,155 @@ const styles = StyleSheet.create({
   },
 
   activeDriverCard: {
-    backgroundColor: colors.gray50,
+    backgroundColor: colors.white,
     borderRadius: radius.lg,
-    padding: spacing.md,
+    padding: spacing.lg,
     marginBottom: spacing.md,
     borderWidth: 1,
     borderColor: colors.gray200,
   },
+  referenceTripCard: {
+    backgroundColor: colors.gray50,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.gray100,
+  },
+  referenceTripRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  referenceTripDot: { width: 10, height: 10, borderRadius: 5 },
+  referenceTripText: { flex: 1 },
+  referenceTripLabel: {
+    fontFamily: font.bold,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    color: colors.gray400,
+  },
+  referenceTripValue: {
+    marginTop: 3,
+    fontFamily: font.bold,
+    fontSize: 15,
+    color: colors.gray800,
+  },
+  referenceTripConnector: {
+    height: 20,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.gray300,
+    marginLeft: 4,
+    marginVertical: 2,
+  },
+  referenceFareRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: colors.gray200,
+    marginTop: spacing.lg,
+    paddingTop: spacing.md,
+  },
+  referenceFareLabel: {
+    fontFamily: font.medium,
+    fontSize: 13,
+    color: colors.gray500,
+  },
+  referenceFareValue: {
+    fontFamily: font.bold,
+    fontSize: 18,
+    color: colors.green,
+  },
+  referenceActionRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
+  referenceSosButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: 48,
+    borderRadius: radius.full,
+    backgroundColor: colors.red,
+  },
+  referenceCallButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: 48,
+    borderRadius: radius.full,
+    backgroundColor: colors.green,
+  },
+  referenceActionText: {
+    fontFamily: font.bold,
+    fontSize: 13,
+    color: colors.white,
+  },
+  referenceContactRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   driverHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  referenceDriverAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
+    backgroundColor: colors.blue,
+    ...shadow.sm,
+  },
+  referenceDriverIdentity: { flex: 1, minWidth: 0 },
+  referenceDriverVehicle: {
+    marginTop: 2,
+    fontFamily: font.regular,
+    fontSize: 12,
+    color: colors.gray500,
+  },
+  referenceDriverRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 3,
+  },
+  referenceDriverRatingText: {
+    fontFamily: font.medium,
+    fontSize: 11,
+    color: colors.yellowText,
+  },
+  referencePlateBadge: {
+    maxWidth: 106,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: radius.sm,
+    backgroundColor: colors.gray900,
+  },
+  referencePlateText: {
+    fontFamily: font.bold,
+    fontSize: 11,
+    color: colors.white,
+    letterSpacing: 0.4,
   },
   driverActions: {
     flexDirection: 'row',
     gap: 12,
+  },
+  shareRideButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    minHeight: 46,
+    marginTop: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    borderRadius: radius.full,
+    backgroundColor: colors.white,
+  },
+  shareRideButtonText: {
+    fontFamily: font.bold,
+    fontSize: 13,
+    color: colors.gray800,
   },
   actionButton: {
     flex: 1,
@@ -2298,7 +3358,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 10,
     borderRadius: radius.sm,
-    backgroundColor: colors.gray100,
+    backgroundColor: colors.gray50,
     borderWidth: 1,
     borderColor: colors.gray200,
   },
@@ -2310,7 +3370,7 @@ const styles = StyleSheet.create({
   },
 
   tripProgress: {
-    backgroundColor: colors.gray50,
+    backgroundColor: colors.white,
     borderRadius: radius.lg,
     padding: spacing.md,
     marginBottom: spacing.md,
@@ -2386,26 +3446,349 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
+    gap: 6,
+    paddingVertical: 10,
     borderRadius: radius.lg,
     backgroundColor: colors.red,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   sosButtonText: {
     fontFamily: font.bold,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
+    color: colors.white,
+  },
+
+  ratingBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+    backgroundColor: 'rgba(17,24,39,0.55)',
+  },
+  ratingCard: {
+    width: '100%',
+    maxWidth: 360,
+    alignItems: 'center',
+    padding: spacing.xxl,
+    borderRadius: radius.xl,
+    backgroundColor: colors.white,
+    ...shadow.lg,
+  },
+  thankYouCard: {
+    width: '100%',
+    maxWidth: 330,
+    alignItems: 'center',
+    padding: spacing.xxl,
+    borderRadius: radius.xl,
+    backgroundColor: colors.white,
+    ...shadow.lg,
+  },
+  shareBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(17,24,39,0.16)',
+  },
+  shareSheet: {
+    width: '100%',
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxl,
+    ...shadow.lg,
+  },
+  shareTitle: {
+    fontFamily: font.bold,
+    fontSize: 21,
+    fontWeight: '700',
+    color: colors.gray900,
+    marginTop: spacing.lg,
+  },
+  shareSubtitle: {
+    marginTop: spacing.xs,
+    marginBottom: spacing.lg,
+    fontFamily: font.regular,
+    fontSize: 12,
+    color: colors.gray500,
+  },
+  shareLabel: {
+    fontFamily: font.bold,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: colors.gray400,
+  },
+  shareRoute: {
+    marginTop: spacing.sm,
+    fontFamily: font.bold,
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.gray900,
+  },
+  shareDriver: {
+    marginTop: 4,
+    fontFamily: font.regular,
+    fontSize: 11,
+    color: colors.gray500,
+  },
+  shareLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.gray50,
+  },
+  shareLink: {
+    flex: 1,
+    fontFamily: font.mono,
+    fontSize: 11,
+    color: colors.gray700,
+  },
+  copyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    backgroundColor: colors.green,
+  },
+  copyButtonText: {
+    fontFamily: font.bold,
+    fontSize: 12,
+    color: colors.white,
+  },
+  shareChannelRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  whatsappButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    minHeight: 48,
+    borderRadius: radius.full,
+    backgroundColor: colors.green,
+  },
+  smsButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    minHeight: 48,
+    borderRadius: radius.full,
+    backgroundColor: colors.blue,
+  },
+  shareChannelText: {
+    fontFamily: font.bold,
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.white,
+  },
+  backToTripButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: 48,
+    marginTop: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    borderRadius: radius.full,
+  },
+  backToTripText: {
+    fontFamily: font.bold,
+    fontSize: 13,
+    color: colors.gray800,
+  },
+  ratingTitle: {
+    color: colors.gray900,
+    fontFamily: font.bold,
+    fontSize: 20,
+    textAlign: 'center',
+  },
+  ratingSubtitle: {
+    marginTop: spacing.sm,
+    color: colors.gray500,
+    fontFamily: font.regular,
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  ratingStars: {
+    flexDirection: 'row',
+    marginVertical: spacing.xxl,
+  },
+  ratingStarButton: {
+    paddingHorizontal: spacing.xs,
+  },
+  submitRatingButton: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 50,
+    borderRadius: radius.md,
+    backgroundColor: colors.green,
+  },
+  submitRatingDisabled: {
+    backgroundColor: colors.gray300,
+  },
+  submitRatingText: {
+    color: colors.white,
+    fontFamily: font.bold,
+    fontSize: 15,
+  },
+  thankYouIcon: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 58,
+    height: 58,
+    marginBottom: spacing.lg,
+    borderRadius: radius.full,
+    backgroundColor: colors.green,
+  },
+
+  paymentBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+  },
+  paymentSheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: spacing.lg,
+    paddingBottom: spacing.xxl,
+  },
+  paymentHandle: {
+    alignSelf: 'center',
+    width: 42,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.gray300,
+    marginBottom: spacing.md,
+  },
+  paymentTitle: { fontFamily: font.bold, fontSize: 21, color: colors.gray900 },
+  paymentSubtitle: {
+    fontFamily: font.regular,
+    fontSize: 13,
+    color: colors.gray500,
+    marginTop: 4,
+    marginBottom: spacing.md,
+  },
+  paymentTripCard: {
+    backgroundColor: colors.gray50,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  paymentTripRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  paymentTripText: {
+    flex: 1,
+    fontFamily: font.medium,
+    fontSize: 13,
+    color: colors.gray800,
+  },
+  paymentTripDivider: {
+    height: 12,
+    borderLeftWidth: 1,
+    borderLeftColor: colors.gray300,
+    marginLeft: 8,
+    marginVertical: 2,
+  },
+  paymentSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: colors.gray200,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+  },
+  paymentSummaryLabel: {
+    fontFamily: font.medium,
+    fontSize: 12,
+    color: colors.gray500,
+  },
+  paymentAmount: {
+    fontFamily: font.bold,
+    fontSize: 19,
+    color: colors.gray900,
+  },
+  paymentSectionTitle: {
+    fontFamily: font.bold,
+    fontSize: 14,
+    color: colors.gray800,
+    marginBottom: spacing.sm,
+  },
+  paymentOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  paymentOptionSelected: {
+    borderColor: colors.green,
+    backgroundColor: colors.greenLight,
+  },
+  paymentOptionText: { flex: 1 },
+  paymentOptionTitle: {
+    fontFamily: font.bold,
+    fontSize: 14,
+    color: colors.gray800,
+  },
+  paymentOptionSubtitle: {
+    fontFamily: font.regular,
+    fontSize: 11,
+    color: colors.gray500,
+    marginTop: 2,
+  },
+  savedCards: { marginTop: spacing.xs, marginBottom: spacing.sm },
+  savedCardsTitle: {
+    fontFamily: font.bold,
+    fontSize: 12,
+    color: colors.gray600,
+    marginBottom: spacing.xs,
+  },
+  savedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  savedCardSelected: { borderColor: colors.blue, backgroundColor: '#eff6ff' },
+  proceedPaymentButton: {
+    backgroundColor: colors.green,
+    borderRadius: radius.md,
+    minHeight: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.md,
+  },
+  proceedPaymentText: {
+    fontFamily: font.bold,
+    fontSize: 14,
     color: colors.white,
   },
 
   bottomActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
   },
   bottomAction: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 10,
     borderRadius: radius.lg,
     alignItems: 'center',
   },
@@ -2416,7 +3799,7 @@ const styles = StyleSheet.create({
   },
   cancelActionText: {
     fontFamily: font.semibold,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: 'rgba(255,255,255,0.6)',
   },
@@ -2425,7 +3808,7 @@ const styles = StyleSheet.create({
   },
   completeActionText: {
     fontFamily: font.bold,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.white,
   },

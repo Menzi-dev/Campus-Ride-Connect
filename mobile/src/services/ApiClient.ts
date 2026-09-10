@@ -78,6 +78,13 @@ apiClient.interceptors.response.use(
 apiClient.interceptors.request.use(async (config) => {
   const token = await AsyncStorage.getItem('authToken');
   
+  // Debug logging
+  if (!token) {
+    console.warn('[ApiClient] ⚠️ WARNING: No authToken found in AsyncStorage for request to', config.url);
+  } else {
+    console.log('[ApiClient] ✓ Token found, adding to Authorization header for:', config.url);
+  }
+  
   // Don't set Content-Type for FormData; let axios/the FormData API handle it
   if (!(config.data instanceof FormData)) {
     if (!config.headers['Content-Type']) {
@@ -90,6 +97,8 @@ apiClient.interceptors.request.use(async (config) => {
       ...(config.headers ?? {}),
       Authorization: `Bearer ${token}`,
     } as AxiosRequestHeaders;
+  } else {
+    console.warn('[ApiClient] ⚠️ No token in AsyncStorage - request will be unauthenticated');
   }
   return config;
 });

@@ -8,12 +8,15 @@ import com.campusconnect.service.RideService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 @RestController
 @RequestMapping("/api/rides")
@@ -28,6 +31,9 @@ public class RideController {
 
     @Autowired
     private DriverRepository driverRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     /**
      * POST /api/rides/request
@@ -163,6 +169,63 @@ public class RideController {
             Map<String, String> error = new HashMap<>();
             error.put("error", e.getMessage());
             return ResponseEntity.badRequest().body(error);
+        }
+    }
+
+    @PostMapping("/{id}/rating")
+    public ResponseEntity<?> rateDriver(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> request) {
+        try {
+            Long riderId = currentUserId();
+            Ride ride = rideService.getRideById(id)
+                    .orElseThrow(() -> new IllegalArgumentException("Ride not found"));
+
+            if (!riderId.equals(ride.getRiderId())) {
+                return ResponseEntity.status(403).body(Map.of("error", "You cannot rate this ride"));
+            }
+            if (ride.getStatus() != Ride.RideStatus.COMPLETED) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Only completed rides can be rated"));
+            }
+            if (ride.getDriverId() == null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "This ride has no driver to rate"));
+            }
+            if (ride.getRiderRating() != null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "This ride has already been rated"));
+            }
+
+            Object rawRating = request.get("rating");
+            int rating = rawRating instanceof Number
+                    ? ((Number) rawRating).intValue()
+                    : Integer.parseInt(String.valueOf(rawRating));
+            if (rating < 1 || rating > 5) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Rating must be between 1 and 5"));
+            }
+
+            ride.setRiderRating(rating);
+            Object comment = request.get("comment");
+            ride.setRiderRatingComment(comment == null ? null : String.valueOf(comment).trim());
+            rideService.saveRide(ride);
+
+            driverRepository.findByUserId(ride.getDriverId()).ifPresent(driver -> {
+                int completedRatings = jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM rides WHERE driver_id = ? AND status = 'COMPLETED' AND rider_rating IS NOT NULL",
+                        Integer.class,
+                        ride.getDriverId());
+                BigDecimal currentTotal = driver.getRating() == null
+                        ? BigDecimal.ZERO
+                        : driver.getRating().multiply(BigDecimal.valueOf(Math.max(0, completedRatings - 1)));
+                BigDecimal average = currentTotal.add(BigDecimal.valueOf(rating))
+                        .divide(BigDecimal.valueOf(completedRatings), 2, RoundingMode.HALF_UP);
+                driver.setRating(average);
+                driverRepository.save(driver);
+            });
+
+            return ResponseEntity.ok(Map.of("success", true, "rating", rating));
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Rating must be a number from 1 to 5"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 

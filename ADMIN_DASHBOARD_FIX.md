@@ -16,7 +16,7 @@ The issue was that:
 ## Solution Implemented
 Created admin account with credentials expected by the mobile app (hardcoded in `LoginScreen.tsx`):
 - **Email:** `admin@spu.ac.za`
-- **Password:** `admin12345`
+- **Password:** `SANELEDLOMO@2005`
 
 ## Verification - All Tests Passing ✓
 
@@ -63,7 +63,7 @@ Created admin account with credentials expected by the mobile app (hardcoded in 
 2. Tap "Register/Login"
 3. Select "University Admin" from role dropdown
 4. **Email:** `admin@spu.ac.za`
-5. **Password:** `admin12345`
+5. **Password:** `SANELEDLOMO@2005`
 6. Tap "Sign In"
 7. You should now see AdminDashboardScreen with pending drivers
 
@@ -75,7 +75,7 @@ Content-Type: application/json
 
 {
   "email": "admin@spu.ac.za",
-  "password": "admin12345"
+  "password": "SANELEDLOMO@2005"
 }
 
 # Response: { "token": "eyJhbGc...", "user": { ... } }
@@ -135,7 +135,7 @@ Authorization: Bearer <TOKEN_FROM_LOGIN>
 ## Resolution Status
 **✓ COMPLETE** - Admin dashboard will now display pending drivers when logged in with:
 - Email: `admin@spu.ac.za`
-- Password: `admin12345`
+- Password: `SANELEDLOMO@2005`
 
 ## Testing Checklist
 - [x] Backend unit tests pass

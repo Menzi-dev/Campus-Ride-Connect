@@ -54,6 +54,7 @@ import {
 } from 'lucide-react-native';
 import Button from '../components/Button';
 import BottomSheetModal from '../components/BottomSheetModal';
+import ChatScreen from './ChatScreen';
 import { useToast } from '../components/Toast';
 import { colors, radius, spacing, font, shadow } from '../theme/theme';
 import apiClient from '../services/ApiClient';
@@ -644,6 +645,11 @@ export default function HomeScreen() {
   const [tripStatus, setTripStatus] = useState<'enroute' | 'arrived' | 'started' | 'completed'>('enroute');
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [showActiveTrip, setShowActiveTrip] = useState(false);
+  const [chatVisible, setChatVisible] = useState(false);
+  const [riderMessageToast, setRiderMessageToast] = useState('');
+  const riderToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+  const seenMessageIdsRef = useRef<Set<number>>(new Set());
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [selectedRating, setSelectedRating] = useState(0);
   const [submittingRating, setSubmittingRating] = useState(false);
@@ -714,6 +720,40 @@ export default function HomeScreen() {
     // Fade in animation
     Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
   }, []);
+
+  useEffect(() => {
+    if (!currentRideId || !userId || !showActiveTrip) return;
+
+    let cancelled = false;
+    const pollMessages = async () => {
+      try {
+        const response = await apiClient.get(`/rides/${currentRideId}/messages`);
+        const messages: { id: number; senderId: number; message: string; senderName?: string }[] = response.data || [];
+        if (cancelled) return;
+
+        const firstPoll = seenMessageIdsRef.current.size === 0;
+        const incoming = messages.filter((message) => message.senderId !== Number(userId) && !seenMessageIdsRef.current.has(message.id));
+        messages.forEach((message) => seenMessageIdsRef.current.add(message.id));
+        if (!firstPoll && incoming.length > 0) {
+          const latest = incoming[incoming.length - 1];
+          setRiderMessageToast(`${latest.senderName || 'Driver'}: ${latest.message}`);
+          if (riderToastTimerRef.current) clearTimeout(riderToastTimerRef.current);
+          riderToastTimerRef.current = setTimeout(() => setRiderMessageToast(''), 3200);
+          setUnreadMessageCount((count) => count + incoming.length);
+        }
+      } catch {
+        // Message polling is non-critical while the trip continues.
+      }
+    };
+
+    pollMessages();
+    const interval = setInterval(pollMessages, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      if (riderToastTimerRef.current) clearTimeout(riderToastTimerRef.current);
+    };
+  }, [currentRideId, userId, showActiveTrip]);
 
   // ===== DRIVER PHASE DERIVATION (mirrors driver screen) =====
   const driverPhase = String(currentRide?.status || tripStatus || '').toLowerCase();
@@ -790,7 +830,7 @@ export default function HomeScreen() {
       if (response.data && response.data.id) {
         const status = String(response.data.status || '').toLowerCase();
         setCurrentRide(response.data);
-        setCurrentRideId(response.data.id);
+        setCurrentRideId(String(response.data.id));
 
         if (status === 'pending') {
           setFindingDriversVisible(true);
@@ -892,7 +932,7 @@ export default function HomeScreen() {
         } else if (status === 'completed') {
           // ===== TRIP COMPLETED: clear the driver navigation =====
           clearDriverNavigation();
-          setCurrentRideId(ride.id || rideId);
+          setCurrentRideId(String(ride.id || rideId));
           setCurrentRide(ride);
           setTripStatus('completed');
           setShowActiveTrip(true);
@@ -1382,11 +1422,10 @@ export default function HomeScreen() {
   };
 
   const handleMessageDriver = () => {
-    if (currentRideId) {
-      navigation.navigate('Chat', {
-        rideId: String(currentRideId),
-        otherPartyName: driverName || 'Driver',
-      });
+    const rideId = currentRideId || (currentRide?.id ? String(currentRide.id) : null);
+    if (rideId) {
+      setUnreadMessageCount(0);
+      setChatVisible(true);
     } else {
       showToast('The active ride is not available', 'red');
     }
@@ -1616,6 +1655,19 @@ export default function HomeScreen() {
         <View style={styles.overlayContainer}>
           <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
+          {riderMessageToast ? (
+            <View style={[styles.riderMessageToast, { bottom: insets.bottom + spacing.xxl }]}>
+              <Text style={styles.riderMessageToastText} numberOfLines={2}>{riderMessageToast}</Text>
+              <TouchableOpacity
+                onPress={() => setRiderMessageToast('')}
+                style={styles.riderMessageToastClose}
+                accessibilityLabel="Dismiss message notification"
+              >
+                <Text style={styles.riderMessageToastCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
           <View style={[styles.overlayHeader, { paddingTop: insets.top + 14 }]}>
             <TouchableOpacity
               onPress={handleCancelSearch}
@@ -1789,11 +1841,7 @@ export default function HomeScreen() {
                     />
                   )}
                   <View style={styles.activeMapStatus}>
-                    <View
-                      style={[styles.statusDot, { backgroundColor: getStatusColor() }]}
-                    />
                     <Text style={styles.mapStatusText}>{getStatusText()}</Text>
-                    <Text style={styles.mapETA}>ETA: {driverEtaDisplay}</Text>
                   </View>
                 </View>
 
@@ -1887,9 +1935,18 @@ export default function HomeScreen() {
                   <TouchableOpacity
                     style={styles.actionButton}
                     onPress={handleMessageDriver}
+                    activeOpacity={0.7}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Message driver"
                   >
                     <MessageCircle size={20} color={colors.green} strokeWidth={2} />
                     <Text style={styles.actionButtonText}>Message</Text>
+                    {unreadMessageCount > 0 && (
+                      <View pointerEvents="none" style={styles.unreadMessageBadge}>
+                        <Text style={styles.unreadMessageBadgeText}>{unreadMessageCount > 9 ? '9+' : unreadMessageCount}</Text>
+                      </View>
+                    )}
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.actionButton}
@@ -1994,6 +2051,18 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                 </Animated.View>
               </Pressable>
+            </View>
+          )}
+          {chatVisible && (
+            <View style={styles.chatOverlay}>
+              <Pressable style={styles.chatBackdrop} onPress={() => setChatVisible(false)} />
+              <View style={styles.chatSheet}>
+                <ChatScreen
+                  rideId={currentRideId || (currentRide?.id ? String(currentRide.id) : undefined)}
+                  otherPartyName={driverName || currentRide?.driver?.fullName || 'Driver'}
+                  onClose={() => setChatVisible(false)}
+                />
+              </View>
             </View>
           )}
         </View>
@@ -2524,6 +2593,30 @@ function NavItem({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.gray50 },
+  chatOverlay: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end', zIndex: 100 },
+  chatBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(15,23,42,0.34)' },
+  chatSheet: { height: '88%', overflow: 'hidden', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: colors.gray50 },
+  riderMessageToast: {
+    position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
+    zIndex: 200,
+    elevation: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.green,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+  },
+  riderMessageToastText: { flex: 1, color: colors.white, fontFamily: font.semibold, fontSize: 13 },
+  riderMessageToastClose: { marginLeft: spacing.sm, padding: spacing.xs },
+  riderMessageToastCloseText: { color: colors.white, fontSize: 16, fontWeight: '700' },
 
   header: {
     paddingHorizontal: spacing.xxl,
@@ -3143,11 +3236,23 @@ const styles = StyleSheet.create({
   },
   activeMapStatus: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: spacing.lg,
+    top: spacing.md,
+    left: spacing.md,
+    maxWidth: '82%',
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 7,
+    paddingVertical: 8,
+    paddingHorizontal: 11,
+    borderRadius: radius.md,
+    backgroundColor: colors.greenDark,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.45)',
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 7,
+    elevation: 5,
   },
   mapOverlay: {
     alignItems: 'center',
@@ -3186,17 +3291,21 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
+    backgroundColor: colors.white,
+    borderWidth: 1.5,
+    borderColor: colors.white,
   },
   mapStatusText: {
+    flexShrink: 1,
     fontFamily: font.semibold,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
-    color: colors.gray900,
+    color: colors.white,
   },
   mapETA: {
     fontFamily: font.medium,
-    fontSize: 12,
-    color: colors.gray600,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.88)',
   },
 
   activeDriverCard: {
@@ -3351,6 +3460,7 @@ const styles = StyleSheet.create({
     color: colors.gray800,
   },
   actionButton: {
+    position: 'relative',
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -3368,6 +3478,21 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: colors.gray700,
   },
+  unreadMessageBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    minWidth: 19,
+    height: 19,
+    borderRadius: 10,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.red,
+    borderWidth: 2,
+    borderColor: colors.white,
+  },
+  unreadMessageBadgeText: { color: colors.white, fontFamily: font.bold, fontSize: 10 },
 
   tripProgress: {
     backgroundColor: colors.white,

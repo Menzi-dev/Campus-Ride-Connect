@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View, Linking, RefreshControl, ScrollView } from 'react-native';
+import { ActivityIndicator, Modal, Platform, StyleSheet, Text, TouchableOpacity, View, Linking, RefreshControl, ScrollView } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RouteProp } from '@react-navigation/native';
 import { ArrowLeft, Car, Check, MapPin, Navigation, Route as RouteIcon, Phone, MessageCircle, RefreshCw } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, radius, spacing, font, shadow } from '../theme/theme';
 import apiClient from '../services/ApiClient';
+import { useToast } from '../components/Toast';
+import ChatScreen from './ChatScreen';
 
 type RootStackParamList = {
   DriverDashboard: undefined;
@@ -22,6 +25,8 @@ type Ride = {
   destLat?: number;
   destLng?: number;
   fare?: number;
+  riderName?: string;
+  rider?: { fullName?: string };
   riderPhone?: string;
 };
 type Coordinate = { latitude: number; longitude: number };
@@ -87,6 +92,7 @@ function DriverMapUpdater({ routePoints }: { routePoints: Coordinate[] }) {
 export default function DriverActiveRideScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'DriverActiveRide'>>();
+  const { showToast } = useToast();
   const [ride, setRide] = useState<Ride | null>(null);
   const [routePoints, setRoutePoints] = useState<Coordinate[]>([]);
   const [carPosition, setCarPosition] = useState<Coordinate>(NORTH_CAPE_MALL);
@@ -95,6 +101,10 @@ export default function DriverActiveRideScreen() {
   const [updating, setUpdating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [routeError, setRouteError] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [chatVisible, setChatVisible] = useState(false);
+  const seenMessageIdsRef = useRef<Set<number>>(new Set());
   const animationRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -141,8 +151,53 @@ export default function DriverActiveRideScreen() {
 
   // Send message to rider
   const handleMessageRider = () => {
-    if (ride) navigation.navigate('Chat', { rideId: String(ride.id), otherPartyName: 'Rider' });
+    if (ride) {
+      setUnreadCount(0);
+      setChatVisible(true);
+    }
   };
+
+  const riderDisplayName = ride?.riderName || ride?.rider?.fullName || 'Unknown rider';
+
+  useEffect(() => {
+    AsyncStorage.getItem('user').then((value) => {
+      if (value) {
+        const user = JSON.parse(value);
+        setCurrentUserId(Number(user.id ?? user.userId));
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!ride?.id || currentUserId == null) return;
+
+    let cancelled = false;
+    const pollMessages = async () => {
+      try {
+        const response = await apiClient.get(`/rides/${ride.id}/messages`);
+        const messages: { id: number; senderId: number; message: string; senderName?: string }[] = response.data || [];
+        if (cancelled) return;
+
+        const firstPoll = seenMessageIdsRef.current.size === 0;
+        const incoming = messages.filter((message) => message.senderId !== currentUserId && !seenMessageIdsRef.current.has(message.id));
+        messages.forEach((message) => seenMessageIdsRef.current.add(message.id));
+        if (!firstPoll && incoming.length > 0) {
+          const latest = incoming[incoming.length - 1];
+          showToast(`${latest.senderName || 'Rider'}: ${latest.message}`, 'green');
+          setUnreadCount((count) => count + incoming.length);
+        }
+      } catch {
+        // Message polling is non-critical while the ride continues.
+      }
+    };
+
+    pollMessages();
+    const interval = setInterval(pollMessages, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [ride?.id, currentUserId, showToast]);
 
   useEffect(() => {
     loadRide();
@@ -245,6 +300,19 @@ export default function DriverActiveRideScreen() {
 
   return (
     <View style={styles.container}>
+      <Modal
+        visible={chatVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setChatVisible(false)}
+      >
+        <View style={styles.chatOverlay}>
+          <TouchableOpacity style={styles.chatBackdrop} activeOpacity={1} onPress={() => setChatVisible(false)} />
+          <View style={styles.chatSheet}>
+            <ChatScreen rideId={String(ride.id)} otherPartyName={riderDisplayName} onClose={() => setChatVisible(false)} />
+          </View>
+        </View>
+      </Modal>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconButton} accessibilityLabel="Back to driver dashboard">
           <ArrowLeft size={22} color={colors.gray800} />
@@ -327,10 +395,17 @@ export default function DriverActiveRideScreen() {
             <TouchableOpacity
               style={styles.messageButton}
               onPress={handleMessageRider}
+              activeOpacity={0.7}
+              hitSlop={8}
               accessibilityLabel="Message rider"
             >
               <MessageCircle size={18} color={colors.white} strokeWidth={2} />
               <Text style={styles.communicationButtonText}>Message</Text>
+              {unreadCount > 0 && (
+                <View pointerEvents="none" style={styles.unreadBadge}>
+                  <Text style={styles.unreadBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                </View>
+              )}
             </TouchableOpacity>
           </View>
 
@@ -397,6 +472,9 @@ export default function DriverActiveRideScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, position: 'relative', backgroundColor: colors.gray50 },
+  chatOverlay: { flex: 1, justifyContent: 'flex-end' },
+  chatBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(15,23,42,0.34)' },
+  chatSheet: { height: '88%', overflow: 'hidden', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: colors.gray50 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   errorText: { color: colors.red, fontFamily: font.semibold },
   header: { flexDirection: 'row', alignItems: 'center', padding: spacing.lg, paddingTop: spacing.xl, backgroundColor: colors.white, ...shadow.sm },
@@ -450,6 +528,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.blue,
   },
   messageButton: {
+    position: 'relative',
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -459,6 +538,21 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     backgroundColor: colors.purple || '#9333ea',
   },
+  unreadBadge: {
+    position: 'absolute',
+    top: -7,
+    right: -7,
+    minWidth: 19,
+    height: 19,
+    borderRadius: 10,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.red,
+    borderWidth: 2,
+    borderColor: colors.white,
+  },
+  unreadBadgeText: { color: colors.white, fontFamily: font.bold, fontSize: 10 },
   communicationButtonText: {
     color: colors.white,
     fontFamily: font.semibold,

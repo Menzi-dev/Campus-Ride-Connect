@@ -25,6 +25,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import DriverActiveRideScreen from './src/screens/DriverActiveRideScreen';
 import ViewRideDetailsScreen from './src/screens/ViewRideDetailsScreen';
 import RatingDriverScreen from './src/screens/RatingDriverScreen';
+import ChatScreen from './src/screens/ChatScreen';
 import { ArrowLeft, ArrowRight } from 'lucide-react-native';
 
 type RootStackParamList = {
@@ -43,6 +44,7 @@ type RootStackParamList = {
   ViewRideDetails: { requestId: string };
   DriverActiveRide: { requestId: string };
   RatingDriver: { rideId: string; driverName?: string };
+  Chat: { rideId: string; otherPartyName?: string };
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -122,6 +124,7 @@ export default function App() {
               <Stack.Screen name="ViewRideDetails" component={ViewRideDetailsScreen} />
               <Stack.Screen name="DriverActiveRide" component={DriverActiveRideScreen} />
               <Stack.Screen name="RatingDriver" component={RatingDriverScreen} />
+              <Stack.Screen name="Chat" component={ChatScreen} />
             </Stack.Navigator>
           </NavigationContainer>
         </ToastProvider>

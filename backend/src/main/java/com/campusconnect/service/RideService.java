@@ -31,6 +31,7 @@ public class RideService {
         ride.setDistanceKm(request.getDistanceKm());
         ride.setDurationMinutes(request.getDuration());
         ride.setFare(request.getFare());
+        ride.setScheduledAt(request.getScheduledAt());
         ride.setStatus(Ride.RideStatus.PENDING);
         ride.setCreatedAt(LocalDateTime.now());
 
@@ -66,7 +67,7 @@ public class RideService {
      * Get active ride for a rider (not completed or cancelled)
      */
     public Optional<Ride> getActiveRideForRider(Long riderId) {
-        return rideRepository.findByRiderIdAndStatusIn(riderId, 
+        return rideRepository.findFirstByRiderIdAndStatusInOrderByCreatedAtDesc(riderId,
             List.of(Ride.RideStatus.PENDING, Ride.RideStatus.ACCEPTED, 
                     Ride.RideStatus.ENROUTE, Ride.RideStatus.ARRIVED, 
                     Ride.RideStatus.STARTED));

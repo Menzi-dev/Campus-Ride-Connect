@@ -1,25 +1,20 @@
-import React from 'react';
-import { View, Text, StyleSheet, StatusBar } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { CalendarDays, Clock3 } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import apiClient from '../services/ApiClient';
 import BottomNav from '../components/BottomNav';
+import { colors, font, radius, spacing } from '../theme/theme';
 
-// Full Schedule Ride design (date tabs, time picker, recurrence) is next
-// phase per the project's table of contents — stub keeps tab bar navigable.
+type RootStackParamList = { Home: undefined; RiderHistory: undefined; RiderSchedule: undefined; RiderProfile: undefined };
 export default function ScheduleScreen() {
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0a0a1a" />
-      <View style={styles.center}>
-        <Text style={styles.title}>📅 Schedule Ride</Text>
-        <Text style={styles.subtitle}>Coming in the next phase</Text>
-      </View>
-      <BottomNav active="Schedule" />
-    </View>
-  );
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+  const [pickup, setPickup] = useState('Current Location'); const [destination, setDestination] = useState(''); const [date, setDate] = useState(new Date()); const [time, setTime] = useState('08:00'); const [saving, setSaving] = useState(false);
+  const dateOptions = useMemo(() => [0, 1, 2, 3].map((offset) => { const value = new Date(); value.setDate(value.getDate() + offset); return value; }), []);
+  const submit = async () => { if (!destination.trim()) { Alert.alert('Destination required', 'Enter where you want to go.'); return; } const [hours, minutes] = time.split(':').map(Number); const scheduled = new Date(date); scheduled.setHours(hours || 0, minutes || 0, 0, 0); if (scheduled <= new Date()) { Alert.alert('Choose a future time', 'Scheduled rides must be in the future.'); return; } setSaving(true); try { const response = await apiClient.post('/rides/request', { pickupLocation: pickup, pickupAddress: pickup, destination: destination.trim(), destinationAddress: destination.trim(), fare: 0, scheduledAt: scheduled.toISOString().slice(0, 19) }); if (response.data?.id) await apiClient.post(`/rides/${response.data.id}/payment`, { method: 'CASH' }); Alert.alert('Ride scheduled', 'Your scheduled ride was saved successfully.', [{ text: 'OK', onPress: () => navigation.navigate('Home') }]); } catch (error: any) { Alert.alert('Could not schedule ride', error?.response?.data?.error || 'Please try again.'); } finally { setSaving(false); } };
+  return <View style={styles.container}><ScrollView contentContainerStyle={styles.content}><Text style={styles.back} onPress={() => navigation.goBack()}>‹ Back</Text><Text style={styles.title}>Schedule Ride</Text><Text style={styles.subtitle}>Book in advance</Text><Text style={styles.label}>DATE</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateTabs}>{dateOptions.map((option, index) => <TouchableOpacity key={option.toISOString()} style={[styles.dateTab, date.toDateString() === option.toDateString() && styles.selectedTab]} onPress={() => setDate(option)}><Text style={[styles.dateTabText, date.toDateString() === option.toDateString() && styles.selectedTabText]}>{index === 0 ? 'Today' : index === 1 ? 'Tomorrow' : option.toLocaleDateString('en-ZA', { weekday: 'short' })}</Text></TouchableOpacity>)}</ScrollView><Text style={styles.label}>TIME</Text><View style={styles.inputRow}><Clock3 size={19} color={colors.gray700} /><TextInput value={time} onChangeText={setTime} placeholder="08:00" keyboardType="numbers-and-punctuation" style={styles.input} /><Text style={styles.am}>24h</Text></View><Text style={styles.label}>PICKUP</Text><TextInput value={pickup} onChangeText={setPickup} style={styles.textInput} placeholder="Pickup location" /><Text style={styles.label}>DESTINATION</Text><TextInput value={destination} onChangeText={setDestination} style={styles.textInput} placeholder="Enter destination" /><View style={styles.summary}><Text style={styles.summaryTitle}>SUMMARY</Text><Row label="Pickup" value={pickup} /><Row label="Destination" value={destination || 'Enter destination'} /><Row label="Date & Time" value={`${date.toLocaleDateString('en-ZA')} ${time}`} /><Row label="Payment" value="Cash" /></View><TouchableOpacity style={styles.confirm} onPress={submit} disabled={saving}><CalendarDays size={17} color={colors.white} /><Text style={styles.confirmText}>{saving ? 'Scheduling...' : 'Confirm Schedule'}</Text></TouchableOpacity></ScrollView><BottomNav active="Schedule" /></View>;
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a1a' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 26, fontWeight: 'bold', color: '#4CAF50' },
-  subtitle: { fontSize: 14, color: '#888', marginTop: 8 },
-});
+function Row({ label, value }: { label: string; value: string }) { return <View style={styles.summaryRow}><Text style={styles.summaryLabel}>{label}</Text><Text style={styles.summaryValue} numberOfLines={1}>{value}</Text></View>; }
+const styles = StyleSheet.create({ container: { flex: 1, backgroundColor: colors.gray50 }, content: { padding: spacing.lg, paddingBottom: spacing.xl }, back: { color: colors.green, fontFamily: font.bold, fontSize: 13 }, title: { color: colors.gray900, fontFamily: font.extrabold, fontSize: 22, marginTop: spacing.sm }, subtitle: { color: colors.gray600, fontFamily: font.medium, fontSize: 12, marginTop: 3, marginBottom: spacing.lg }, label: { color: colors.gray600, fontFamily: font.bold, fontSize: 10, marginTop: spacing.md, marginBottom: spacing.sm }, dateTabs: { gap: spacing.sm }, dateTab: { borderWidth: 1, borderColor: colors.gray200, backgroundColor: colors.white, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: spacing.sm }, selectedTab: { backgroundColor: colors.green, borderColor: colors.green }, dateTabText: { color: colors.gray700, fontFamily: font.bold, fontSize: 11 }, selectedTabText: { color: colors.white }, inputRow: { backgroundColor: colors.white, borderRadius: radius.md, paddingHorizontal: spacing.md, minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, input: { flex: 1, color: colors.gray900, fontFamily: font.extrabold, fontSize: 22 }, am: { color: colors.gray600, fontFamily: font.bold, fontSize: 11 }, textInput: { backgroundColor: colors.white, borderRadius: radius.md, paddingHorizontal: spacing.md, minHeight: 44, color: colors.gray900, fontFamily: font.medium, borderWidth: 1, borderColor: colors.gray200 }, summary: { backgroundColor: colors.white, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.xl }, summaryTitle: { color: colors.gray600, fontFamily: font.bold, fontSize: 10, marginBottom: spacing.sm }, summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.gray100 }, summaryLabel: { color: colors.gray500, fontFamily: font.medium, fontSize: 11 }, summaryValue: { color: colors.gray900, fontFamily: font.bold, fontSize: 11, maxWidth: '65%' }, confirm: { backgroundColor: colors.green, borderRadius: radius.full, minHeight: 46, marginTop: spacing.lg, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' }, confirmText: { color: colors.white, fontFamily: font.bold, fontSize: 13 } });

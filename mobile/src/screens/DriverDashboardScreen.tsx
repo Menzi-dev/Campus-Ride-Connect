@@ -33,6 +33,7 @@ import { colors, radius, spacing, font, shadow } from '../theme/theme';
 import Button from '../components/Button';
 import { useToast } from '../components/Toast';
 import apiClient from '../services/ApiClient';
+import DriverBottomNav from '../components/DriverBottomNav';
 
 type RootStackParamList = {
   Login: undefined;
@@ -43,6 +44,9 @@ type RootStackParamList = {
   TripHistory: undefined;
   DriverVerification: undefined;
   Profile: undefined;
+  DriverEarnings: undefined;
+  DriverHistory: undefined;
+  DriverProfile: undefined;
   Chat: { rideId: string; otherPartyName?: string };
 };
 
@@ -555,31 +559,8 @@ export default function DriverDashboardScreen() {
           ))
         )}
 
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
-          <TouchableOpacity 
-            style={styles.actionItem} 
-            onPress={() => showToast('Trip History - Coming soon', 'blue')}
-          >
-            <Clock size={20} color={colors.gray600} strokeWidth={1.8} />
-            <Text style={styles.actionText}>Trip History</Text>
-            <ChevronRight size={16} color={colors.gray400} strokeWidth={2} />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.actionItem} 
-            onPress={() => showToast('Profile & Verification - Coming soon', 'blue')}
-          >
-            <User size={20} color={colors.gray600} strokeWidth={1.8} />
-            <Text style={styles.actionText}>Profile & Verification</Text>
-            <ChevronRight size={16} color={colors.gray400} strokeWidth={2} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionItem} onPress={handleLogout}>
-            <LogOut size={20} color={colors.red} strokeWidth={1.8} />
-            <Text style={[styles.actionText, { color: colors.red }]}>Logout</Text>
-            <ChevronRight size={16} color={colors.gray400} strokeWidth={2} />
-          </TouchableOpacity>
-        </View>
       </ScrollView>
+      <DriverBottomNav active="DriverDashboard" />
     </View>
   );
 }

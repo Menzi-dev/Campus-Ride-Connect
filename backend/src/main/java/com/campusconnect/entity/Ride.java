@@ -37,6 +37,12 @@ public class Ride {
     @Column(name = "dest_lng")
     private Double destLng;
 
+    @Column(name = "current_lat")
+    private Double currentLat;
+
+    @Column(name = "current_lng")
+    private Double currentLng;
+
     @Column(name = "fare")
     private BigDecimal fare;
 
@@ -103,6 +109,12 @@ public class Ride {
 
     public Double getDestLng() { return destLng; }
     public void setDestLng(Double destLng) { this.destLng = destLng; }
+
+    public Double getCurrentLat() { return currentLat; }
+    public void setCurrentLat(Double currentLat) { this.currentLat = currentLat; }
+
+    public Double getCurrentLng() { return currentLng; }
+    public void setCurrentLng(Double currentLng) { this.currentLng = currentLng; }
 
     public BigDecimal getFare() { return fare; }
     public void setFare(BigDecimal fare) { this.fare = fare; }

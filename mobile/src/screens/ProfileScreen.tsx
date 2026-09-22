@@ -1,29 +1,29 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, Alert } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { ActivityIndicator, RefreshControl, ScrollView, View, Text, StyleSheet, TouchableOpacity, StatusBar, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import BottomNav from '../components/BottomNav';
+import apiClient from '../services/ApiClient';
+import { colors, font, radius, spacing, shadow } from '../theme/theme';
 
-type RootStackParamList = { Login: undefined };
+type RootStackParamList = { Login: undefined; RiderHistory: undefined; RiderPaymentMethods: undefined };
 
 type StoredUser = {
   fullName: string;
   email: string;
   yearOfStudy?: number;
   role?: string;
+  phone?: string;
+  faceVerified?: boolean;
 };
 
 export default function ProfileScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
-  const [user, setUser] = useState<StoredUser | null>(null);
+  const [user, setUser] = useState<StoredUser | null>(null); const [loading, setLoading] = useState(true); const [refreshing, setRefreshing] = useState(false); const [tripCount, setTripCount] = useState(0);
 
-  useEffect(() => {
-    (async () => {
-      const stored = await AsyncStorage.getItem('user');
-      if (stored) setUser(JSON.parse(stored));
-    })();
-  }, []);
+  const load = useCallback(async (refresh = false) => { refresh ? setRefreshing(true) : setLoading(true); try { const [profile, history] = await Promise.all([apiClient.get('/users/me'), apiClient.get('/rides/history')]); setUser(profile.data); setTripCount((history.data || []).filter((ride: any) => ride.status === 'COMPLETED').length); await AsyncStorage.setItem('user', JSON.stringify(profile.data)); } finally { setLoading(false); setRefreshing(false); } }, []);
+  React.useEffect(() => { load(); }, [load]);
 
   const handleSignOut = async () => {
     await AsyncStorage.multiRemove(['authToken', 'user']);
@@ -36,12 +36,10 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0a0a1a" />
-
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Profile</Text>
-      </View>
-
+      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.green} />} contentContainerStyle={styles.scrollContent}>
+      <View style={styles.header}><Text style={styles.headerTitle}>Profile</Text></View>
+      {loading ? <ActivityIndicator color={colors.green} style={styles.loader} /> : <>
       <View style={styles.profileCard}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{initials}</Text>
@@ -57,20 +55,21 @@ export default function ProfileScreen() {
         </View>
       </View>
 
+      <View style={styles.stats}><Stat value={tripCount} label="RIDES" /><Stat value="4.9 ★" label="RATING" /><Stat value="Cash" label="PAYMENT" /><Stat value="SPU" label="CAMPUS" /></View>
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>ACCOUNT</Text>
         <View style={styles.rowItem}>
           <Text style={styles.rowText}>Edit Profile</Text>
           <Text style={styles.chevron}>›</Text>
         </View>
-        <View style={styles.rowItem}>
+        <TouchableOpacity style={styles.rowItem} onPress={() => navigation.navigate('RiderPaymentMethods')}>
           <Text style={styles.rowText}>Payment Methods</Text>
           <Text style={styles.chevron}>›</Text>
-        </View>
-        <View style={styles.rowItem}>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.rowItem} onPress={() => navigation.navigate('RiderHistory')}>
           <Text style={styles.rowText}>Trip History</Text>
           <Text style={styles.chevron}>›</Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       <TouchableOpacity
@@ -83,62 +82,69 @@ export default function ProfileScreen() {
         }
       >
         <Text style={styles.signOutText}>⇥ Sign Out</Text>
-      </TouchableOpacity>
+      </TouchableOpacity></>}
+      </ScrollView>
 
-      <BottomNav active="Profile" />
+      <BottomNav active="RiderProfile" />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a1a' },
-  header: { paddingHorizontal: 20, paddingTop: 50, paddingBottom: 16 },
-  headerTitle: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
-  profileCard: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, marginBottom: 24 },
+  container: { flex: 1, backgroundColor: colors.gray50 }, scrollContent: { paddingBottom: spacing.lg },
+  header: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.md, backgroundColor: colors.white },
+  headerTitle: { color: colors.gray900, fontFamily: font.extrabold, fontSize: 22 },
+  profileCard: { flexDirection: 'row', alignItems: 'center', padding: spacing.lg, backgroundColor: colors.white, ...shadow.sm },
   avatar: {
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#4CAF50',
+    backgroundColor: colors.green,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  avatarText: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
-  name: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  email: { color: '#888', fontSize: 13, marginTop: 2 },
+  avatarText: { color: colors.white, fontFamily: font.extrabold, fontSize: 22 },
+  name: { color: colors.gray900, fontFamily: font.extrabold, fontSize: 18 },
+  email: { color: colors.gray600, fontFamily: font.medium, fontSize: 13, marginTop: 2 },
   badge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(76,175,80,0.15)',
+    backgroundColor: colors.greenLight,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 2,
     marginTop: 6,
   },
-  badgeText: { color: '#4CAF50', fontSize: 10, fontWeight: 'bold' },
-  section: { paddingHorizontal: 20, marginBottom: 20 },
-  sectionLabel: { color: '#666', fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 8 },
+  badgeText: { color: colors.greenDark, fontFamily: font.bold, fontSize: 10 },
+  stats: { flexDirection: 'row', gap: spacing.sm, padding: spacing.lg },
+  stat: { flex: 1, backgroundColor: colors.white, borderRadius: radius.md, padding: spacing.sm, ...shadow.sm },
+  statValue: { color: colors.gray900, fontFamily: font.extrabold, fontSize: 15 },
+  statLabel: { color: colors.gray600, fontFamily: font.bold, fontSize: 8, marginTop: 3 },
+  section: { paddingHorizontal: spacing.lg, marginBottom: spacing.md },
+  sectionLabel: { color: colors.gray600, fontFamily: font.bold, fontSize: 11, letterSpacing: 0.5, marginBottom: spacing.sm },
   rowItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#1a1a2e',
-    borderRadius: 12,
+    backgroundColor: colors.white,
+    borderRadius: radius.md,
     padding: 16,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#2a2a4a',
+    borderColor: colors.gray200,
   },
-  rowText: { color: '#ddd', fontSize: 14 },
-  chevron: { color: '#555', fontSize: 18 },
+  rowText: { color: colors.gray900, fontFamily: font.bold, fontSize: 14 },
+  chevron: { color: colors.gray500, fontSize: 18 },
   signOutButton: {
-    marginHorizontal: 20,
-    backgroundColor: '#1a1a2e',
-    borderRadius: 12,
+    marginHorizontal: spacing.lg,
+    backgroundColor: colors.white,
+    borderRadius: radius.full,
     padding: 16,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#c0392b',
+    borderColor: colors.redLight,
     marginBottom: 20,
   },
-  signOutText: { color: '#e74c3c', fontSize: 15, fontWeight: 'bold' },
+  signOutText: { color: colors.red, fontFamily: font.bold, fontSize: 15 }, loader: { marginTop: spacing.xxxl },
 });
+
+function Stat({ value, label }: { value: string | number; label: string }) { return <View style={styles.stat}><Text style={styles.statValue}>{value}</Text><Text style={styles.statLabel}>{label}</Text></View>; }

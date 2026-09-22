@@ -16,16 +16,21 @@ spring:
 
   servlet:
     multipart:
-      max-file-size: 10MB
-      max-request-size: 10MB
+      max-file-size: 2MB
+      max-request-size: 2MB
 
 server:
   port: 8080
   address: 0.0.0.0
 
+app:
+  jwt:
+    secret: changeitchangemechangekey1234567890
+    expiration-ms: 604800000
+
 jwt:
-  secret: your-very-secure-secret-key-change-in-production
-  expiration: 3600000
+  secret: changeitchangemechangekey1234567890
+  expiration: 604800000
 
 logging:
   level:

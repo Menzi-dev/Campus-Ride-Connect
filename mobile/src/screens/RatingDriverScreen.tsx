@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -8,7 +8,7 @@ import { colors, font, radius, shadow, spacing } from '../theme/theme';
 import apiClient from '../services/ApiClient';
 
 type RootStackParamList = {
-  Home: undefined;
+  Home: { skipActiveRideRestore?: boolean } | undefined;
   RatingDriver: { rideId: string; driverName?: string };
 };
 
@@ -16,6 +16,7 @@ export default function RatingDriverScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'RatingDriver'>>();
   const [selectedRating, setSelectedRating] = useState(0);
+  const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
@@ -25,9 +26,12 @@ export default function RatingDriverScreen() {
     setSubmitting(true);
     setError('');
     try {
-      await apiClient.post(`/rides/${route.params.rideId}/rating`, { rating: selectedRating });
+      await apiClient.post(`/rides/${route.params.rideId}/rating`, {
+        rating: selectedRating,
+        comment: comment.trim() || undefined,
+      });
       setSubmitted(true);
-      setTimeout(() => navigation.replace('Home'), 2200);
+      setTimeout(() => navigation.replace('Home', { skipActiveRideRestore: true }), 2200);
     } catch (requestError: any) {
       setError(requestError?.response?.data?.error || 'Could not submit rating. Please try again.');
     } finally {
@@ -69,6 +73,17 @@ export default function RatingDriverScreen() {
             </TouchableOpacity>
           ))}
         </View>
+        <TextInput
+          style={styles.commentInput}
+          value={comment}
+          onChangeText={setComment}
+          placeholder="Add a comment (optional)"
+          placeholderTextColor={colors.gray400}
+          multiline
+          maxLength={500}
+          textAlignVertical="top"
+          accessibilityLabel="Optional rating comment"
+        />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <TouchableOpacity
           style={[styles.submitButton, selectedRating === 0 && styles.disabledButton]}
@@ -94,6 +109,7 @@ const styles = StyleSheet.create({
   subtitle: { marginTop: spacing.sm, color: colors.gray500, fontFamily: font.regular, fontSize: 14, textAlign: 'center' },
   stars: { flexDirection: 'row', marginVertical: spacing.xxxl },
   starButton: { paddingHorizontal: spacing.xs },
+  commentInput: { width: '100%', minHeight: 92, padding: spacing.md, borderWidth: 1, borderColor: colors.gray200, borderRadius: radius.md, backgroundColor: colors.white, color: colors.gray900, fontFamily: font.regular, fontSize: 14, marginBottom: spacing.lg },
   submitButton: { width: '100%', minHeight: 54, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.green },
   disabledButton: { backgroundColor: colors.gray300 },
   submitText: { color: colors.white, fontFamily: font.bold, fontSize: 16 },

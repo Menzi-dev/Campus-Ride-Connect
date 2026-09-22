@@ -17,10 +17,10 @@ import java.util.Date;
 @Component
 public class JwtTokenProvider {
 
-    @Value("${app.jwt.secret:changeitchangemechangekey1234567890}")
+    @Value("${app.jwt.secret:${jwt.secret:changeitchangemechangekey1234567890}}")
     private String secret;
 
-    @Value("${app.jwt.expiration-ms:604800000}") // 7 days
+    @Value("${app.jwt.expiration-ms:${jwt.expiration:604800000}}")
     private long expirationMs;
 
     private SecretKey key;

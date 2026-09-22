@@ -39,7 +39,7 @@ type RootStackParamList = {
   Landing: undefined;
   Login: undefined;
   CreateAccount: undefined;
-  Home: undefined;
+  Home: { skipActiveRideRestore?: boolean } | undefined;
   AdminDashboard: undefined;
   DriverDashboard: undefined;
   SecurityDashboard: undefined;
@@ -127,7 +127,7 @@ export default function LoginScreen() {
             navigation.replace('DriverDashboard');
             break;
           default:
-            navigation.replace('Home');
+            navigation.replace('Home', { skipActiveRideRestore: true });
         }
       }, 500);
     } catch (error: any) {

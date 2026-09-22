@@ -1,6 +1,7 @@
 package com.campusconnect.dto;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 public class RideRequest {
     private String pickupLocation;
@@ -14,6 +15,7 @@ public class RideRequest {
     private Double distanceKm;
     private Double duration;
     private BigDecimal fare;
+    private LocalDateTime scheduledAt;
 
     // Getters and Setters
     public String getPickupLocation() { return pickupLocation; }
@@ -48,4 +50,6 @@ public class RideRequest {
 
     public BigDecimal getFare() { return fare; }
     public void setFare(BigDecimal fare) { this.fare = fare; }
+    public LocalDateTime getScheduledAt() { return scheduledAt; }
+    public void setScheduledAt(LocalDateTime scheduledAt) { this.scheduledAt = scheduledAt; }
 }

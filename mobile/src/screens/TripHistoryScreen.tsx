@@ -1,25 +1,18 @@
-import React from 'react';
-import { View, Text, StyleSheet, StatusBar } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { ActivityIndicator, RefreshControl, ScrollView, Text, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { Clock3, Star } from 'lucide-react-native';
+import apiClient from '../services/ApiClient';
 import BottomNav from '../components/BottomNav';
 
-// Full Schedule Ride design (date tabs, time picker, recurrence) is next
-// phase per the project's table of contents — stub keeps tab bar navigable.
+type Ride = { id: number; pickupLocation?: string; destination?: string; fare?: number | string; createdAt?: string; completedAt?: string; status?: string; driverName?: string; driverRating?: number };
 export default function ScheduleScreen() {
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0a0a1a" />
-      <View style={styles.center}>
-        <Text style={styles.title}>📅 Schedule Ride</Text>
-        <Text style={styles.subtitle}>Coming in the next phase</Text>
-      </View>
-      <BottomNav active="Schedule" />
-    </View>
-  );
+  const [rides, setRides] = useState<Ride[]>([]); const [loading, setLoading] = useState(true); const [refreshing, setRefreshing] = useState(false); const [page, setPage] = useState(0);
+  const load = useCallback(async (refresh = false) => { refresh ? setRefreshing(true) : setLoading(true); try { const response = await apiClient.get('/rides/history'); setRides((response.data || []).filter((ride: Ride) => ride.status === 'COMPLETED')); } finally { setLoading(false); setRefreshing(false); } }, []);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+  const pageSize = 5; const pageCount = Math.max(1, Math.ceil(rides.length / pageSize)); const visible = rides.slice(page * pageSize, page * pageSize + pageSize);
+  return <View style={styles.container}><ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setPage(0); load(true); }} tintColor="#00C96B" />} contentContainerStyle={styles.content}><Text style={styles.title}>Trip History</Text>{loading ? <ActivityIndicator color="#00C96B" style={styles.loader} /> : visible.length === 0 ? <Text style={styles.empty}>No completed trips yet.</Text> : visible.map((ride) => <View style={styles.card} key={ride.id}><View style={styles.dateRow}><Text style={styles.date}>{formatDate(ride.completedAt || ride.createdAt)}</Text><View style={styles.stars}>{[1, 2, 3, 4, 5].map((star) => <Star key={star} size={12} color="#EAB308" fill="#EAB308" />)}</View></View><View style={styles.routeRow}><View style={styles.routeLine}><View style={styles.dotGreen} /><Text style={styles.route}>{ride.pickupLocation || 'Pickup'}</Text></View><View style={styles.routeLine}><View style={styles.dotDark} /><Text style={styles.route}>{ride.destination || 'Destination'}</Text></View><Text style={styles.driver}>{ride.driverName || 'Campus Ride driver'}</Text></View><Text style={styles.fare}>R {String(ride.fare ?? '0')}</Text></View>)}</ScrollView><View style={styles.pagination}><TouchableOpacity disabled={page === 0} onPress={() => setPage((value) => Math.max(0, value - 1))} style={[styles.pageButton, page === 0 && styles.disabled]}><Text style={styles.pageText}>‹ Back</Text></TouchableOpacity><Text style={styles.pageLabel}>Page {page + 1} of {pageCount}</Text><TouchableOpacity disabled={page >= pageCount - 1} onPress={() => setPage((value) => Math.min(pageCount - 1, value + 1))} style={[styles.pageButton, page >= pageCount - 1 && styles.disabled]}><Text style={styles.pageText}>Next ›</Text></TouchableOpacity></View><BottomNav active="RiderHistory" /></View>;
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a1a' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 26, fontWeight: 'bold', color: '#4CAF50' },
-  subtitle: { fontSize: 14, color: '#888', marginTop: 8 },
-});
+function formatDate(value?: string) { return value ? new Date(value).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' }) : 'Date unavailable'; }
+const styles = StyleSheet.create({ container: { flex: 1, backgroundColor: '#F7F9FA' }, content: { padding: 16, paddingBottom: 8 }, title: { color: '#111827', fontSize: 20, fontWeight: '800', marginBottom: 8 }, card: { backgroundColor: '#FFF', borderRadius: 14, padding: 12, marginBottom: 8, shadowColor: '#111827', shadowOpacity: 0.06, shadowRadius: 5, elevation: 1, position: 'relative' }, dateRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }, date: { color: '#9CA3AF', fontSize: 10, fontWeight: '600' }, stars: { flexDirection: 'row', gap: 1 }, routeRow: { gap: 6 }, routeLine: { flexDirection: 'row', alignItems: 'center', gap: 8 }, dotGreen: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#00C96B' }, dotDark: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#111827' }, route: { color: '#111827', fontSize: 12, fontWeight: '700' }, driver: { color: '#9CA3AF', fontSize: 9, marginLeft: 15 }, fare: { position: 'absolute', right: 12, bottom: 12, color: '#111827', fontSize: 11, fontWeight: '800' }, pagination: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: '#E5E7EB', backgroundColor: '#FFF' }, pageButton: { backgroundColor: '#F3F4F6', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 8 }, disabled: { opacity: 0.4 }, pageText: { color: '#374151', fontSize: 11, fontWeight: '700' }, pageLabel: { color: '#6B7280', fontSize: 11, fontWeight: '600' }, loader: { marginTop: 40 }, empty: { color: '#6B7280', textAlign: 'center', marginTop: 50, fontSize: 13 } });

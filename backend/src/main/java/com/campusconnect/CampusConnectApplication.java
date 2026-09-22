@@ -40,12 +40,57 @@ public class CampusConnectApplication {
     }
 
     @Bean
+    public CommandLineRunner seedSecurityAccount(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+        return args -> {
+            String securityEmail = "Security@spu.ac.za";
+            User security = userRepository.findByEmail(securityEmail).orElse(null);
+            if (security == null) {
+                security = new User();
+                security.setFullName("Security Officer");
+                security.setEmail(securityEmail);
+                security.setStatus(User.UserStatus.ACTIVE);
+                security.setCreatedAt(LocalDateTime.now());
+            }
+            security.setPasswordHash(passwordEncoder.encode("S1gwebel@"));
+            security.setRole(User.Role.SECURITY);
+            security.setStatus(User.UserStatus.ACTIVE);
+            if (security.getCreatedAt() == null) {
+                security.setCreatedAt(LocalDateTime.now());
+            }
+            userRepository.save(security);
+        };
+    }
+
+    @Bean
+    public CommandLineRunner completeExistingRides(JdbcTemplate jdbcTemplate) {
+        return args -> {
+            jdbcTemplate.update(
+                "UPDATE rides SET status = 'COMPLETED', completed_at = COALESCE(completed_at, NOW()) " +
+                "WHERE status IN ('PENDING', 'ACCEPTED', 'ENROUTE', 'ARRIVED', 'STARTED')"
+            );
+        };
+    }
+
+    @Bean
     public CommandLineRunner repairRideSchema(JdbcTemplate jdbcTemplate) {
         return args -> {
             ensureRideColumn(jdbcTemplate, "rider_rating", "INT NULL");
             ensureRideColumn(jdbcTemplate, "rider_rating_comment", "VARCHAR(500) NULL");
             ensureCashPaymentMethod(jdbcTemplate);
+            ensureUniversitySettingsTable(jdbcTemplate);
         };
+    }
+
+    private void ensureUniversitySettingsTable(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS admin_platform_settings ("
+                + "id BIGINT AUTO_INCREMENT PRIMARY KEY,"
+                + "university_name VARCHAR(160) NOT NULL,"
+                + "email_domain VARCHAR(120) NOT NULL,"
+                + "campus_security_phone VARCHAR(40) NOT NULL,"
+                + "sos_response_time_seconds INT NOT NULL,"
+                + "first_year_priority_matching BOOLEAN NOT NULL DEFAULT TRUE,"
+                + "updated_at DATETIME NOT NULL"
+                + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     }
 
     private void ensureCashPaymentMethod(JdbcTemplate jdbcTemplate) {

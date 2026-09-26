@@ -129,6 +129,87 @@ public class DriverController {
         }
     }
 
+    @GetMapping("/earnings")
+    public ResponseEntity<?> getDriverEarnings() {
+        Long driverId = currentUserId();
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("thisWeek", earningsForWeek(driverId, 0));
+        response.put("lastWeek", earningsForWeek(driverId, 1));
+        BigDecimal totalAmount = jdbcTemplate.queryForObject(
+            "SELECT COALESCE(SUM(fare), 0) FROM rides WHERE driver_id = ? AND status = 'COMPLETED'",
+            BigDecimal.class, driverId);
+        response.put("total", totalAmount == null ? "0" : totalAmount.toPlainString());
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+            "SELECT DATE_FORMAT(COALESCE(completed_at, updated_at, created_at), '%Y-%m') AS month, " +
+                "COALESCE(SUM(fare), 0) AS amount, COUNT(*) AS rides " +
+                "FROM rides WHERE driver_id = ? AND status = 'COMPLETED' " +
+                "GROUP BY DATE_FORMAT(COALESCE(completed_at, updated_at, created_at), '%Y-%m') " +
+                "ORDER BY month DESC", driverId);
+        rows.forEach(row -> {
+            Object amount = row.get("amount");
+            if (amount != null) row.put("amount", amount.toString());
+        });
+        response.put("months", rows);
+        return ResponseEntity.ok(response);
+    }
+
+    private Map<String, Object> earningsForWeek(Long driverId, int weeksAgo) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        BigDecimal amount = jdbcTemplate.queryForObject(
+            "SELECT COALESCE(SUM(fare), 0) FROM rides WHERE driver_id = ? AND status = 'COMPLETED' " +
+                "AND YEARWEEK(COALESCE(completed_at, updated_at, created_at), 1) = YEARWEEK(CURDATE(), 1) - ?",
+            BigDecimal.class, driverId, weeksAgo);
+        Long rides = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM rides WHERE driver_id = ? AND status = 'COMPLETED' " +
+                "AND YEARWEEK(COALESCE(completed_at, updated_at, created_at), 1) = YEARWEEK(CURDATE(), 1) - ?",
+            Long.class, driverId, weeksAgo);
+        result.put("amount", amount == null ? "0" : amount.toPlainString());
+        result.put("rides", rides == null ? 0 : rides);
+        return result;
+    }
+
+    @GetMapping("/history")
+    public ResponseEntity<?> getDriverHistory() {
+        Long driverId = currentUserId();
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+            "SELECT r.ride_id AS id, r.pickup_location AS pickup, r.destination, r.fare, " +
+                "COALESCE(r.completed_at, r.updated_at, r.created_at) AS completedAt, " +
+                "u.full_name AS riderName FROM rides r LEFT JOIN users u ON u.user_id = r.rider_id " +
+                "WHERE r.driver_id = ? AND r.status = 'COMPLETED' " +
+                "ORDER BY COALESCE(r.completed_at, r.updated_at, r.created_at) DESC", driverId);
+            rows.forEach(row -> {
+                Object fare = row.get("fare");
+                if (fare != null) row.put("fare", fare.toString());
+            });
+            return ResponseEntity.ok(rows);
+    }
+
+    @GetMapping("/profile")
+    public ResponseEntity<?> getDriverProfile() {
+        Long userId = currentUserId();
+        Optional<User> user = userRepository.findById(userId);
+        Optional<Driver> driver = driverRepository.findByUserId(userId);
+        if (user.isEmpty()) return ResponseEntity.notFound().build();
+        Map<String, Object> profile = new LinkedHashMap<>();
+        User account = user.get();
+        profile.put("fullName", account.getFullName());
+        profile.put("email", account.getEmail());
+        profile.put("phone", account.getPhone());
+        profile.put("faceVerified", Boolean.TRUE.equals(account.getFaceVerified()));
+        driver.ifPresent(value -> {
+            profile.put("rating", value.getRating());
+            Long completedTrips = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM rides WHERE driver_id = ? AND status = 'COMPLETED'", Long.class, userId);
+            profile.put("totalTrips", completedTrips == null ? 0 : completedTrips);
+            profile.put("approvalStatus", value.getApprovalStatus());
+            profile.put("licencePlate", value.getLicencePlate() != null ? value.getLicencePlate() : account.getLicencePlate());
+            profile.put("vehicleMake", value.getVehicleMake() != null ? value.getVehicleMake() : account.getVehicleMake());
+            profile.put("vehicleYear", value.getVehicleYear() != null ? value.getVehicleYear() : account.getVehicleYear());
+            profile.put("vehiclePhoto", value.getVehiclePhoto());
+        });
+        return ResponseEntity.ok(profile);
+    }
+
     /**
      * GET /api/driver/requests
      * Returns pending ride requests (PENDING status in rides table where driver_id is NULL)
@@ -323,6 +404,35 @@ public class DriverController {
             LOGGER.error("Error updating assigned ride status", e);
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    @PostMapping("/rides/{id}/location")
+    public ResponseEntity<?> updateAssignedRideLocation(
+            @PathVariable("id") Long rideId,
+            @RequestBody Map<String, Object> request) {
+        try {
+            Long driverId = currentUserId();
+            Ride ride = rideRepository.findById(rideId).orElse(null);
+            if (ride == null || !driverId.equals(ride.getDriverId())) {
+                return ResponseEntity.status(404).body(Map.of("error", "Assigned ride not found"));
+            }
+            Double latitude = coordinateValue(request.get("latitude"));
+            Double longitude = coordinateValue(request.get("longitude"));
+            if (latitude == null || longitude == null || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Valid latitude and longitude are required"));
+            }
+            ride.setCurrentLat(latitude);
+            ride.setCurrentLng(longitude);
+            Ride saved = rideRepository.save(ride);
+            return ResponseEntity.ok(Map.of("rideId", saved.getId(), "currentLat", latitude, "currentLng", longitude));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    private Double coordinateValue(Object value) {
+        try { return value == null ? null : Double.valueOf(value.toString()); }
+        catch (NumberFormatException ignored) { return null; }
     }
 
     /**

@@ -14,7 +14,8 @@
     ],
     "ios": {
       "infoPlist": {
-        "NSCameraUsageDescription": "We use your camera to verify your identity before rides."
+        "NSCameraUsageDescription": "We use your camera to verify your identity before rides.",
+        "NSMicrophoneUsageDescription": "We record SOS evidence audio during an emergency alert."
       }
     },
     "android": {

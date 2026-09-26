@@ -7,7 +7,6 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastProvider } from './src/components/Toast';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Import Screens
 import LandingScreen from './src/screens/LandingScreen';
@@ -22,10 +21,22 @@ import FaceVerificationScreen from './src/screens/FaceVerificationScreen';
 import TripHistoryScreen from './src/screens/TripHistoryScreen';
 import ScheduleScreen from './src/screens/ScheduleRideScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import PaymentMethodsScreen from './src/screens/PaymentMethodsScreen';
 import DriverActiveRideScreen from './src/screens/DriverActiveRideScreen';
+import DriverEarningsScreen from './src/screens/DriverEarningsScreen';
+import DriverHistoryScreen from './src/screens/DriverHistoryScreen';
+import DriverProfileScreen from './src/screens/DriverProfileScreen';
 import ViewRideDetailsScreen from './src/screens/ViewRideDetailsScreen';
 import RatingDriverScreen from './src/screens/RatingDriverScreen';
 import ChatScreen from './src/screens/ChatScreen';
+import UserManagementScreen from './src/screens/UserManagementScreen';
+import RideMonitoringScreen from './src/screens/RideMonitoringScreen';
+import IncidentReportsScreen from './src/screens/IncidentReportsScreen';
+import AudioRecordingsScreen from './src/screens/AudioRecordingsScreen';
+import ActiveRidesMonitorScreen from './src/screens/ActiveRidesMonitorScreen';
+import SosAlertsScreen from './src/screens/SosAlertsScreen';
+import ResolvedSosScreen from './src/screens/ResolvedSosScreen';
+import UniversitySettingsScreen from './src/screens/UniversitySettingsScreen';
 import { ArrowLeft, ArrowRight } from 'lucide-react-native';
 
 type RootStackParamList = {
@@ -34,16 +45,32 @@ type RootStackParamList = {
   CreateAccount: undefined;
   FaceVerification: { fullName?: string; email?: string } | undefined;
   AdminDashboard: undefined;
+  UserManagement: undefined;
+  RideMonitoring: undefined;
+  IncidentReports: undefined;
+  AudioRecordings: { incidentId: number; security?: boolean };
+  ActiveRidesMonitor: undefined;
+  SosAlerts: undefined;
+  ResolvedSos: undefined;
+  UniversitySettings: undefined;
   DriverDashboard: undefined;
   SecurityDashboard: undefined;
-  Home: undefined;
+  Home: { skipActiveRideRestore?: boolean } | undefined;
   TestConnection: undefined;
   TripHistory: undefined;
   Schedule: undefined;
   Profile: undefined;
+  PaymentMethods: undefined;
+  RiderHistory: undefined;
+  RiderSchedule: undefined;
+  RiderProfile: undefined;
+  RiderPaymentMethods: undefined;
   ViewRideDetails: { requestId: string };
   DriverActiveRide: { requestId: string };
-  RatingDriver: { rideId: string; driverName?: string };
+  DriverEarnings: undefined;
+  DriverHistory: undefined;
+  DriverProfile: undefined;
+  RatingDriver: { rideId: string; driverName?: string; returnToHistory?: boolean };
   Chat: { rideId: string; otherPartyName?: string };
 };
 
@@ -53,15 +80,7 @@ export default function App() {
   const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
 
   useEffect(() => {
-    const requireLoginOnStartup = async () => {
-      try {
-        await AsyncStorage.multiRemove(['authToken', 'user']);
-      } catch {
-      }
-      setInitialRoute('Landing');
-    };
-
-    requireLoginOnStartup();
+    setInitialRoute('Landing');
   }, []);
 
   if (!initialRoute) {
@@ -114,15 +133,27 @@ export default function App() {
               <Stack.Screen name="CreateAccount" component={CreateAccountScreen} />
               <Stack.Screen name="FaceVerification" component={FaceVerificationScreen} />
               <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+              <Stack.Screen name="UserManagement" component={UserManagementScreen} />
+              <Stack.Screen name="RideMonitoring" component={RideMonitoringScreen} />
+              <Stack.Screen name="IncidentReports" component={IncidentReportsScreen} />
+              <Stack.Screen name="AudioRecordings" component={AudioRecordingsScreen} />
+              <Stack.Screen name="ActiveRidesMonitor" component={ActiveRidesMonitorScreen} />
+              <Stack.Screen name="SosAlerts" component={SosAlertsScreen} />
+              <Stack.Screen name="ResolvedSos" component={ResolvedSosScreen} />
+              <Stack.Screen name="UniversitySettings" component={UniversitySettingsScreen} />
               <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} />
               <Stack.Screen name="SecurityDashboard" component={SecurityCentreDashboardScreen} />
               <Stack.Screen name="Home" component={HomeScreen} />
               <Stack.Screen name="TestConnection" component={TestConnectionScreen} />
-              <Stack.Screen name="TripHistory" component={TripHistoryScreen} />
-              <Stack.Screen name="Schedule" component={ScheduleScreen} />
-              <Stack.Screen name="Profile" component={ProfileScreen} />
+              <Stack.Screen name="RiderHistory" component={TripHistoryScreen} />
+              <Stack.Screen name="RiderSchedule" component={ScheduleScreen} />
+              <Stack.Screen name="RiderProfile" component={ProfileScreen} />
+              <Stack.Screen name="RiderPaymentMethods" component={PaymentMethodsScreen} />
               <Stack.Screen name="ViewRideDetails" component={ViewRideDetailsScreen} />
               <Stack.Screen name="DriverActiveRide" component={DriverActiveRideScreen} />
+              <Stack.Screen name="DriverEarnings" component={DriverEarningsScreen} />
+              <Stack.Screen name="DriverHistory" component={DriverHistoryScreen} />
+              <Stack.Screen name="DriverProfile" component={DriverProfileScreen} />
               <Stack.Screen name="RatingDriver" component={RatingDriverScreen} />
               <Stack.Screen name="Chat" component={ChatScreen} />
             </Stack.Navigator>

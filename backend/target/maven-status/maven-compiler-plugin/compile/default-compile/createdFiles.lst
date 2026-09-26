@@ -1,5 +1,8 @@
+com\campusconnect\controller\SecurityController.class
+com\campusconnect\controller\MessageController.class
 com\campusconnect\dto\RideRequest.class
 com\campusconnect\config\SecurityConfig.class
+com\campusconnect\entity\ChatMessage.class
 com\campusconnect\controller\AuthController.class
 com\campusconnect\controller\UserController.class
 com\campusconnect\service\RideService.class
@@ -10,12 +13,16 @@ com\campusconnect\repository\DriverRepository.class
 com\campusconnect\dto\AuthRequest.class
 com\campusconnect\entity\Driver.class
 com\campusconnect\entity\User.class
+com\campusconnect\repository\SosAlertRepository.class
 com\campusconnect\service\AuthService.class
 com\campusconnect\entity\Ride.class
 com\campusconnect\dto\RegisterRequest.class
 com\campusconnect\entity\Ride$RideStatus.class
 com\campusconnect\config\JwtAuthenticationFilter.class
+com\campusconnect\controller\PaymentController.class
+com\campusconnect\entity\SosAlert.class
 com\campusconnect\controller\TestController.class
+com\campusconnect\repository\ChatMessageRepository.class
 com\campusconnect\entity\User$Role.class
 com\campusconnect\dto\AuthResponse.class
 com\campusconnect\controller\AdminController.class

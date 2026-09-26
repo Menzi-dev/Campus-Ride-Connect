@@ -14,10 +14,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toast, setToast] = useState<{ message: string; color: ToastColor } | null>(null);
   const [visible, setVisible] = useState(false);
   const opacity = useRef(new Animated.Value(0)).current;
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = useCallback((message: string, color: ToastColor = 'green') => {
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     setToast({ message, color });
     setVisible(true);
+    hideTimerRef.current = setTimeout(() => {
+      setVisible(false);
+      hideTimerRef.current = null;
+    }, 2600);
   }, []);
 
   useEffect(() => {
@@ -30,15 +36,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const hideTimer = setTimeout(() => setVisible(false), 2600);
     Animated.timing(opacity, {
       toValue: 1,
       duration: 180,
       useNativeDriver: true,
     }).start();
 
-    return () => clearTimeout(hideTimer);
   }, [visible, opacity]);
+
+  useEffect(() => () => {
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+  }, []);
 
   const contextValue = useMemo(() => ({ showToast }), [showToast]);
 

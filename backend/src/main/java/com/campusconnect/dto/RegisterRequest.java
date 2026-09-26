@@ -12,6 +12,7 @@ public class RegisterRequest {
 	private String licencePlate;
 	private String vehicleMake;
 	private Integer vehicleYear;
+	private String vehiclePhoto;
 	private Boolean faceVerified;
 	private String faceEmbedding;
 
@@ -101,6 +102,14 @@ public class RegisterRequest {
 
 	public void setVehicleYear(Integer vehicleYear) {
 		this.vehicleYear = vehicleYear;
+	}
+
+	public String getVehiclePhoto() {
+		return vehiclePhoto;
+	}
+
+	public void setVehiclePhoto(String vehiclePhoto) {
+		this.vehiclePhoto = vehiclePhoto;
 	}
 
 	public Boolean getFaceVerified() {

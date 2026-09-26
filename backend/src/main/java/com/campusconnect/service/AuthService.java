@@ -105,6 +105,7 @@ public class AuthService {
                 driver.setLicencePlate(request.getLicencePlate());
                 driver.setVehicleMake(request.getVehicleMake());
                 driver.setVehicleYear(request.getVehicleYear());
+                driver.setVehiclePhoto(request.getVehiclePhoto());
                 driver.setApprovalStatus(Driver.ApprovalStatus.PENDING);
                 driverRepository.save(driver);
                 logger.info("Driver approval record created with PENDING status");

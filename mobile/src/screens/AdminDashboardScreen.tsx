@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   StatusBar,
   Modal,
+  Pressable,
   Image,
   Linking,
   FlatList,
@@ -50,6 +51,10 @@ import apiClient from '../services/ApiClient';
 
 type RootStackParamList = {
   AdminDashboard: undefined;
+  UserManagement: undefined;
+  RideMonitoring: undefined;
+  IncidentReports: undefined;
+  UniversitySettings: undefined;
   Login: undefined;
 };
 
@@ -355,22 +360,22 @@ export default function AdminDashboardScreen() {
           <NavCard
             icon={<Users size={22} color={colors.blue} strokeWidth={1.8} />}
             label="User Management"
-            onPress={() => showToast('Coming soon', 'blue')}
+            onPress={() => navigation.navigate('UserManagement')}
           />
           <NavCard
             icon={<MapPinned size={22} color={colors.green} strokeWidth={1.8} />}
             label="Ride Monitoring"
-            onPress={() => showToast('Coming soon', 'blue')}
+            onPress={() => navigation.navigate('RideMonitoring')}
           />
           <NavCard
             icon={<FileWarning size={22} color={colors.red} strokeWidth={1.8} />}
             label="Incident Reports"
-            onPress={() => showToast('Coming soon', 'blue')}
+            onPress={() => navigation.navigate('IncidentReports')}
           />
           <NavCard
             icon={<SettingsIcon size={22} color={colors.gray500} strokeWidth={1.8} />}
             label="Settings"
-            onPress={() => showToast('Coming soon', 'blue')}
+            onPress={() => navigation.navigate('UniversitySettings')}
           />
         </View>
       </ScrollView>
@@ -383,6 +388,7 @@ export default function AdminDashboardScreen() {
         onRequestClose={() => setShowDetailsModal(false)}
       >
         <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowDetailsModal(false)} />
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Application Details</Text>

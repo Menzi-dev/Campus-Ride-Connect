@@ -2,7 +2,9 @@ package com.campusconnect.controller;
 
 import com.campusconnect.dto.RideRequest;
 import com.campusconnect.entity.Ride;
+import com.campusconnect.entity.SosAlert;
 import com.campusconnect.repository.DriverRepository;
+import com.campusconnect.repository.SosAlertRepository;
 import com.campusconnect.repository.UserRepository;
 import com.campusconnect.service.RideService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
 import java.util.List;
@@ -17,6 +20,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/rides")
@@ -31,6 +38,10 @@ public class RideController {
 
     @Autowired
     private DriverRepository driverRepository;
+
+    @Autowired
+    private SosAlertRepository sosAlertRepository;
+
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -140,6 +151,40 @@ public class RideController {
         return ResponseEntity.ok(rides);
     }
 
+    @GetMapping("/scheduled")
+    public ResponseEntity<?> getScheduledRides() {
+        try {
+            Long riderId = currentUserId();
+            return ResponseEntity.ok(rideService.getScheduledRidesForRider(riderId));
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
+    }
+
+    @PostMapping("/{id}/dispatch")
+    public ResponseEntity<?> dispatchRide(@PathVariable Long id) {
+        try {
+            Ride ride = rideService.getRideById(id)
+                    .orElseThrow(() -> new IllegalArgumentException("Ride not found"));
+
+            if (ride.getStatus() == Ride.RideStatus.ACCEPTED || ride.getStatus() == Ride.RideStatus.ENROUTE
+                    || ride.getStatus() == Ride.RideStatus.ARRIVED || ride.getStatus() == Ride.RideStatus.STARTED
+                    || ride.getStatus() == Ride.RideStatus.COMPLETED || ride.getStatus() == Ride.RideStatus.CANCELLED) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Ride is not in a dispatchable state"));
+            }
+
+            ride.setStatus(Ride.RideStatus.PENDING);
+            Ride saved = rideService.saveRide(ride);
+            return ResponseEntity.ok(saved);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
+    }
+
     /**
      * POST /api/rides/{id}/cancel
      * Cancel a ride
@@ -234,21 +279,95 @@ public class RideController {
      * Send SOS alert for a ride
      */
     @PostMapping("/{id}/sos")
-    public ResponseEntity<?> sosAlert(@PathVariable Long id) {
+    public ResponseEntity<?> sosAlert(@PathVariable Long id, @RequestBody(required = false) Map<String, Object> request) {
         try {
             Optional<Ride> rideOpt = rideService.getRideById(id);
-            if (rideOpt.isPresent()) {
-                Map<String, String> response = new HashMap<>();
-                response.put("message", "SOS alert has been sent to emergency services");
-                response.put("rideId", id.toString());
-                return ResponseEntity.ok(response);
-            } else {
+            if (rideOpt.isEmpty()) {
                 return ResponseEntity.notFound().build();
             }
+
+            Long userId = currentUserId();
+            Ride ride = rideOpt.get();
+            if (!userId.equals(ride.getRiderId()) && !userId.equals(ride.getDriverId())) {
+                return ResponseEntity.status(403).body(Map.of("error", "You are not part of this ride"));
+            }
+
+            SosAlert alert = new SosAlert();
+            alert.setRideId(id);
+            alert.setTriggeredBy(userId);
+            if (request != null) {
+                alert.setGpsLat(asDouble(request.get("gpsLat")));
+                alert.setGpsLng(asDouble(request.get("gpsLng")));
+            }
+            SosAlert saved = sosAlertRepository.save(alert);
+            Map<String, Object> response = new HashMap<>();
+            response.put("alertId", saved.getId());
+            response.put("message", "SOS alert has been dispatched");
+            response.put("rideId", id);
+            response.put("status", saved.getStatus());
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             Map<String, String> error = new HashMap<>();
             error.put("error", e.getMessage());
             return ResponseEntity.badRequest().body(error);
+        }
+    }
+
+    private Double asDouble(Object value) {
+        if (value == null) return null;
+        try { return Double.valueOf(value.toString()); } catch (NumberFormatException ignored) { return null; }
+    }
+
+    @PutMapping("/{id}/sos/{alertId}/audio")
+    public ResponseEntity<?> uploadSosAudio(@PathVariable Long id, @PathVariable Long alertId,
+                                            @RequestParam("audio") MultipartFile audio,
+                                            @RequestParam("duration") Integer duration) {
+        try {
+            Long userId = currentUserId();
+            Ride ride = rideService.getRideById(id).orElse(null);
+            SosAlert alert = sosAlertRepository.findById(alertId).orElse(null);
+                boolean isRideParticipant = ride != null
+                    && (userId.equals(ride.getRiderId()) || userId.equals(ride.getDriverId()));
+                boolean isAlertOwner = alert != null && userId.equals(alert.getTriggeredBy());
+            if (ride == null || alert == null || !id.equals(alert.getRideId())
+                    || (!isRideParticipant && !isAlertOwner)) {
+                return ResponseEntity.status(403).body(Map.of("error", "SOS alert is not accessible"));
+            }
+            if (audio == null || audio.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Audio file is required"));
+            if (audio.getSize() > 2 * 1024 * 1024) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Audio file must be 2 MB or smaller"));
+            }
+            if (duration == null || duration < 1 || duration > 60) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Audio duration must be between 1 and 60 seconds"));
+            }
+
+            Path directory = Paths.get("uploads", "sos");
+            Files.createDirectories(directory);
+
+            String extension = audio.getOriginalFilename() != null && audio.getOriginalFilename().contains(".")
+                    ? audio.getOriginalFilename().substring(audio.getOriginalFilename().lastIndexOf('.')) : ".m4a";
+            Path target = directory.resolve("sos-" + alertId + extension);
+            Path previousPath = alert.getAudioFilePath() != null ? Paths.get(alert.getAudioFilePath()) : null;
+            if (previousPath != null && !previousPath.equals(target) && Files.exists(previousPath)) {
+                Files.deleteIfExists(previousPath);
+            }
+
+            try (var inputStream = audio.getInputStream();
+                 var outputStream = Files.newOutputStream(target, Files.exists(target) ? java.nio.file.StandardOpenOption.APPEND : java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.WRITE)) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                }
+                outputStream.flush();
+            }
+
+            alert.setAudioFilePath(target.toString());
+            alert.setRecordingDuration(Math.max(0, duration == null ? 0 : duration));
+            sosAlertRepository.save(alert);
+            return ResponseEntity.ok(Map.of("alertId", alertId, "audioFilePath", target.toString(), "recordingDuration", alert.getRecordingDuration()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -269,6 +388,8 @@ public class RideController {
         response.put("pickupLng", ride.getPickupLng());
         response.put("destLat", ride.getDestLat());
         response.put("destLng", ride.getDestLng());
+        response.put("currentLat", ride.getCurrentLat());
+        response.put("currentLng", ride.getCurrentLng());
         response.put("fare", ride.getFare());
         response.put("distanceKm", ride.getDistanceKm());
         response.put("durationMinutes", ride.getDurationMinutes());

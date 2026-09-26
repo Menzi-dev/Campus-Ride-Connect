@@ -31,7 +31,12 @@ public class RideService {
         ride.setDistanceKm(request.getDistanceKm());
         ride.setDurationMinutes(request.getDuration());
         ride.setFare(request.getFare());
-        ride.setStatus(Ride.RideStatus.PENDING);
+        ride.setScheduledAt(request.getScheduledAt());
+
+        String requestedStatus = request.getStatus() == null ? "" : request.getStatus().trim();
+        boolean isScheduled = "scheduled".equalsIgnoreCase(requestedStatus)
+                || (request.getScheduledAt() != null && !"pending".equalsIgnoreCase(requestedStatus));
+        ride.setStatus(isScheduled ? Ride.RideStatus.SCHEDULED : Ride.RideStatus.PENDING);
         ride.setCreatedAt(LocalDateTime.now());
 
         return rideRepository.save(ride);
@@ -42,6 +47,13 @@ public class RideService {
      */
     public List<Ride> getHistory(Long riderId) {
         return rideRepository.findByRiderIdOrderByCreatedAtDesc(riderId);
+    }
+
+    public List<Ride> getScheduledRidesForRider(Long riderId) {
+        return rideRepository.findByRiderIdAndStatusInOrderByCreatedAtDesc(riderId,
+                List.of(Ride.RideStatus.SCHEDULED, Ride.RideStatus.PENDING, Ride.RideStatus.ACCEPTED,
+                        Ride.RideStatus.ENROUTE, Ride.RideStatus.ARRIVED, Ride.RideStatus.STARTED,
+                        Ride.RideStatus.COMPLETED));
     }
 
     /**
@@ -66,7 +78,7 @@ public class RideService {
      * Get active ride for a rider (not completed or cancelled)
      */
     public Optional<Ride> getActiveRideForRider(Long riderId) {
-        return rideRepository.findByRiderIdAndStatusIn(riderId, 
+        return rideRepository.findFirstByRiderIdAndStatusInOrderByCreatedAtDesc(riderId,
             List.of(Ride.RideStatus.PENDING, Ride.RideStatus.ACCEPTED, 
                     Ride.RideStatus.ENROUTE, Ride.RideStatus.ARRIVED, 
                     Ride.RideStatus.STARTED));

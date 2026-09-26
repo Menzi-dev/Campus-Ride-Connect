@@ -18,11 +18,13 @@ import {
   Linking,
   Share,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
+import type { RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import { Audio } from 'expo-av';
 import {
   MapPin,
   LocateFixed,
@@ -57,6 +59,9 @@ import BottomSheetModal from '../components/BottomSheetModal';
 import ChatScreen from './ChatScreen';
 import { useToast } from '../components/Toast';
 import { colors, radius, spacing, font, shadow } from '../theme/theme';
+
+const MAX_SOS_RECORDING_SECONDS = 60;
+const SOS_AUDIO_SEGMENT_SECONDS = 5;
 import apiClient from '../services/ApiClient';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -95,11 +100,11 @@ if (Platform.OS === 'web') {
 }
 
 type RootStackParamList = {
-  Home: undefined;
+  Home: { skipActiveRideRestore?: boolean } | undefined;
   Login: undefined;
-  TripHistory: undefined;
-  Schedule: undefined;
-  Profile: undefined;
+  RiderHistory: undefined;
+  RiderSchedule: undefined;
+  RiderProfile: undefined;
   RatingDriver: { rideId: string; driverName?: string };
   Chat: { rideId: string; otherPartyName?: string };
 };
@@ -231,11 +236,15 @@ async function fetchNearbyPlaces(center: Coords, radiusMeters = 6000): Promise<C
   const query = `[out:json][timeout:25];(node["amenity"](around:${radiusMeters},${center.latitude},${center.longitude});node["shop"](around:${radiusMeters},${center.latitude},${center.longitude});node["tourism"](around:${radiusMeters},${center.latitude},${center.longitude});node["aeroway"="aerodrome"](around:${radiusMeters},${center.latitude},${center.longitude}););out body 80;`;
 
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
     const response = await fetch(OVERPASS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: query,
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     if (!response.ok) throw new Error('Overpass request failed');
     const data = await response.json();
 
@@ -261,8 +270,7 @@ async function fetchNearbyPlaces(center: Coords, radiusMeters = 6000): Promise<C
     }
 
     return places.sort((a, b) => a.distance - b.distance).slice(0, 25);
-  } catch (error) {
-    console.error('Nearby places error:', error);
+  } catch {
     return [];
   }
 }
@@ -329,6 +337,23 @@ function getGreeting() {
   if (hour < 12) return 'Good morning';
   if (hour < 18) return 'Good afternoon';
   return 'Good evening';
+}
+
+function getRouteHeading(position: Coords, routePoints: Coords[]): number {
+  if (routePoints.length < 2) return 0;
+  let nearestIndex = 0;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  routePoints.forEach((point, index) => {
+    const distance = Math.abs(point.latitude - position.latitude) + Math.abs(point.longitude - position.longitude);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestIndex = index;
+    }
+  });
+  const nextPoint = routePoints[Math.min(nearestIndex + 1, routePoints.length - 1)];
+  const latitudeDelta = nextPoint.latitude - position.latitude;
+  const longitudeDelta = nextPoint.longitude - position.longitude;
+  return (Math.atan2(longitudeDelta, latitudeDelta) * 180) / Math.PI;
 }
 
 // Web Map Component
@@ -403,13 +428,64 @@ const WebMap = ({
       return null;
     }
   };
+  
+  const createLocationPinIcon = (color: string, size: number = 28) => {
+    if (typeof window === 'undefined' || !MapContainer) return null;
+    const pinHeight = Math.round(size * 1.35);
+    try {
+      const L = require('leaflet');
+      return L.divIcon({
+        className: 'location-pin-marker',
+        html: `<div style="width:${size}px;height:${pinHeight}px;position:relative;filter:drop-shadow(0 2px 2px rgba(15,23,42,.4))">
+          <svg viewBox="0 0 40 54" width="${size}" height="${pinHeight}" aria-label="Location marker">
+            <ellipse cx="20" cy="51" rx="13" ry="2.5" fill="rgba(15,23,42,.35)"/>
+            <path d="M20 2C10.1 2 2 10.1 2 20c0 13.1 18 30 18 30s18-16.9 18-30C38 10.1 29.9 2 20 2Z" fill="${color}" stroke="#fff" stroke-width="2"/>
+            <circle cx="20" cy="20" r="6.5" fill="#fff"/>
+          </svg>
+        </div>`,
+        iconSize: [size, pinHeight],
+        iconAnchor: [size / 2, pinHeight],
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  const createDriverCarIcon = (heading: number) => {
+    if (typeof window === 'undefined' || !MapContainer) return null;
+    try {
+      const L = require('leaflet');
+      return L.divIcon({
+        className: 'driver-car-marker',
+        html: `<div style="width:38px;height:38px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 2px 3px rgba(15,23,42,.4));transform:rotate(${heading}deg)">
+          <svg viewBox="0 0 80 120" width="38" height="38" role="img" aria-label="Campus ride vehicle">
+            <defs><linearGradient id="topCarBody" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#cbd5db"/><stop offset=".2" stop-color="#fff"/><stop offset=".8" stop-color="#f8fafc"/><stop offset="1" stop-color="#b8c2c9"/></linearGradient><linearGradient id="topCarGlass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4b5563"/><stop offset="1" stop-color="#111827"/></linearGradient></defs>
+            <ellipse cx="40" cy="61" rx="25" ry="55" fill="rgba(15,23,42,.2)"/>
+            <path d="M40 3c13 0 22 13 25 29l7 54c2 16-7 29-20 31H28c-13-2-22-15-20-31l7-54C18 16 27 3 40 3Z" fill="url(#topCarBody)" stroke="#94a3ad" stroke-width="1.5"/>
+            <path d="M27 21c3-9 8-13 13-13s10 4 13 13l5 27H22l5-27Z" fill="url(#topCarGlass)" stroke="#7c8790" stroke-width="1.2"/>
+            <path d="M22 53h36v30H22Z" fill="#f8fafc"/><path d="M22 61h36v22H22Z" fill="#16a34a" opacity=".9"/>
+            <path d="M25 64h13v16H25Zm17 0h13v16H42Z" fill="#22c55e" opacity=".55"/>
+            <path d="M18 34h7M55 34h7M15 91h8M57 91h8" stroke="#aab4bb" stroke-width="2" stroke-linecap="round"/>
+            <path d="M21 99c2 10 8 15 19 15s17-5 19-15" fill="#e2e8ec" stroke="#a3afb7" stroke-width="1"/>
+            <path d="M28 107h24" stroke="#64727b" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>`,
+        iconSize: [38, 38],
+        iconAnchor: [19, 19],
+      });
+    } catch {
+      return null;
+    }
+  };
 
   const MapUpdater = () => {
     const map = useMap();
     useEffect(() => {
       if (!map) return;
-      try {
-        setTimeout(() => {
+      let cancelled = false;
+      const updateMap = setTimeout(() => {
+        if (cancelled) return;
+        try {
           map.invalidateSize();
           // If we have a driver route, fit to the whole route
           if (routePoints && routePoints.length > 1) {
@@ -428,10 +504,15 @@ const WebMap = ({
           } else {
             map.setView([userLocation.latitude, userLocation.longitude], 15);
           }
-        }, 300);
-      } catch (e) {
-        console.warn('Map update error:', e);
-      }
+        } catch {
+          // The map may be unmounted while a route update is settling.
+        }
+      }, 300);
+
+      return () => {
+        cancelled = true;
+        clearTimeout(updateMap);
+      };
     }, [map, destination, userLocation, routePoints]);
     return null;
   };
@@ -469,7 +550,7 @@ const WebMap = ({
 
           <Marker
             position={[userLocation.latitude, userLocation.longitude]}
-            icon={createMarkerIcon('#4CAF50', 20, '📍')}
+            icon={createLocationPinIcon('#16a34a', 25)}
           >
             <Popup>Your Location</Popup>
           </Marker>
@@ -477,7 +558,7 @@ const WebMap = ({
           {destination && (
             <Marker
               position={[destination.coords.latitude, destination.coords.longitude]}
-              icon={createMarkerIcon('#2196F3', 28, '🏁')}
+              icon={createLocationPinIcon('#ef4444', 28)}
             >
               <Popup>
                 <strong>{destination.name}</strong>
@@ -492,7 +573,7 @@ const WebMap = ({
           {driverMarker && driverPosition && (
             <Marker
               position={[driverPosition.latitude, driverPosition.longitude]}
-              icon={createMarkerIcon('#1F2937', 38, '🚗')}
+              icon={createDriverCarIcon(getRouteHeading(driverPosition, routePoints))}
               zIndexOffset={1000}
             >
               <Popup>Driver location</Popup>
@@ -510,28 +591,6 @@ const WebMap = ({
               smoothFactor={1}
             />
           )}
-
-          {places.map((loc) => {
-            const isDestination = destination?.name === loc.name;
-            return (
-              <Marker
-                key={`${loc.name}-${loc.coords.latitude}-${loc.coords.longitude}`}
-                position={[loc.coords.latitude, loc.coords.longitude]}
-                icon={isDestination ? createMarkerIcon('#2196F3', 28, '🏁') : createMarkerIcon('#9E9E9E', 14, '•')}
-                eventHandlers={{
-                  click: () => onLocationSelect(loc),
-                }}
-              >
-                <Popup>
-                  <strong>{loc.name}</strong>
-                  <br />
-                  <span style={{ fontSize: 12 }}>{loc.address}</span>
-                  <br />
-                  <span style={{ fontSize: 11, color: '#666' }}>{loc.category}</span>
-                </Popup>
-              </Marker>
-            );
-          })}
 
           {loading && (
             <div style={{
@@ -590,6 +649,8 @@ type RideRequest = {
   status: 'pending' | 'accepted' | 'enroute' | 'arrived' | 'started' | 'completed' | 'cancelled';
   createdAt: string;
   updatedAt: string;
+  currentLat?: number;
+  currentLng?: number;
   driver?: {
     id: string;
     fullName: string;
@@ -601,8 +662,12 @@ type RideRequest = {
   };
 };
 
+type SavedPaymentCard = { id: string; lastFour: string; label: string; expiry: string; isDefault?: boolean };
+
 export default function HomeScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'Home'>>();
+  const skipActiveRideRestore = route.params?.skipActiveRideRestore === true;
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
 
@@ -645,6 +710,25 @@ export default function HomeScreen() {
   const [tripStatus, setTripStatus] = useState<'enroute' | 'arrived' | 'started' | 'completed'>('enroute');
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [showActiveTrip, setShowActiveTrip] = useState(false);
+  const [sosVisible, setSosVisible] = useState(false);
+  const [sosSending, setSosSending] = useState(false);
+  const [sosDispatched, setSosDispatched] = useState(false);
+  const [sosRecordingSeconds, setSosRecordingSeconds] = useState(0);
+  const sosRecordingSecondsRef = useRef(0);
+  const sosUploadingRef = useRef(false);
+  const [sosLocation, setSosLocation] = useState<Coords>(FALLBACK_REGION);
+  const [showSosRecordingToast, setShowSosRecordingToast] = useState(false);
+  const sosRecordingRef = useRef<Audio.Recording | null>(null);
+  const sosWebRecorderRef = useRef<MediaRecorder | null>(null);
+  const sosWebStreamRef = useRef<MediaStream | null>(null);
+  const sosWebChunksRef = useRef<Blob[]>([]);
+  const sosWebSegmentChunksRef = useRef<Blob[]>([]);
+  const sosAlertIdRef = useRef<number | null>(null);
+  const sosTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sosToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sosWaveAnimationsRef = useRef(
+    Array.from({ length: 11 }, () => new Animated.Value(0.55))
+  );
   const [chatVisible, setChatVisible] = useState(false);
   const [riderMessageToast, setRiderMessageToast] = useState('');
   const riderToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -658,7 +742,8 @@ export default function HomeScreen() {
   const shareSheetAnim = useRef(new Animated.Value(0)).current;
   const [paymentVisible, setPaymentVisible] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD'>('CASH');
-  const [selectedCard, setSelectedCard] = useState('4242');
+  const [savedPaymentCards, setSavedPaymentCards] = useState<SavedPaymentCard[]>([]);
+  const [selectedCard, setSelectedCard] = useState('');
   const [paymentRide, setPaymentRide] = useState<RideRequest | null>(null);
   const [pollingInterval, setPollingInterval] = useState<ReturnType<typeof setInterval> | null>(null);
 
@@ -692,10 +777,6 @@ export default function HomeScreen() {
   // Wipes the route polyline, the car marker and stops the animation loop.
   // Called when the trip is completed so nothing is left on the map.
   const clearDriverNavigation = () => {
-    if (driverAnimationRef.current) {
-      clearInterval(driverAnimationRef.current);
-      driverAnimationRef.current = null;
-    }
     driverRouteRequestRef.current += 1; // invalidate any in-flight route fetch
     setDriverRoutePoints([]);
     setDriverCarPosition(DRIVER_START_POINT);
@@ -715,11 +796,11 @@ export default function HomeScreen() {
       } catch (e) {}
     })();
     detectLocation();
-    checkForActiveRide();
+    if (!skipActiveRideRestore) checkForActiveRide();
 
     // Fade in animation
     Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
-  }, []);
+  }, [skipActiveRideRestore]);
 
   useEffect(() => {
     if (!currentRideId || !userId || !showActiveTrip) return;
@@ -893,6 +974,9 @@ export default function HomeScreen() {
             ride?.destinationLng ?? ride?.destLng ?? ride?.destination_lng ?? ride?.dest_lng,
         });
         setCurrentRide(ride);
+        if (Number.isFinite(ride.currentLat) && Number.isFinite(ride.currentLng)) {
+          setDriverCarPosition({ latitude: Number(ride.currentLat), longitude: Number(ride.currentLng) });
+        }
 
         const status = String(ride.status || '').toLowerCase();
         if (
@@ -1100,13 +1184,7 @@ export default function HomeScreen() {
         updateRoute(coords, destination);
       }
 
-      try {
-        const [place] = await Location.reverseGeocodeAsync(coords);
-        const label = place?.street || place?.name || place?.district || 'Current Location';
-        setPickupLabel(label);
-      } catch {
-        setPickupLabel('Current Location');
-      }
+      setPickupLabel('Current Location');
     } catch (err) {
       setPickupLabel('SPU Kimberley Campus');
       showToast('Could not detect your location', 'red');
@@ -1277,7 +1355,15 @@ export default function HomeScreen() {
       setCurrentRideId(newRide.id);
       setCurrentRide(newRide);
       setPaymentRide(newRide);
-      setPaymentMethod('CASH');
+      const [cardsRaw, preferredMethod] = await Promise.all([
+        AsyncStorage.getItem('saved_cards'),
+        AsyncStorage.getItem('default_payment_method'),
+      ]);
+      const cards: SavedPaymentCard[] = cardsRaw ? JSON.parse(cardsRaw) : [];
+      const preferredCard = cards.find((card) => card.isDefault) || cards[0];
+      setSavedPaymentCards(cards);
+      setSelectedCard(preferredCard?.id || '');
+      setPaymentMethod(preferredMethod === 'CARD' && preferredCard ? 'CARD' : 'CASH');
       setPaymentVisible(true);
     } catch (error: any) {
       if (error?.response?.status === 401 || error?.response?.status === 403) {
@@ -1308,10 +1394,15 @@ export default function HomeScreen() {
 
   const confirmPayment = async () => {
     if (!paymentRide?.id) return;
+    const chosenCard = savedPaymentCards.find((card) => card.id === selectedCard);
+    if (paymentMethod === 'CARD' && !chosenCard) {
+      showToast('Add a saved card in Profile before choosing card payment', 'red');
+      return;
+    }
     try {
       await apiClient.post(`/rides/${paymentRide.id}/payment`, {
         method: paymentMethod,
-        ...(paymentMethod === 'CARD' ? { cardLastFour: selectedCard } : {}),
+        ...(paymentMethod === 'CARD' && chosenCard ? { cardLastFour: chosenCard.lastFour } : {}),
       });
       setPaymentVisible(false);
       showToast('Payment method saved', 'green');
@@ -1482,17 +1573,218 @@ export default function HomeScreen() {
   };
 
   const handleSOS = async () => {
+    setSosVisible(true);
+    setSosDispatched(false);
+  };
+
+  const startSosRecording = async () => {
+    if (Platform.OS === 'web') {
+      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+        throw new Error('Browser audio recording is not supported');
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : 'audio/webm';
+      const recorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 24000 });
+      sosWebChunksRef.current = [];
+          sosWebSegmentChunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              sosWebChunksRef.current.push(event.data);
+              sosWebSegmentChunksRef.current.push(event.data);
+            }
+      };
+      recorder.start(1000);
+      sosWebStreamRef.current = stream;
+      sosWebRecorderRef.current = recorder;
+      return;
+    }
+    const permission = await Audio.requestPermissionsAsync();
+    if (permission.status !== 'granted') throw new Error('Microphone permission is required for SOS evidence');
+    await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+    const recording = new Audio.Recording();
+    await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.LOW_QUALITY);
+    await recording.startAsync();
+    sosRecordingRef.current = recording;
+  };
+
+  const confirmSOS = async () => {
+    if (sosSending) return;
+    setSosSending(true);
     try {
-      if (currentRideId) {
-        await apiClient.post(`/rides/${currentRideId}/sos`);
-        showToast('SOS alert sent! Emergency services notified.', 'red');
+      const rideId = currentRideId || (currentRide?.id ? String(currentRide.id) : null);
+      if (rideId) {
+        let gpsLat: number | undefined;
+        let gpsLng: number | undefined;
+        try {
+          const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+          gpsLat = position.coords.latitude;
+          gpsLng = position.coords.longitude;
+        } catch {
+          gpsLat = userLocation.latitude;
+          gpsLng = userLocation.longitude;
+        }
+        const alertLocation = { latitude: gpsLat, longitude: gpsLng };
+        setSosLocation(alertLocation);
+        const response = await apiClient.post(`/rides/${rideId}/sos`, { gpsLat, gpsLng });
+        sosAlertIdRef.current = response.data.alertId;
+        await startSosRecording();
+        setSosRecordingSeconds(0);
+        sosRecordingSecondsRef.current = 0;
+        setShowSosRecordingToast(true);
+        if (sosToastTimerRef.current) clearTimeout(sosToastTimerRef.current);
+        sosToastTimerRef.current = setTimeout(() => {
+          setShowSosRecordingToast(false);
+          sosToastTimerRef.current = null;
+        }, 2600);
+        setSosDispatched(true);
+        showToast('SOS alert dispatched.', 'red');
       } else {
-        showToast('SOS alert sent!', 'red');
+        showToast('An active ride is required for SOS.', 'red');
       }
     } catch (error) {
       showToast('Could not send SOS alert', 'red');
+    } finally {
+      setSosSending(false);
     }
   };
+
+  const finishSosRecording = async (continueRecording = false) => {
+    if (sosUploadingRef.current) return;
+    sosUploadingRef.current = true;
+    const recording = sosRecordingRef.current;
+    const alertId = sosAlertIdRef.current;
+    const rideId = currentRideId || (currentRide?.id ? String(currentRide.id) : null);
+    const webRecorder = sosWebRecorderRef.current;
+    if (!alertId || !rideId || (Platform.OS !== 'web' && !recording) || (Platform.OS === 'web' && !webRecorder)) return;
+    try {
+      const form = new FormData();
+      if (Platform.OS === 'web') {
+        const audioBlob = await new Promise<Blob>((resolve) => {
+          webRecorder!.onstop = () => resolve(new Blob(sosWebChunksRef.current, { type: 'audio/webm' }));
+          webRecorder!.stop();
+        });
+        sosWebStreamRef.current?.getTracks().forEach((track) => track.stop());
+        form.append('audio', audioBlob, `sos-${alertId}.webm`);
+      } else {
+        await recording!.stopAndUnloadAsync();
+        const uri = recording!.getURI();
+        if (!uri) return;
+        form.append('audio', { uri, name: `sos-${alertId}.m4a`, type: 'audio/m4a' } as any);
+      }
+      form.append('duration', String(sosRecordingSecondsRef.current));
+      if (Platform.OS === 'web') {
+        const token = await AsyncStorage.getItem('authToken');
+        const uploadBaseUrl = apiClient.defaults.baseURL || 'http://localhost:8080/api';
+        const uploadResponse = await fetch(`${uploadBaseUrl}/rides/${rideId}/sos/${alertId}/audio`, {
+          method: 'PUT',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: form,
+        });
+        if (!uploadResponse.ok) {
+          const responseBody = await uploadResponse.text();
+          throw new Error(`Audio upload failed (${uploadResponse.status}): ${responseBody || 'server rejected the recording'}`);
+        }
+      } else {
+        await apiClient.put(`/rides/${rideId}/sos/${alertId}/audio`, form);
+      }
+      if (!continueRecording) showToast('SOS audio evidence saved', 'green');
+    } catch (error: any) {
+      console.error('SOS audio upload failed:', error?.response?.data || error);
+      showToast('SOS was saved, but audio upload failed', 'yellow');
+    } finally {
+      sosRecordingRef.current = null;
+      sosWebRecorderRef.current = null;
+      sosWebStreamRef.current = null;
+      sosWebChunksRef.current = [];
+      sosUploadingRef.current = false;
+      if (continueRecording && sosDispatched && sosAlertIdRef.current) {
+        await startSosRecording();
+        sosRecordingSecondsRef.current = 0;
+        setSosRecordingSeconds(0);
+      }
+    }
+  };
+
+  const uploadWebSosSegment = async () => {
+    const alertId = sosAlertIdRef.current;
+    const rideId = currentRideId || (currentRide?.id ? String(currentRide.id) : null);
+    const recorder = sosWebRecorderRef.current;
+    if (!alertId || !rideId || !recorder || recorder.state !== 'recording' || sosUploadingRef.current) return;
+    const chunks = sosWebSegmentChunksRef.current.splice(0);
+    if (!chunks.length) return;
+    sosUploadingRef.current = true;
+    try {
+      const form = new FormData();
+      form.append('audio', new Blob(chunks, { type: recorder.mimeType || 'audio/webm' }), `sos-${alertId}.webm`);
+      form.append('duration', String(SOS_AUDIO_SEGMENT_SECONDS));
+      const token = await AsyncStorage.getItem('authToken');
+      const uploadBaseUrl = apiClient.defaults.baseURL || 'http://localhost:8080/api';
+      const response = await fetch(`${uploadBaseUrl}/rides/${rideId}/sos/${alertId}/audio`, {
+        method: 'PUT',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+      if (!response.ok) throw new Error(await response.text());
+    } catch (error) {
+      sosWebSegmentChunksRef.current.unshift(...chunks);
+      console.error('SOS audio segment upload failed:', error);
+    } finally {
+      sosUploadingRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    if (!sosDispatched) {
+      if (sosTimerRef.current) clearInterval(sosTimerRef.current);
+      return;
+    }
+    sosTimerRef.current = setInterval(() => {
+      setSosRecordingSeconds((seconds) => {
+        const nextSeconds = Math.min(seconds + 1, MAX_SOS_RECORDING_SECONDS);
+        sosRecordingSecondsRef.current = nextSeconds;
+        if (nextSeconds === MAX_SOS_RECORDING_SECONDS) {
+          void finishSosRecording().finally(() => {
+            if (sosTimerRef.current) clearInterval(sosTimerRef.current);
+            setSosDispatched(false);
+            setSosVisible(false);
+          });
+        } else if (nextSeconds % SOS_AUDIO_SEGMENT_SECONDS === 0 && Platform.OS === 'web') {
+          void uploadWebSosSegment();
+        }
+        return nextSeconds;
+      });
+    }, 1000);
+    return () => {
+      if (sosTimerRef.current) clearInterval(sosTimerRef.current);
+    };
+  }, [sosDispatched]);
+
+  useEffect(() => {
+    const animations = sosWaveAnimationsRef.current.map((animation, index) => (
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(index * 55),
+          Animated.timing(animation, { toValue: 1.35, duration: 230, useNativeDriver: true }),
+          Animated.timing(animation, { toValue: 0.45, duration: 230, useNativeDriver: true }),
+        ])
+      )
+    ));
+
+    if (sosDispatched) {
+      animations.forEach((animation) => animation.start());
+    }
+
+    return () => {
+      animations.forEach((animation) => animation.stop());
+      sosWaveAnimationsRef.current.forEach((animation) => animation.setValue(0.55));
+    };
+  }, [sosDispatched]);
+
+  useEffect(() => () => {
+    if (sosToastTimerRef.current) clearTimeout(sosToastTimerRef.current);
+  }, []);
 
   const handleCancelTrip = async () => {
     try {
@@ -1681,6 +1973,44 @@ export default function HomeScreen() {
             </Text>
             <View style={styles.headerRight} />
           </View>
+
+          {sosVisible && (
+            <View style={[styles.sosLayer, sosDispatched && styles.sosActivatedLayer]}>
+              {!sosDispatched && <Pressable style={styles.sosBackdrop} onPress={() => setSosVisible(false)} />}
+              {sosDispatched ? (
+                <View style={styles.sosActivatedPanel}>
+                  <View style={styles.sosActivatedHeader}>
+                    <TouchableOpacity
+                      onPress={async () => { setSosVisible(false); setSosDispatched(false); await finishSosRecording(); }}
+                      style={styles.sosBackButton}
+                      accessibilityLabel="Back to active trip"
+                    >
+                      <ArrowLeft size={22} color={colors.white} strokeWidth={2.4} />
+                    </TouchableOpacity>
+                    <View style={styles.sosHeaderIcon}><AlertTriangle size={24} color={colors.white} strokeWidth={2.5} /></View>
+                    <View><Text style={styles.sosActivatedTitle}>SOS Activated</Text><Text style={styles.sosActivatedSubtitle}>Campus Security has been alerted</Text></View>
+                  </View>
+                  <View style={styles.sosAlertNotice}><AlertTriangle size={14} color="#ef4444" /><Text style={styles.sosAlertNoticeText}>Campus Security and your emergency contact have been notified with your live GPS location.</Text></View>
+                  <View style={styles.sosGpsCard}><Text style={styles.sosSectionLabel}>GPS LOCATION</Text><Text style={styles.sosGpsValue}>{sosLocation.latitude.toFixed(6)}, {sosLocation.longitude.toFixed(6)}</Text><View style={styles.sosGpsDot} /></View>
+                  <View style={styles.sosEvidenceRow}><Text style={styles.sosSectionLabel}>EVIDENCE AUDIO</Text><View style={styles.sosRecBadge}><View style={styles.sosRecDot} /><Text style={styles.sosRecText}>REC</Text></View></View>
+                  <Text style={styles.sosTimer}>{String(Math.floor(sosRecordingSeconds / 60)).padStart(2, '0')}:{String(sosRecordingSeconds % 60).padStart(2, '0')}</Text>
+                  <View style={styles.sosWaveform}>{[10, 18, 28, 38, 24, 44, 30, 18, 10, 25, 15].map((height, index) => <Animated.View key={index} style={[styles.sosWaveBar, { height, transform: [{ scaleY: sosWaveAnimationsRef.current[index] }] }]} />)}</View>
+                  <View style={styles.sosRecordingButton}><View style={styles.sosRecordingDot} /><Text style={styles.sosRecordingText}>Recording in progress...</Text></View>
+                  <TouchableOpacity style={styles.sosSafeButton} onPress={async () => { setSosVisible(false); setSosDispatched(false); await finishSosRecording(); }}><Text style={styles.sosSafeText}>I'm Safe — Cancel SOS</Text></TouchableOpacity>
+                  {showSosRecordingToast && <View style={styles.sosBottomNotice}><AlertTriangle size={15} color={colors.white} /><Text style={styles.sosBottomNoticeText}>Audio recording started</Text></View>}
+                </View>
+              ) : (
+                <View style={styles.sosCard}>
+                  <View style={styles.sosHandle} />
+                  <View style={styles.sosWarningIcon}><AlertTriangle size={42} color="#ef4444" fill="#ef4444" strokeWidth={2.5} /></View>
+                  <Text style={styles.sosTitle}>Activate SOS Alert?</Text>
+                  <Text style={styles.sosSubtitle}>This will immediately alert Campus Security and your emergency contact with your live GPS location.</Text>
+                  <TouchableOpacity style={styles.sosConfirmButton} onPress={confirmSOS} disabled={sosSending}>{sosSending ? <ActivityIndicator color={colors.white} /> : <Text style={styles.sosConfirmText}>Yes, Send SOS Alert</Text>}</TouchableOpacity>
+                  <TouchableOpacity style={styles.sosCancelButton} onPress={() => setSosVisible(false)} disabled={sosSending}><Text style={styles.sosCancelText}>×  Cancel</Text></TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
 
           <ScrollView
             style={styles.overlayContent}
@@ -2177,6 +2507,10 @@ export default function HomeScreen() {
               loading={requesting}
               icon={<Car size={18} color={colors.white} strokeWidth={2} />}
             />
+            <TouchableOpacity style={styles.scheduleRideButton} onPress={() => navigation.navigate('RiderSchedule')}>
+              <CalendarDays size={18} color={colors.greenDark} strokeWidth={2} />
+              <Text style={styles.scheduleRideText}>Schedule Ride</Text>
+            </TouchableOpacity>
           </View>
         </Animated.View>
       </ScrollView>
@@ -2191,17 +2525,17 @@ export default function HomeScreen() {
         <NavItem
           icon={<Clock size={20} color={colors.gray400} strokeWidth={1.8} />}
           label="History"
-          onPress={() => navigation.navigate('TripHistory')}
+          onPress={() => navigation.navigate('RiderHistory')}
         />
         <NavItem
           icon={<CalendarDays size={20} color={colors.gray400} strokeWidth={1.8} />}
           label="Schedule"
-          onPress={() => navigation.navigate('Schedule')}
+          onPress={() => navigation.navigate('RiderSchedule')}
         />
         <NavItem
           icon={<CircleUserRound size={20} color={colors.gray400} strokeWidth={1.8} />}
           label="Profile"
-          onPress={() => navigation.navigate('Profile')}
+          onPress={() => navigation.navigate('RiderProfile')}
         />
       </View>
 
@@ -2468,6 +2802,7 @@ export default function HomeScreen() {
         onRequestClose={() => setPaymentVisible(false)}
       >
         <View style={styles.paymentBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setPaymentVisible(false)} />
           <View style={styles.paymentSheet}>
             <View style={styles.paymentHandle} />
             <Text style={styles.paymentTitle}>Choose payment</Text>
@@ -2520,7 +2855,9 @@ export default function HomeScreen() {
               style={[
                 styles.paymentOption,
                 paymentMethod === 'CARD' && styles.paymentOptionSelected,
+                savedPaymentCards.length === 0 && styles.paymentOptionDisabled,
               ]}
+              disabled={savedPaymentCards.length === 0}
               onPress={() => setPaymentMethod('CARD')}
             >
               {paymentMethod === 'CARD' ? (
@@ -2531,26 +2868,28 @@ export default function HomeScreen() {
               <CreditCard size={20} color={colors.gray700} />
               <View style={styles.paymentOptionText}>
                 <Text style={styles.paymentOptionTitle}>Card</Text>
-                <Text style={styles.paymentOptionSubtitle}>Use a saved card</Text>
+                <Text style={styles.paymentOptionSubtitle}>
+                  {savedPaymentCards.length ? 'Choose a saved card' : 'Add a card from Profile > Saved cards'}
+                </Text>
               </View>
             </TouchableOpacity>
             {paymentMethod === 'CARD' && (
               <View style={styles.savedCards}>
                 <Text style={styles.savedCardsTitle}>Saved cards</Text>
-                <TouchableOpacity
-                  style={[
-                    styles.savedCard,
-                    selectedCard === '4242' && styles.savedCardSelected,
-                  ]}
-                  onPress={() => setSelectedCard('4242')}
-                >
-                  <CreditCard size={20} color={colors.blue} />
-                  <View style={styles.paymentOptionText}>
-                    <Text style={styles.paymentOptionTitle}>Visa ending in 4242</Text>
-                    <Text style={styles.paymentOptionSubtitle}>Default card</Text>
-                  </View>
-                  <CheckCircle2 size={19} color={colors.green} />
-                </TouchableOpacity>
+                {savedPaymentCards.map((card) => (
+                  <TouchableOpacity
+                    key={card.id}
+                    style={[styles.savedCard, selectedCard === card.id && styles.savedCardSelected]}
+                    onPress={() => setSelectedCard(card.id)}
+                  >
+                    <CreditCard size={20} color={colors.blue} />
+                    <View style={styles.paymentOptionText}>
+                      <Text style={styles.paymentOptionTitle}>{card.label}</Text>
+                      <Text style={styles.paymentOptionSubtitle}>{card.isDefault ? 'Default card' : `Expires ${card.expiry}`}</Text>
+                    </View>
+                    {selectedCard === card.id && <CheckCircle2 size={19} color={colors.green} />}
+                  </TouchableOpacity>
+                ))}
               </View>
             )}
             <TouchableOpacity
@@ -2615,6 +2954,44 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
   },
   riderMessageToastText: { flex: 1, color: colors.white, fontFamily: font.semibold, fontSize: 13 },
+  sosLayer: { ...StyleSheet.absoluteFill, zIndex: 300, justifyContent: 'flex-end', paddingHorizontal: 22 },
+  sosActivatedLayer: { paddingHorizontal: 0, justifyContent: 'flex-start' },
+  sosBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(15,23,42,0.46)' },
+  sosCard: { width: '100%', padding: spacing.xl, paddingBottom: spacing.lg, borderRadius: 24, backgroundColor: colors.white, alignItems: 'center', shadowColor: colors.black, shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.2, shadowRadius: 18, elevation: 24 },
+  sosHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: colors.gray300, marginBottom: spacing.xl },
+  sosWarningIcon: { width: 54, height: 50, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg },
+  sosTitle: { color: '#111827', fontFamily: font.bold, fontSize: 19, textAlign: 'center' },
+  sosSubtitle: { color: '#7b8494', fontFamily: font.regular, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.lg, maxWidth: 300 },
+  sosConfirmButton: { width: '100%', minHeight: 48, borderRadius: radius.full, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center' },
+  sosConfirmText: { color: colors.white, fontFamily: font.bold, fontSize: 14 },
+  sosCancelButton: { width: '100%', minHeight: 44, marginTop: spacing.sm, borderRadius: radius.full, borderWidth: 1, borderColor: colors.gray200, alignItems: 'center', justifyContent: 'center' },
+  sosCancelText: { color: '#1f2937', fontFamily: font.semibold, fontSize: 14 },
+  sosActivatedPanel: { flex: 1, width: '100%', backgroundColor: colors.white, minHeight: 0 },
+  sosActivatedHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.lg, backgroundColor: '#ef4444' },
+  sosBackButton: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', marginRight: spacing.xs },
+  sosHeaderIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f87171', alignItems: 'center', justifyContent: 'center' },
+  sosActivatedTitle: { color: colors.white, fontFamily: font.bold, fontSize: 18 },
+  sosActivatedSubtitle: { color: colors.white, fontFamily: font.regular, fontSize: 12, marginTop: 2 },
+  sosAlertNotice: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, margin: spacing.lg, padding: spacing.md, borderRadius: radius.md, backgroundColor: '#fee2e2' },
+  sosAlertNoticeText: { flex: 1, color: '#ef4444', fontFamily: font.medium, fontSize: 12, lineHeight: 17 },
+  sosGpsCard: { marginHorizontal: spacing.lg, padding: spacing.md, borderRadius: radius.md, backgroundColor: '#f8fafc', position: 'relative' },
+  sosSectionLabel: { color: '#475569', fontFamily: font.bold, fontSize: 11, letterSpacing: 0.5 },
+  sosGpsValue: { color: '#111827', fontFamily: font.bold, fontSize: 14, marginTop: 7 },
+  sosGpsDot: { position: 'absolute', top: spacing.md, right: spacing.md, width: 7, height: 7, borderRadius: 4, backgroundColor: '#ef4444' },
+  sosEvidenceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: spacing.lg, marginTop: spacing.lg },
+  sosRecBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#fee2e2' },
+  sosRecDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#ef4444' },
+  sosRecText: { color: '#ef4444', fontFamily: font.bold, fontSize: 10 },
+  sosTimer: { color: '#111827', fontFamily: font.extrabold, fontSize: 42, letterSpacing: 1, textAlign: 'center', marginTop: spacing.lg },
+  sosWaveform: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, height: 44, marginVertical: spacing.md },
+  sosWaveBar: { width: 3, borderRadius: 2, backgroundColor: '#ef4444' },
+  sosRecordingButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginHorizontal: spacing.lg, minHeight: 40, borderRadius: 22, backgroundColor: '#f87171' },
+  sosRecordingDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#fecaca' },
+  sosRecordingText: { color: colors.white, fontFamily: font.bold, fontSize: 13 },
+  sosSafeButton: { marginHorizontal: spacing.lg, marginTop: spacing.md, minHeight: 42, borderRadius: 22, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
+  sosSafeText: { color: colors.white, fontFamily: font.bold, fontSize: 13 },
+  sosBottomNotice: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: spacing.lg, marginTop: 'auto', marginBottom: spacing.lg, paddingHorizontal: spacing.md, minHeight: 38, borderRadius: radius.md, backgroundColor: '#ef4444' },
+  sosBottomNoticeText: { color: colors.white, fontFamily: font.bold, fontSize: 12 },
   riderMessageToastClose: { marginLeft: spacing.sm, padding: spacing.xs },
   riderMessageToastCloseText: { color: colors.white, fontSize: 16, fontWeight: '700' },
 
@@ -2764,6 +3141,8 @@ const styles = StyleSheet.create({
   },
 
   actionsWrap: { paddingHorizontal: spacing.lg, marginTop: spacing.md },
+  scheduleRideButton: { minHeight: 44, marginTop: spacing.sm, borderRadius: radius.full, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.green, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  scheduleRideText: { color: colors.greenDark, fontFamily: font.bold, fontSize: 13 },
 
   bottomNav: {
     flexDirection: 'row',
@@ -3864,6 +4243,7 @@ const styles = StyleSheet.create({
     borderColor: colors.green,
     backgroundColor: colors.greenLight,
   },
+  paymentOptionDisabled: { opacity: 0.55 },
   paymentOptionText: { flex: 1 },
   paymentOptionTitle: {
     fontFamily: font.bold,

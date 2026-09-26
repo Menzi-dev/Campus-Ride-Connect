@@ -24,6 +24,9 @@ public class Driver {
     @Column(name = "vehicle_year")
     private Integer vehicleYear;
 
+    @Column(name = "vehicle_photo", columnDefinition = "LONGTEXT")
+    private String vehiclePhoto;
+
     private BigDecimal rating;
 
     @Column(name = "total_trips")
@@ -80,6 +83,14 @@ public class Driver {
 
     public void setVehicleYear(Integer vehicleYear) {
         this.vehicleYear = vehicleYear;
+    }
+
+    public String getVehiclePhoto() {
+        return vehiclePhoto;
+    }
+
+    public void setVehiclePhoto(String vehiclePhoto) {
+        this.vehiclePhoto = vehiclePhoto;
     }
 
     public BigDecimal getRating() {

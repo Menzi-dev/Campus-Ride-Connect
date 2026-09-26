@@ -125,6 +125,7 @@ export default function CreateAccountScreen() {
   const [proofDoc, setProofDoc] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [licenceDoc, setLicenceDoc] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [vehicleDoc, setVehicleDoc] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
+  const [vehiclePhotoAsset, setVehiclePhotoAsset] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
 
   // Step 3 — Security
   const [password, setPassword] = useState('');
@@ -178,6 +179,25 @@ export default function CreateAccountScreen() {
       }
     } catch (err) {
       showToast('Could not open document picker', 'red');
+    }
+  };
+
+  const pickVehiclePhoto = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/jpeg', 'image/png', 'image/webp'],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const photo = result.assets[0];
+      if (photo.size && photo.size > 4 * 1024 * 1024) {
+        showToast('Choose a vehicle photo smaller than 4 MB', 'red');
+        return;
+      }
+      setVehiclePhotoAsset(photo);
+      showToast('Vehicle photo selected', 'green');
+    } catch {
+      showToast('Could not open the photo picker', 'red');
     }
   };
 
@@ -534,6 +554,17 @@ export default function CreateAccountScreen() {
           formData.append('vehicleRegistration', vehicleBlob, vehicleDoc.name);
         } catch (err: any) {
           throw new Error(`Vehicle document error: ${err.message}`);
+        }
+      }
+
+      if (role === 'DRIVER' && vehiclePhotoAsset) {
+        try {
+          const photoResponse = await fetch(vehiclePhotoAsset.uri);
+          if (!photoResponse.ok) throw new Error(`Failed to load photo (${photoResponse.status})`);
+          const photoBlob = await photoResponse.blob();
+          formData.append('vehiclePhoto', photoBlob, vehiclePhotoAsset.name || 'vehicle-photo.jpg');
+        } catch (err: any) {
+          throw new Error(`Vehicle photo upload error: ${err.message}`);
         }
       }
 
@@ -960,6 +991,20 @@ export default function CreateAccountScreen() {
                   <Text style={[styles.inputLabel, { marginTop: 8 }]}>Vehicle Registration</Text>
                   <UploadZone file={vehicleDoc} onPress={() => pickDocument(setVehicleDoc)} />
 
+                  <Text style={[styles.inputLabel, { marginTop: 8 }]}>Vehicle Photo <Text style={styles.optionalLabel}>Optional</Text></Text>
+                  <TouchableOpacity style={[styles.vehiclePhotoPicker, vehiclePhotoAsset && styles.vehiclePhotoPickerSelected]} onPress={pickVehiclePhoto} activeOpacity={0.8}>
+                    {vehiclePhotoAsset ? (
+                      <Image source={{ uri: vehiclePhotoAsset.uri }} style={styles.vehiclePhotoPreview} />
+                    ) : (
+                      <View style={styles.vehiclePhotoPlaceholder}><Car size={20} color={colors.greenDark} /></View>
+                    )}
+                    <View style={styles.vehiclePhotoCopy}>
+                      <Text style={styles.vehiclePhotoTitle} numberOfLines={1}>{vehiclePhotoAsset ? 'Vehicle photo selected' : 'Add a photo of your car'}</Text>
+                      <Text style={styles.vehiclePhotoHint} numberOfLines={2}>Shown on your driver profile · JPG, PNG or WebP · up to 4 MB</Text>
+                    </View>
+                    <CameraIcon size={17} color={colors.greenDark} />
+                  </TouchableOpacity>
+
                   <Field label="Licence Plate" icon={<Car size={16} color={colors.gray400} strokeWidth={1.8} />}>
                     <TextInput
                       style={[styles.fieldInput, styles.plateInput]}
@@ -1324,6 +1369,14 @@ const styles = StyleSheet.create({
   },
   uploadText: { fontFamily: font.semibold, fontSize: 10.5, fontWeight: '600', color: colors.gray700, marginTop: 2, textAlign: 'center' },
   uploadHint: { fontFamily: font.regular, fontSize: 7.5, color: colors.gray400, marginTop: 1, textAlign: 'center' },
+  optionalLabel: { color: colors.gray400, fontFamily: font.regular, fontSize: 10 },
+  vehiclePhotoPicker: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 8, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gray300, borderRadius: radius.md, backgroundColor: colors.gray50 },
+  vehiclePhotoPickerSelected: { borderStyle: 'solid', borderColor: colors.green, backgroundColor: colors.greenLight },
+  vehiclePhotoPreview: { width: 76, height: 54, borderRadius: radius.sm, backgroundColor: colors.gray200 },
+  vehiclePhotoPlaceholder: { width: 76, height: 54, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: colors.greenLight },
+  vehiclePhotoCopy: { flex: 1, minWidth: 0 },
+  vehiclePhotoTitle: { color: colors.gray800, fontFamily: font.bold, fontSize: 11 },
+  vehiclePhotoHint: { color: colors.gray500, fontFamily: font.medium, fontSize: 9, lineHeight: 13, marginTop: 3 },
 
   row: { flexDirection: 'row', alignItems: 'center' },
   halfField: { flex: 1, marginRight: spacing.sm },

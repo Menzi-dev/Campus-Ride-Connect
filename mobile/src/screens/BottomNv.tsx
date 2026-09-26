@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
+import { CalendarDays, CircleUserRound, Clock, House } from 'lucide-react-native';
 
 type RootStackParamList = {
   Home: undefined;
@@ -12,11 +13,11 @@ type RootStackParamList = {
 
 type TabKey = 'Home' | 'TripHistory' | 'Schedule' | 'Profile';
 
-const TABS: { key: TabKey; label: string; icon: string }[] = [
-  { key: 'Home', label: 'Home', icon: '🏠' },
-  { key: 'TripHistory', label: 'History', icon: '🕐' },
-  { key: 'Schedule', label: 'Schedule', icon: '📅' },
-  { key: 'Profile', label: 'Profile', icon: '👤' },
+const TABS: { key: TabKey; label: string; icon: typeof House }[] = [
+  { key: 'Home', label: 'Home', icon: House },
+  { key: 'TripHistory', label: 'History', icon: Clock },
+  { key: 'Schedule', label: 'Schedule', icon: CalendarDays },
+  { key: 'Profile', label: 'Profile', icon: CircleUserRound },
 ];
 
 export default function BottomNav({ active }: { active: TabKey }) {
@@ -26,6 +27,7 @@ export default function BottomNav({ active }: { active: TabKey }) {
     <View style={styles.container}>
       {TABS.map((tab) => {
         const isActive = tab.key === active;
+        const Icon = tab.icon;
         return (
           <TouchableOpacity
             key={tab.key}
@@ -34,7 +36,7 @@ export default function BottomNav({ active }: { active: TabKey }) {
               if (!isActive) navigation.navigate(tab.key);
             }}
           >
-            <Text style={[styles.icon, isActive && styles.iconActive]}>{tab.icon}</Text>
+            <Icon size={20} color={isActive ? '#22C55E' : '#9CA3AF'} />
             <Text style={[styles.label, isActive && styles.labelActive]}>{tab.label}</Text>
           </TouchableOpacity>
         );
@@ -44,17 +46,11 @@ export default function BottomNav({ active }: { active: TabKey }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    backgroundColor: '#0f0f22',
-    borderTopWidth: 1,
-    borderTopColor: '#1a1a2e',
-    paddingTop: 8,
-    paddingBottom: 20,
-  },
+  container: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 10, paddingBottom: 10 },
   tab: {
     flex: 1,
     alignItems: 'center',
+    gap: 3,
   },
   icon: {
     fontSize: 20,

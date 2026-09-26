@@ -76,7 +76,8 @@ apiClient.interceptors.response.use(
 
 // Attach the JWT to every request automatically once the user is logged in
 apiClient.interceptors.request.use(async (config) => {
-  const token = await AsyncStorage.getItem('authToken');
+  const isLoginRequest = config.url === '/auth/login' || config.url?.endsWith('/auth/login');
+  const token = isLoginRequest ? null : await AsyncStorage.getItem('authToken');
   
   // Debug logging
   if (!token) {

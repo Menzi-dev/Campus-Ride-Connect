@@ -8,8 +8,8 @@ import { colors, font, radius, shadow, spacing } from '../theme/theme';
 import apiClient from '../services/ApiClient';
 
 type RootStackParamList = {
-  Home: undefined;
-  RatingDriver: { rideId: string; driverName?: string };
+  Home: { skipActiveRideRestore?: boolean } | undefined;
+  RatingDriver: { rideId: string; driverName?: string; returnToHistory?: boolean };
 };
 
 export default function RatingDriverScreen() {
@@ -27,7 +27,16 @@ export default function RatingDriverScreen() {
     try {
       await apiClient.post(`/rides/${route.params.rideId}/rating`, { rating: selectedRating });
       setSubmitted(true);
-      setTimeout(() => navigation.replace('Home'), 2200);
+      setTimeout(() => {
+        if (route.params.returnToHistory) {
+          navigation.goBack();
+          return;
+        }
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Home', params: { skipActiveRideRestore: true } }],
+        });
+      }, 2200);
     } catch (requestError: any) {
       setError(requestError?.response?.data?.error || 'Could not submit rating. Please try again.');
     } finally {
@@ -56,20 +65,33 @@ export default function RatingDriverScreen() {
         <Text style={styles.headerTitle}>Rate your ride</Text>
         <View style={styles.headerSpacer} />
       </View>
+
       <View style={styles.content}>
         <Text style={styles.eyebrow}>TRIP COMPLETED</Text>
         <Text style={styles.title}>Rate our driver</Text>
         <Text style={styles.subtitle}>
           How was your ride{route.params.driverName ? ` with ${route.params.driverName}` : ''}?
         </Text>
+
         <View style={styles.stars}>
           {[1, 2, 3, 4, 5].map((value) => (
-            <TouchableOpacity key={value} onPress={() => setSelectedRating(value)} style={styles.starButton} accessibilityLabel={`${value} star rating`}>
-              <Star size={38} color={value <= selectedRating ? colors.orange : colors.gray300} fill={value <= selectedRating ? colors.orange : 'transparent'} />
+            <TouchableOpacity
+              key={value}
+              onPress={() => setSelectedRating(value)}
+              style={styles.starButton}
+              accessibilityLabel={`${value} star rating`}
+            >
+              <Star
+                size={38}
+                color={value <= selectedRating ? colors.orange : colors.gray300}
+                fill={value <= selectedRating ? colors.orange : 'transparent'}
+              />
             </TouchableOpacity>
           ))}
         </View>
+
         {error ? <Text style={styles.error}>{error}</Text> : null}
+
         <TouchableOpacity
           style={[styles.submitButton, selectedRating === 0 && styles.disabledButton]}
           onPress={submitRating}
@@ -84,17 +106,39 @@ export default function RatingDriverScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.gray50 },
-  header: { flexDirection: 'row', alignItems: 'center', padding: spacing.lg, backgroundColor: colors.white, ...shadow.sm },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.white,
+    ...shadow.sm,
+  },
   backButton: { padding: spacing.sm },
-  headerTitle: { flex: 1, textAlign: 'center', color: colors.gray900, fontFamily: font.bold, fontSize: 17 },
+  headerTitle: { flex: 1, textAlign: 'center', color: colors.gray900, fontFamily: font.bold, fontSize: 18 },
   headerSpacer: { width: 38 },
-  content: { alignItems: 'center', padding: spacing.xxxl, marginTop: spacing.xxxl },
+  content: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xxl,
+  },
   eyebrow: { color: colors.greenDark, fontFamily: font.bold, fontSize: 11, letterSpacing: 1 },
-  title: { marginTop: spacing.md, color: colors.gray900, fontFamily: font.bold, fontSize: 25, textAlign: 'center' },
-  subtitle: { marginTop: spacing.sm, color: colors.gray500, fontFamily: font.regular, fontSize: 14, textAlign: 'center' },
-  stars: { flexDirection: 'row', marginVertical: spacing.xxxl },
+  title: { marginTop: spacing.md, color: colors.gray900, fontFamily: font.bold, fontSize: 28, textAlign: 'center' },
+  subtitle: { marginTop: spacing.sm, color: colors.gray500, fontFamily: font.regular, fontSize: 15, textAlign: 'center' },
+  stars: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: spacing.xl, marginBottom: spacing.xl },
   starButton: { paddingHorizontal: spacing.xs },
-  submitButton: { width: '100%', minHeight: 54, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.green },
+  submitButton: {
+    width: '100%',
+    minHeight: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.md,
+    backgroundColor: colors.green,
+    marginTop: spacing.md,
+  },
   disabledButton: { backgroundColor: colors.gray300 },
   submitText: { color: colors.white, fontFamily: font.bold, fontSize: 16 },
   error: { marginBottom: spacing.md, color: colors.red, fontFamily: font.medium, textAlign: 'center' },

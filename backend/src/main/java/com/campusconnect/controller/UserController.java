@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -70,5 +71,20 @@ public class UserController {
                 return ResponseEntity.ok(response);
             })
             .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<Map<String, Object>> getCurrentUser() {
+        Long userId = Long.valueOf((String) SecurityContextHolder.getContext().getAuthentication().getPrincipal());
+        return userRepository.findById(userId).map(user -> {
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("id", user.getId());
+            response.put("fullName", user.getFullName());
+            response.put("email", user.getEmail());
+            response.put("phone", user.getPhone());
+            response.put("yearOfStudy", user.getYearOfStudy());
+            response.put("faceVerified", Boolean.TRUE.equals(user.getFaceVerified()));
+            return ResponseEntity.ok(response);
+        }).orElseGet(() -> ResponseEntity.notFound().build());
     }
 }

@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -46,6 +47,7 @@ public class AuthController {
             @RequestParam(value = "licencePlate", required = false) String licencePlate,
             @RequestParam(value = "vehicleMake", required = false) String vehicleMake,
             @RequestParam(value = "vehicleYear", required = false) Integer vehicleYear,
+            @RequestParam(value = "vehiclePhoto", required = false) MultipartFile vehiclePhoto,
             @RequestParam(value = "selfie", required = false) MultipartFile selfie,
             @RequestParam(value = "proofOfRegistration", required = false) MultipartFile proofOfRegistration,
             @RequestParam(value = "driverLicence", required = false) MultipartFile driverLicence,
@@ -63,6 +65,21 @@ public class AuthController {
         request.setLicencePlate(licencePlate);
         request.setVehicleMake(vehicleMake);
         request.setVehicleYear(vehicleYear);
+
+        if (vehiclePhoto != null && !vehiclePhoto.isEmpty()) {
+            String contentType = vehiclePhoto.getContentType();
+            if (contentType == null || !Set.of("image/jpeg", "image/png", "image/webp").contains(contentType)) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Vehicle photo must be a JPEG, PNG, or WebP image"));
+            }
+            if (vehiclePhoto.getSize() > 4L * 1024 * 1024) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Vehicle photo must be 4 MB or smaller"));
+            }
+            try {
+                request.setVehiclePhoto("data:" + contentType + ";base64," + Base64.getEncoder().encodeToString(vehiclePhoto.getBytes()));
+            } catch (IOException e) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Could not read vehicle photo"));
+            }
+        }
 
         // Process selfie if present
         if (selfie != null && !selfie.isEmpty()) {

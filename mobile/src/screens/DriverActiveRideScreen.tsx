@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, StyleSheet, Text, TouchableOpacity, View, Linking, RefreshControl, ScrollView } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View, Linking, RefreshControl, ScrollView } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RouteProp } from '@react-navigation/native';
 import { ArrowLeft, Car, Check, MapPin, Navigation, Route as RouteIcon, Phone, MessageCircle, RefreshCw } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
 import { colors, radius, spacing, font, shadow } from '../theme/theme';
 import apiClient from '../services/ApiClient';
 import { useToast } from '../components/Toast';
@@ -69,6 +70,21 @@ function interpolateRoute(route: Coordinate[], progress: number): Coordinate {
   return route[index];
 }
 
+function getRouteHeading(position: Coordinate, routePoints: Coordinate[]): number {
+  if (routePoints.length < 2) return 0;
+  let nearestIndex = 0;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  routePoints.forEach((point, index) => {
+    const distance = Math.abs(point.latitude - position.latitude) + Math.abs(point.longitude - position.longitude);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestIndex = index;
+    }
+  });
+  const nextPoint = routePoints[Math.min(nearestIndex + 1, routePoints.length - 1)];
+  return (Math.atan2(nextPoint.longitude - position.longitude, nextPoint.latitude - position.latitude) * 180) / Math.PI;
+}
+
 function DriverMapUpdater({ routePoints }: { routePoints: Coordinate[] }) {
   if (!LeafletUseMap) return null;
 
@@ -104,8 +120,10 @@ export default function DriverActiveRideScreen() {
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [chatVisible, setChatVisible] = useState(false);
+  const [hoveredButton, setHoveredButton] = useState<'call' | 'message' | 'complete' | null>(null);
   const seenMessageIdsRef = useRef<Set<number>>(new Set());
   const animationRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const carPositionRef = useRef<Coordinate>(NORTH_CAPE_MALL);
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
@@ -254,6 +272,20 @@ export default function DriverActiveRideScreen() {
     };
   }, [routePoints, phase]);
 
+  useEffect(() => {
+    carPositionRef.current = carPosition;
+  }, [carPosition]);
+
+  useEffect(() => {
+    if (!ride?.id || !['ACCEPTED', 'ENROUTE', 'STARTED'].includes(phase)) return;
+    const publishLocation = () => {
+      apiClient.post(`/driver/rides/${ride.id}/location`, carPositionRef.current).catch(() => undefined);
+    };
+    publishLocation();
+    const interval = setInterval(publishLocation, 500);
+    return () => clearInterval(interval);
+  }, [ride?.id, phase]);
+
   const updateStatus = async (status: 'ARRIVED' | 'STARTED' | 'COMPLETED') => {
     if (!ride || updating) return;
     setUpdating(true);
@@ -271,23 +303,46 @@ export default function DriverActiveRideScreen() {
     }
   };
 
+  const carHeading = getRouteHeading(carPosition, routePoints);
   const markerIcon = useMemo(() => {
     if (!leaflet) return undefined;
     return leaflet.divIcon({
       className: 'driver-car-marker',
-      html: '<div style="background:#16a34a;border:3px solid white;border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 12px rgba(0,0,0,.28);font-size:21px">🚗</div>',
-      iconSize: [40, 40],
-      iconAnchor: [20, 20],
+      html: `<div style="width:38px;height:38px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 2px 3px rgba(15,23,42,.4));transform:rotate(${carHeading}deg)">
+        <svg viewBox="0 0 80 120" width="38" height="38" role="img" aria-label="Campus ride vehicle">
+          <defs><linearGradient id="driverTopCarBody" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#cbd5db"/><stop offset=".2" stop-color="#fff"/><stop offset=".8" stop-color="#f8fafc"/><stop offset="1" stop-color="#b8c2c9"/></linearGradient><linearGradient id="driverTopCarGlass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4b5563"/><stop offset="1" stop-color="#111827"/></linearGradient></defs>
+          <ellipse cx="40" cy="61" rx="25" ry="55" fill="rgba(15,23,42,.2)"/>
+          <path d="M40 3c13 0 22 13 25 29l7 54c2 16-7 29-20 31H28c-13-2-22-15-20-31l7-54C18 16 27 3 40 3Z" fill="url(#driverTopCarBody)" stroke="#94a3ad" stroke-width="1.5"/>
+          <path d="M27 21c3-9 8-13 13-13s10 4 13 13l5 27H22l5-27Z" fill="url(#driverTopCarGlass)" stroke="#7c8790" stroke-width="1.2"/>
+          <path d="M22 53h36v30H22Z" fill="#f8fafc"/><path d="M22 61h36v22H22Z" fill="#16a34a" opacity=".9"/>
+          <path d="M25 64h13v16H25Zm17 0h13v16H42Z" fill="#22c55e" opacity=".55"/>
+          <path d="M18 34h7M55 34h7M15 91h8M57 91h8" stroke="#aab4bb" stroke-width="2" stroke-linecap="round"/>
+          <path d="M21 99c2 10 8 15 19 15s17-5 19-15" fill="#e2e8ec" stroke="#a3afb7" stroke-width="1"/>
+          <path d="M28 107h24" stroke="#64727b" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>`,
+      iconSize: [38, 38],
+      iconAnchor: [19, 19],
     });
-  }, []);
+  }, [carHeading]);
 
   const pickupIcon = useMemo(() => {
     if (!leaflet) return undefined;
     return leaflet.divIcon({
       className: 'pickup-marker',
-      html: '<div style="background:#2563eb;border:3px solid white;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.28);font-size:15px">📍</div>',
-      iconSize: [30, 30],
-      iconAnchor: [15, 15],
+      html: '<div style="width:28px;height:38px;position:relative;filter:drop-shadow(0 2px 2px rgba(15,23,42,.4))"><svg viewBox="0 0 40 54" width="28" height="38" aria-label="Pickup location marker"><ellipse cx="20" cy="51" rx="13" ry="2.5" fill="rgba(15,23,42,.35)"/><path d="M20 2C10.1 2 2 10.1 2 20c0 13.1 18 30 18 30s18-16.9 18-30C38 10.1 29.9 2 20 2Z" fill="#ef4444" stroke="#fff" stroke-width="2"/><circle cx="20" cy="20" r="6.5" fill="#fff"/></svg></div>',
+      iconSize: [28, 38],
+      iconAnchor: [14, 38],
+    });
+  }, []);
+
+  const driverLocationIcon = useMemo(() => {
+    if (!leaflet) return undefined;
+    return leaflet.divIcon({
+      className: 'location-pin-marker',
+      html: '<div style="width:25px;height:34px;position:relative;filter:drop-shadow(0 2px 2px rgba(15,23,42,.4))"><svg viewBox="0 0 40 54" width="25" height="34" aria-label="Driver location marker"><ellipse cx="20" cy="51" rx="13" ry="2.5" fill="rgba(15,23,42,.35)"/><path d="M20 2C10.1 2 2 10.1 2 20c0 13.1 18 30 18 30s18-16.9 18-30C38 10.1 29.9 2 20 2Z" fill="#16a34a" stroke="#fff" stroke-width="2"/><circle cx="20" cy="20" r="6.5" fill="#fff"/></svg></div>',
+      iconSize: [25, 34],
+      iconAnchor: [12.5, 34],
     });
   }, []);
 
@@ -351,6 +406,7 @@ export default function DriverActiveRideScreen() {
               positions={routePoints.map((point) => [point.latitude, point.longitude])}
               pathOptions={{ color: '#2563EB', weight: 6, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }}
             />
+            <LeafletMarker position={[startPoint.latitude, startPoint.longitude]} icon={driverLocationIcon} />
             <LeafletMarker position={[endPoint.latitude, endPoint.longitude]} icon={pickupIcon} />
             <LeafletMarker position={[carPosition.latitude, carPosition.longitude]} icon={markerIcon} />
             <LeafletZoomControl position="topright" />
@@ -383,30 +439,43 @@ export default function DriverActiveRideScreen() {
 
           {/* Call and Message Buttons */}
           <View style={styles.communicationButtons}>
-            <TouchableOpacity
-              style={styles.callButton}
+            <Pressable
+              style={({ pressed }) => [styles.callButton, (hoveredButton === 'call' || pressed) && styles.greenButtonHover]}
               onPress={handleCallRider}
+              onHoverIn={() => setHoveredButton('call')}
+              onHoverOut={() => setHoveredButton(null)}
               disabled={!ride?.riderPhone}
               accessibilityLabel="Call rider"
             >
-              <Phone size={18} color={colors.white} strokeWidth={2} />
-              <Text style={styles.communicationButtonText}>Call Rider</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.messageButton}
+              {({ pressed }) => {
+                const inverted = hoveredButton === 'call' || pressed;
+                return <>
+                  <Phone size={18} color={inverted ? colors.greenDark : colors.white} strokeWidth={2} />
+                  <Text style={[styles.communicationButtonText, inverted && styles.greenButtonHoverText]}>Call Rider</Text>
+                </>;
+              }}
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.messageButton, (hoveredButton === 'message' || pressed) && styles.greenButtonHover]}
               onPress={handleMessageRider}
-              activeOpacity={0.7}
+              onHoverIn={() => setHoveredButton('message')}
+              onHoverOut={() => setHoveredButton(null)}
               hitSlop={8}
               accessibilityLabel="Message rider"
             >
-              <MessageCircle size={18} color={colors.white} strokeWidth={2} />
-              <Text style={styles.communicationButtonText}>Message</Text>
-              {unreadCount > 0 && (
-                <View pointerEvents="none" style={styles.unreadBadge}>
-                  <Text style={styles.unreadBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+              {({ pressed }) => {
+                const inverted = hoveredButton === 'message' || pressed;
+                return <>
+                  <MessageCircle size={18} color={inverted ? colors.greenDark : colors.white} strokeWidth={2} />
+                  <Text style={[styles.communicationButtonText, inverted && styles.greenButtonHoverText]}>Message</Text>
+                  {unreadCount > 0 && (
+                    <View pointerEvents="none" style={styles.unreadBadge}>
+                      <Text style={styles.unreadBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                    </View>
+                  )}
+                </>;
+              }}
+            </Pressable>
           </View>
 
           {/* Status Buttons - Conditional Display */}
@@ -441,18 +510,23 @@ export default function DriverActiveRideScreen() {
           )}
 
           {showCompleteButton && (
-            <TouchableOpacity
-              style={[styles.primaryButton, styles.completeButton]}
+            <Pressable
+              style={({ pressed }) => [styles.primaryButton, styles.completeButton, (hoveredButton === 'complete' || pressed) && styles.greenButtonHover]}
               onPress={() => updateStatus('COMPLETED')}
+              onHoverIn={() => setHoveredButton('complete')}
+              onHoverOut={() => setHoveredButton(null)}
               disabled={updating}
             >
-              {updating ? <ActivityIndicator color={colors.white} /> : (
-                <>
-                  <Check size={19} color={colors.white} />
-                  <Text style={styles.primaryButtonText}>Complete Trip</Text>
-                </>
-              )}
-            </TouchableOpacity>
+              {({ pressed }) => {
+                const inverted = hoveredButton === 'complete' || pressed;
+                return updating ? <ActivityIndicator color={inverted ? colors.greenDark : colors.white} /> : (
+                  <>
+                    <Check size={19} color={inverted ? colors.greenDark : colors.white} />
+                    <Text style={[styles.primaryButtonText, inverted && styles.greenButtonHoverText]}>Complete Trip</Text>
+                  </>
+                );
+              }}
+            </Pressable>
           )}
 
           <Text style={styles.helper}>
@@ -525,7 +599,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingVertical: spacing.md,
     borderRadius: radius.md,
-    backgroundColor: colors.blue,
+    backgroundColor: colors.greenDark,
   },
   messageButton: {
     position: 'relative',
@@ -536,7 +610,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingVertical: spacing.md,
     borderRadius: radius.md,
-    backgroundColor: colors.purple || '#9333ea',
+    backgroundColor: colors.green,
   },
   unreadBadge: {
     position: 'absolute',
@@ -559,10 +633,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  greenButtonHover: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.green },
+  greenButtonHoverText: { color: colors.greenDark },
   
   primaryButton: { minHeight: 52, marginTop: spacing.md, borderRadius: radius.md, backgroundColor: colors.greenDark, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   arriveButton: { backgroundColor: colors.green },
-  completeButton: { backgroundColor: colors.blue },
+  completeButton: { backgroundColor: colors.green },
   primaryButtonText: { color: colors.white, fontFamily: font.bold, fontSize: 15 },
   helper: { color: colors.gray500, fontFamily: font.regular, textAlign: 'center', fontSize: 12, marginTop: spacing.sm },
 });

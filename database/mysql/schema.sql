@@ -20,7 +20,23 @@ CREATE TABLE IF NOT EXISTS users (
     phone               VARCHAR(255) NULL,
     student_number      VARCHAR(255) NULL,
     vehicle_make        VARCHAR(255) NULL,
-    vehicle_year        INT NULL
+    vehicle_year        INT NULL,
+    profile_photo       LONGTEXT NULL,
+    default_payment_method VARCHAR(20) NOT NULL DEFAULT 'CASH'
+);
+
+CREATE TABLE IF NOT EXISTS user_payment_methods (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id         BIGINT NOT NULL,
+    label           VARCHAR(80) NOT NULL,
+    last_four       CHAR(4) NOT NULL,
+    brand           VARCHAR(32) NOT NULL,
+    expiry          CHAR(5) NOT NULL,
+    cardholder      VARCHAR(120) NOT NULL,
+    is_default      BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX user_payment_methods_user_id (user_id),
+    CONSTRAINT user_payment_methods_user_fk FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
 -- ---------------------------------------------------------------------
@@ -43,6 +59,12 @@ CREATE TABLE IF NOT EXISTS rides (
     fare                    DECIMAL(6,2),
     distance_km             DECIMAL(5,2),
     duration_minutes        DOUBLE,
+    rider_rating            INT NULL,
+    rider_rating_comment    VARCHAR(500) NULL,
+    driver_rating           INT NULL,
+    driver_rating_comment   VARCHAR(500) NULL,
+    cancellation_reason    VARCHAR(500) NULL,
+    cancelled_by           BIGINT NULL,
     status                  ENUM('PENDING', 'ACCEPTED', 'ENROUTE', 'ARRIVED', 'STARTED', 'COMPLETED', 'CANCELLED') DEFAULT 'PENDING',
     created_at              DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at              DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

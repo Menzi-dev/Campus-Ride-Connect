@@ -22,6 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
+@org.springframework.transaction.annotation.Transactional
 public class AdminControllerWithAuthenticationTest {
 
     @Autowired

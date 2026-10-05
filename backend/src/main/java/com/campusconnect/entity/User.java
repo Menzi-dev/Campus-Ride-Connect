@@ -37,6 +37,9 @@ public class User {
 	@Column(name = "phone")
 	private String phone;
 
+	@Column(name = "profile_photo", columnDefinition = "LONGTEXT")
+	private String profilePhoto;
+
 	@Column(name = "licence_plate")
 	private String licencePlate;
 
@@ -142,6 +145,14 @@ public class User {
 
 	public void setPhone(String phone) {
 		this.phone = phone;
+	}
+
+	public String getProfilePhoto() {
+		return profilePhoto;
+	}
+
+	public void setProfilePhoto(String profilePhoto) {
+		this.profilePhoto = profilePhoto;
 	}
 
 	public String getLicencePlate() {

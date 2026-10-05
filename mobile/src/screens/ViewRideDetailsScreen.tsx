@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
@@ -17,7 +18,6 @@ import {
   ArrowLeft,
   MapPin,
   Clock,
-  DollarSign,
   User,
   Star,
   AlertCircle,
@@ -39,6 +39,7 @@ type RideRequestDetails = {
   riderName: string;
   riderRating: number;
   riderInitials: string;
+  riderProfileImage?: string | null;
   pickup: string;
   destination: string;
   pickupLat?: number;
@@ -50,7 +51,6 @@ type RideRequestDetails = {
   estimatedTime?: string;
   riderPhone?: string;
   notes?: string;
-  riderProfileImage?: string;
 };
 
 export default function ViewRideDetailsScreen() {
@@ -96,7 +96,7 @@ export default function ViewRideDetailsScreen() {
   }, [route.params.requestId]);
 
   const handleAccept = async () => {
-    if (accepting) return;
+    if (accepting || declining) return;
 
     setAccepting(true);
     try {
@@ -119,7 +119,7 @@ export default function ViewRideDetailsScreen() {
   };
 
   const handleDecline = async () => {
-    if (declining) return;
+    if (declining || accepting) return;
 
     setDeclining(true);
     try {
@@ -204,7 +204,11 @@ export default function ViewRideDetailsScreen() {
           <Text style={styles.sectionTitle}>Rider Information</Text>
           <View style={styles.riderInfo}>
             <View style={styles.riderAvatar}>
-              <Text style={styles.riderInitials}>{details.riderInitials}</Text>
+              {details.riderProfileImage ? (
+                <Image source={{ uri: details.riderProfileImage }} style={styles.riderAvatarImage} />
+              ) : (
+                <Text style={styles.riderInitials}>{details.riderInitials}</Text>
+              )}
             </View>
             <View style={styles.riderDetails}>
               <Text style={styles.riderName}>{details.riderName}</Text>
@@ -267,7 +271,6 @@ export default function ViewRideDetailsScreen() {
         {/* Fare Card */}
         <View style={styles.card}>
           <View style={styles.fareHeader}>
-            <DollarSign size={20} color={colors.green} />
             <Text style={styles.sectionTitle}>Fare Amount</Text>
           </View>
           <Text style={styles.fareAmount}>{details.fare}</Text>
@@ -306,7 +309,7 @@ export default function ViewRideDetailsScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flex: 1, minWidth: 0, minHeight: 0,
     backgroundColor: colors.gray50,
   },
   centered: {
@@ -396,6 +399,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.white,
   },
+  riderAvatarImage: { width: '100%', height: '100%', borderRadius: 28 },
   riderDetails: {
     flex: 1,
   },

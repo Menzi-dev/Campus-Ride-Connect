@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RouteProp } from '@react-navigation/native';
 import { ArrowLeft, Check, Star } from 'lucide-react-native';
-import { colors, font, radius, shadow, spacing } from '../theme/theme';
+import { colors, font, radius, spacing } from '../theme/theme';
 import apiClient from '../services/ApiClient';
 
 type RootStackParamList = {
@@ -16,6 +16,7 @@ export default function RatingDriverScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'RatingDriver'>>();
   const [selectedRating, setSelectedRating] = useState(0);
+  const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
@@ -25,7 +26,10 @@ export default function RatingDriverScreen() {
     setSubmitting(true);
     setError('');
     try {
-      await apiClient.post(`/rides/${route.params.rideId}/rating`, { rating: selectedRating });
+      await apiClient.post(`/rides/${route.params.rideId}/rating`, {
+        rating: selectedRating,
+        ...(comment.trim() ? { comment: comment.trim() } : {}),
+      });
       setSubmitted(true);
       setTimeout(() => {
         if (route.params.returnToHistory) {
@@ -66,7 +70,8 @@ export default function RatingDriverScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
-      <View style={styles.content}>
+      <KeyboardAvoidingView style={{ flex: 1, minHeight: 0 }} behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined}>
+      <ScrollView style={{ flex: 1, minHeight: 0 }} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.eyebrow}>TRIP COMPLETED</Text>
         <Text style={styles.title}>Rate our driver</Text>
         <Text style={styles.subtitle}>
@@ -78,11 +83,13 @@ export default function RatingDriverScreen() {
             <TouchableOpacity
               key={value}
               onPress={() => setSelectedRating(value)}
+              disabled={submitting}
               style={styles.starButton}
+              accessibilityRole="button"
               accessibilityLabel={`${value} star rating`}
             >
               <Star
-                size={38}
+                size={44}
                 color={value <= selectedRating ? colors.orange : colors.gray300}
                 fill={value <= selectedRating ? colors.orange : 'transparent'}
               />
@@ -90,54 +97,78 @@ export default function RatingDriverScreen() {
           ))}
         </View>
 
+        <TextInput
+          testID="ride-rating-comment"
+          style={styles.commentInput}
+          placeholder="Add a comment (optional)"
+          placeholderTextColor={colors.gray400}
+          accessibilityLabel="Add a comment (optional)"
+          value={comment}
+          onChangeText={setComment}
+          editable={!submitting}
+          multiline
+          numberOfLines={4}
+          maxLength={500}
+          textAlignVertical="top"
+        />
+
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <TouchableOpacity
           style={[styles.submitButton, selectedRating === 0 && styles.disabledButton]}
           onPress={submitRating}
           disabled={selectedRating === 0 || submitting}
+          accessibilityRole="button"
+          accessibilityLabel="Submit rating"
         >
           {submitting ? <ActivityIndicator color={colors.white} /> : <Text style={styles.submitText}>Submit rating</Text>}
         </TouchableOpacity>
-      </View>
+      </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.gray50 },
+  container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.white },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
+    minHeight: 76,
     backgroundColor: colors.white,
-    ...shadow.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray100,
   },
   backButton: { padding: spacing.sm },
-  headerTitle: { flex: 1, textAlign: 'center', color: colors.gray900, fontFamily: font.bold, fontSize: 18 },
+  headerTitle: { flex: 1, textAlign: 'center', color: colors.gray900, fontFamily: font.medium, fontSize: 18 },
   headerSpacer: { width: 38 },
   content: {
-    flex: 1,
+    flexGrow: 1,
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
+    paddingBottom: spacing.xl,
     alignItems: 'center',
     justifyContent: 'flex-start',
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xxl,
+    paddingTop: spacing.xxxl,
   },
-  eyebrow: { color: colors.greenDark, fontFamily: font.bold, fontSize: 11, letterSpacing: 1 },
-  title: { marginTop: spacing.md, color: colors.gray900, fontFamily: font.bold, fontSize: 28, textAlign: 'center' },
-  subtitle: { marginTop: spacing.sm, color: colors.gray500, fontFamily: font.regular, fontSize: 15, textAlign: 'center' },
-  stars: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: spacing.xl, marginBottom: spacing.xl },
-  starButton: { paddingHorizontal: spacing.xs },
+  eyebrow: { color: colors.greenDark, fontFamily: font.medium, fontSize: 14, letterSpacing: 1 },
+  title: { marginTop: spacing.xxl, color: colors.gray900, fontFamily: font.regular, fontSize: 32, textAlign: 'center' },
+  subtitle: { marginTop: spacing.md, color: colors.gray500, fontFamily: font.regular, fontSize: 17, textAlign: 'center' },
+  stars: { width: '100%', maxWidth: 440, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: spacing.xxxl },
+  starButton: { padding: spacing.xs, minWidth: 44 },
+  commentInput: { width: '100%', minHeight: 136, borderWidth: 1, borderColor: colors.gray200, borderRadius: radius.lg, padding: spacing.lg, fontFamily: font.regular, fontSize: 16, color: colors.gray900, backgroundColor: colors.white, marginBottom: spacing.xl },
   submitButton: {
     width: '100%',
-    minHeight: 54,
+    minHeight: 56,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     backgroundColor: colors.green,
-    marginTop: spacing.md,
   },
   disabledButton: { backgroundColor: colors.gray300 },
   submitText: { color: colors.white, fontFamily: font.bold, fontSize: 16 },

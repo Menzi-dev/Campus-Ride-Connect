@@ -1,5 +1,6 @@
+import { useToast } from '../components/Toast';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Platform, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -33,6 +34,7 @@ type RootStackParamList = {
 };
 
 export default function DriverProfileScreen() {
+  const { showToast } = useToast();
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const [profile, setProfile] = useState<Profile>({});
   const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -54,7 +56,7 @@ export default function DriverProfileScreen() {
         AsyncStorage.getItem(`userProfileImage:${key}`),
       ]);
       const account: Profile = { ...storedUser, ...(response.data || {}) };
-      const photo = storedPhoto || account.profilePhoto || null;
+      const photo = account.profilePhoto || storedPhoto || null;
       setProfile(account);
       setProfileImage(photo);
       if (photo && !account.profilePhoto) {
@@ -95,13 +97,25 @@ export default function DriverProfileScreen() {
         await FileSystem.copyAsync({ from: asset.uri, to: uri });
       }
 
-      await AsyncStorage.setItem(`userProfileImage:${ownerKey}`, uri);
+      const mimeType = asset.mimeType || (asset.name?.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg');
+      const photoData = Platform.OS === 'web'
+        ? uri
+        : `data:${mimeType};base64,${await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 })}`;
+      if (photoData.length > 5_600_000) throw new Error('Profile photo must be 4 MB or smaller');
+      await apiClient.put('/users/me/profile-photo', { profilePhoto: photoData });
+
       const nextProfile = { ...profile, profilePhoto: uri };
-      await AsyncStorage.setItem('user', JSON.stringify(nextProfile));
+      if (Platform.OS === 'web') {
+        await AsyncStorage.removeItem(`userProfileImage:${ownerKey}`);
+        await AsyncStorage.setItem('user', JSON.stringify({ ...nextProfile, profilePhoto: undefined }));
+      } else {
+        await AsyncStorage.setItem(`userProfileImage:${ownerKey}`, uri);
+        await AsyncStorage.setItem('user', JSON.stringify(nextProfile));
+      }
       setProfile(nextProfile);
       setProfileImage(uri);
     } catch {
-      Alert.alert('Profile photo', 'Could not update your profile photo right now.');
+      showToast('Could not update your profile photo right now.', 'red');
     }
   };
 
@@ -290,10 +304,10 @@ function DetailRow({ icon, label, value, positive }: { icon: React.ReactNode; la
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, minHeight: 0, backgroundColor: colors.gray50, position: 'relative' },
+  container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50, position: 'relative' },
   scroll: { flex: 1, minHeight: 0 },
-  content: { paddingHorizontal: spacing.md, paddingTop: spacing.xs, paddingBottom: 84 },
-  bottomNavDock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 10, backgroundColor: colors.white },
+  content: { paddingHorizontal: spacing.md, paddingTop: spacing.xs, paddingBottom: spacing.lg },
+  bottomNavDock: { flexShrink: 0, backgroundColor: colors.white },
   headingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.xs, marginBottom: spacing.sm },
   eyebrow: { color: colors.greenDark, fontFamily: font.bold, fontSize: 9, marginBottom: 4 },
   title: { color: colors.gray900, fontFamily: font.extrabold, fontSize: 22 },

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   ScrollView,
   RefreshControl,
@@ -63,6 +64,7 @@ type RideRequest = {
   id: string;
   riderName: string;
   riderInitials: string;
+  riderProfileImage?: string | null;
   pickup: string;
   destination: string;
   fare: string;
@@ -600,7 +602,11 @@ function RideRequestCard({
     <View style={styles.requestCard}>
       <View style={styles.requestHeader}>
         <View style={styles.riderAvatar}>
-          <Text style={styles.riderInitials}>{request.riderInitials}</Text>
+          {request.riderProfileImage ? (
+            <Image source={{ uri: request.riderProfileImage }} style={styles.riderAvatarImage} />
+          ) : (
+            <Text style={styles.riderInitials}>{request.riderInitials}</Text>
+          )}
         </View>
         <View style={styles.requestInfo}>
           <Text style={styles.riderName}>{request.riderName}</Text>
@@ -624,7 +630,7 @@ function RideRequestCard({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.gray50 },
+  container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
   centered: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xxxl },
   loadingText: { fontFamily: font.medium, fontSize: 13, color: colors.gray500, marginTop: spacing.md },
 
@@ -634,6 +640,8 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
     backgroundColor: colors.white,
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
     justifyContent: 'space-between',
     alignItems: 'center',
   },
@@ -646,6 +654,7 @@ const styles = StyleSheet.create({
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     marginTop: 4,
   },
   statusDot: {
@@ -701,7 +710,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   statCard: {
-    width: '47%',
+    flexBasis: 140,
+    flexGrow: 1,
+    minWidth: 0,
     backgroundColor: colors.white,
     borderRadius: radius.lg,
     padding: spacing.md,
@@ -807,6 +818,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.white,
   },
+  riderAvatarImage: { width: '100%', height: '100%', borderRadius: 22 },
   requestInfo: {
     flex: 1,
   },

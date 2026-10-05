@@ -1,9 +1,13 @@
+import useMapResize from '../hooks/useMapResize';
+import Button from '../components/Button';
+import ScrollableCard from '../components/ScrollableCard';
+import RideSosModal from '../components/RideSosModal';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View, Linking, RefreshControl, ScrollView } from 'react-native';
+import { ActivityIndicator, Image, Modal, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, Linking, ScrollView } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RouteProp } from '@react-navigation/native';
-import { ArrowLeft, Car, Check, MapPin, Navigation, Route as RouteIcon, Phone, MessageCircle, RefreshCw } from 'lucide-react-native';
+import { ArrowLeft, Car, Check, MapPin, Navigation, Route as RouteIcon, Phone, MessageCircle, RefreshCw, Siren, Star, X } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { colors, radius, spacing, font, shadow } from '../theme/theme';
@@ -28,7 +32,10 @@ type Ride = {
   fare?: number;
   riderName?: string;
   rider?: { fullName?: string };
+  riderProfileImage?: string | null;
   riderPhone?: string;
+  cancellationReason?: string | null;
+  cancelledBy?: number | string | null;
 };
 type Coordinate = { latitude: number; longitude: number };
 
@@ -89,6 +96,7 @@ function DriverMapUpdater({ routePoints }: { routePoints: Coordinate[] }) {
   if (!LeafletUseMap) return null;
 
   const map = LeafletUseMap();
+  useMapResize(map);
 
   useEffect(() => {
     if (!map || routePoints.length < 2) return;
@@ -120,9 +128,19 @@ export default function DriverActiveRideScreen() {
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [chatVisible, setChatVisible] = useState(false);
+  const [sosVisible, setSosVisible] = useState(false);
+  const [ratingVisible, setRatingVisible] = useState(false);
+  const [cancelDialogVisible, setCancelDialogVisible] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
+  const [cancellationNotice, setCancellationNotice] = useState('');
+  const [cancellationNoticeVisible, setCancellationNoticeVisible] = useState(false);
+  const [selectedRiderRating, setSelectedRiderRating] = useState(0);
+  const [submittingRating, setSubmittingRating] = useState(false);
   const [hoveredButton, setHoveredButton] = useState<'call' | 'message' | 'complete' | null>(null);
   const seenMessageIdsRef = useRef<Set<number>>(new Set());
   const animationRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const cancellationNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const carPositionRef = useRef<Coordinate>(NORTH_CAPE_MALL);
 
   useEffect(() => {
@@ -160,11 +178,9 @@ export default function DriverActiveRideScreen() {
 
   // Make call to rider
   const handleCallRider = () => {
-    if (ride?.riderPhone) {
-      const phoneNumber = ride.riderPhone.replace(/\D/g, '');
-      const telUrl = `tel:${phoneNumber}`;
-      Linking.openURL(telUrl).catch(err => console.log('Error opening phone:', err));
-    }
+    const phone = ride?.riderPhone?.replace(/[^\d+]/g, '');
+    if (!phone) { showToast('The rider has not provided a phone number. Use Message instead.', 'blue'); return; }
+    Linking.openURL(`tel:${phone}`).catch(() => showToast(`Could not open the phone app. You can call ${phone} directly.`, 'red'));
   };
 
   // Send message to rider
@@ -218,9 +234,43 @@ export default function DriverActiveRideScreen() {
   }, [ride?.id, currentUserId, showToast]);
 
   useEffect(() => {
+    if (!ride?.id || currentUserId == null || phase === 'COMPLETED' || phase === 'CANCELLED') return;
+    let disposed = false;
+    const pollCancellation = async () => {
+      try {
+        const response = await apiClient.get(`/driver/rides/${ride.id}`);
+        if (disposed) return;
+        const latestRide = response.data as Ride;
+        if (String(latestRide.status).toUpperCase() !== 'CANCELLED') return;
+
+        setRide((previous) => previous ? { ...previous, ...latestRide } : latestRide);
+        const cancelledByDriver = Number(latestRide.cancelledBy) === currentUserId;
+        setCancellationNotice(`${cancelledByDriver ? 'You cancelled this ride.' : 'The rider cancelled this ride.'}\nReason: ${latestRide.cancellationReason || 'No reason provided.'}`);
+        setCancellationNoticeVisible(true);
+        if (animationRef.current) clearInterval(animationRef.current);
+        cancellationNoticeTimerRef.current = setTimeout(() => {
+          cancellationNoticeTimerRef.current = null;
+          setCancellationNoticeVisible(false);
+          navigation.replace('DriverDashboard');
+        }, 3000);
+      } catch {
+        // Cancellation polling is non-critical while the ride continues.
+      }
+    };
+
+    void pollCancellation();
+    const interval = setInterval(pollCancellation, 2000);
+    return () => {
+      disposed = true;
+      clearInterval(interval);
+    };
+  }, [ride?.id, currentUserId, phase, navigation]);
+
+  useEffect(() => {
     loadRide();
     return () => {
       if (animationRef.current) clearInterval(animationRef.current);
+      if (cancellationNoticeTimerRef.current) clearTimeout(cancellationNoticeTimerRef.current);
     };
   }, []);
 
@@ -291,15 +341,59 @@ export default function DriverActiveRideScreen() {
     setUpdating(true);
     try {
       const response = await apiClient.post(`/driver/rides/${ride.id}/status`, { status });
-      setRide(response.data);
+      setRide((previous) => previous ? { ...previous, ...response.data } : response.data);
       setProgress(0);
       if (status === 'COMPLETED') {
-        navigation.replace('DriverDashboard');
+        setRatingVisible(true);
       }
     } catch (error: any) {
-      setRouteError(true);
+      showToast(error?.response?.data?.error || 'Could not update the ride status. Please try again.', 'red');
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const openCancellationDialog = () => {
+    setCancelReason('');
+    setCancelDialogVisible(true);
+  };
+
+  const handleConfirmRideCancellation = async () => {
+    if (!ride || cancelSubmitting) return;
+    const reason = cancelReason.trim();
+    if (!reason) return;
+    setCancelSubmitting(true);
+    try {
+      const response = await apiClient.post(`/rides/${ride.id}/cancel`, { reason });
+      setRide((previous) => previous ? { ...previous, ...response.data } : { ...ride, ...response.data });
+      setCancelDialogVisible(false);
+      setCancellationNotice(`You cancelled this ride.\nReason: ${reason}`);
+      setCancellationNoticeVisible(true);
+      if (animationRef.current) clearInterval(animationRef.current);
+      cancellationNoticeTimerRef.current = setTimeout(() => {
+        cancellationNoticeTimerRef.current = null;
+        setCancellationNoticeVisible(false);
+        navigation.replace('DriverDashboard');
+      }, 3000);
+    } catch (error: any) {
+      showToast(error?.response?.data?.error || 'Could not cancel ride', 'red');
+    } finally {
+      setCancelSubmitting(false);
+    }
+  };
+
+  const submitRiderRating = async () => {
+    if (!ride || selectedRiderRating < 1 || submittingRating) return;
+    setSubmittingRating(true);
+    try {
+      await apiClient.post(`/rides/${ride.id}/rider-rating`, { rating: selectedRiderRating });
+      showToast('Rider rating submitted', 'green');
+      setRatingVisible(false);
+      navigation.replace('DriverDashboard');
+    } catch (error: any) {
+      showToast(error?.response?.data?.error || 'Could not submit rider rating', 'red');
+    } finally {
+      setSubmittingRating(false);
     }
   };
 
@@ -351,10 +445,11 @@ export default function DriverActiveRideScreen() {
   const showCompleteButton = phase === 'STARTED' && !headingToPickup;
 
   if (loading) return <View style={[styles.centered]}><ActivityIndicator size="large" color={colors.green} /></View>;
-  if (!ride) return <View style={[styles.centered]}><Text style={styles.errorText}>This ride is no longer available.</Text></View>;
+  if (!ride) return <View style={[styles.centered]}><Text style={styles.errorText}>This ride is no longer available.</Text><Button label="Retry" onPress={() => loadRide(true)} loading={refreshing} disabled={refreshing} style={{ marginTop: spacing.lg }} /><Button label="Back to dashboard" variant="secondary" onPress={() => navigation.navigate('DriverDashboard')} style={{ marginTop: spacing.sm }} /></View>;
 
   return (
     <View style={styles.container}>
+      <RideSosModal visible={sosVisible} rideId={ride.id} onClose={() => setSosVisible(false)} />
       <Modal
         visible={chatVisible}
         transparent
@@ -368,6 +463,85 @@ export default function DriverActiveRideScreen() {
           </View>
         </View>
       </Modal>
+      <Modal visible={ratingVisible} transparent animationType="fade" onRequestClose={() => undefined}>
+        <View style={styles.ratingBackdrop}>
+          <ScrollableCard style={styles.ratingCard}>
+            <Text style={styles.ratingTitle}>Rate your rider</Text>
+            {ride.riderProfileImage ? (
+              <Image source={{ uri: ride.riderProfileImage }} style={styles.ratingRiderImage} />
+            ) : null}
+            <Text style={styles.ratingSubtitle}>How was your ride with {riderDisplayName}?</Text>
+            <View style={styles.ratingStars}>
+              {[1, 2, 3, 4, 5].map((rating) => (
+                <TouchableOpacity
+                  key={rating}
+                  style={styles.ratingStarButton}
+                  onPress={() => setSelectedRiderRating(rating)}
+                  accessibilityLabel={`Rate rider ${rating} out of 5`}
+                >
+                  <Star
+                    size={34}
+                    color={rating <= selectedRiderRating ? colors.orange : colors.gray300}
+                    fill={rating <= selectedRiderRating ? colors.orange : 'transparent'}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={[styles.ratingSubmitButton, (selectedRiderRating === 0 || submittingRating) && styles.ratingSubmitDisabled]}
+              onPress={submitRiderRating}
+              disabled={selectedRiderRating === 0 || submittingRating}
+            >
+              {submittingRating ? <ActivityIndicator color={colors.white} /> : <Text style={styles.ratingSubmitText}>Submit rating</Text>}
+            </TouchableOpacity>
+          </ScrollableCard>
+        </View>
+      </Modal>
+      <Modal visible={cancelDialogVisible} transparent animationType="fade" onRequestClose={() => setCancelDialogVisible(false)}>
+        <View style={styles.cancelDialogBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => !cancelSubmitting && setCancelDialogVisible(false)} />
+          <ScrollableCard style={styles.cancelDialogCard}>
+            <View style={styles.cancelDialogIcon}><X size={21} color={colors.red} /></View>
+            <Text style={styles.cancelDialogTitle}>Cancel this ride?</Text>
+            <Text style={styles.cancelDialogSubtitle}>Please tell the rider why you need to cancel.</Text>
+            <TextInput
+              style={styles.cancelReasonInput}
+              value={cancelReason}
+              onChangeText={setCancelReason}
+              placeholder="Enter a cancellation reason"
+              placeholderTextColor={colors.gray400}
+              multiline
+              maxLength={500}
+              textAlignVertical="top"
+              editable={!cancelSubmitting}
+            />
+            <Text style={styles.cancelReasonCount}>{cancelReason.length}/500</Text>
+            <View style={styles.cancelDialogActions}>
+              <TouchableOpacity style={styles.cancelKeepButton} onPress={() => setCancelDialogVisible(false)} disabled={cancelSubmitting}>
+                <Text style={styles.cancelKeepText}>Keep ride</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.cancelConfirmButton, (!cancelReason.trim() || cancelSubmitting) && styles.cancelConfirmDisabled]}
+                onPress={handleConfirmRideCancellation}
+                disabled={!cancelReason.trim() || cancelSubmitting}
+              >
+                {cancelSubmitting ? <ActivityIndicator color={colors.white} size="small" /> : <Text style={styles.cancelConfirmText}>Cancel ride</Text>}
+              </TouchableOpacity>
+            </View>
+          </ScrollableCard>
+        </View>
+      </Modal>
+      <Modal visible={cancellationNoticeVisible} transparent animationType="fade" onRequestClose={() => undefined}>
+        <View style={styles.cancelDialogBackdrop}>
+          <ScrollableCard style={styles.cancelNoticeCard}>
+            <View style={styles.cancelNoticeIcon}><Check size={24} color={colors.white} /></View>
+            <Text style={styles.cancelDialogTitle}>Ride cancelled</Text>
+            <Text style={styles.cancelNoticeText}>{cancellationNotice}</Text>
+            <Text style={styles.cancelNoticeHint}>Returning to Driver Dashboard…</Text>
+          </ScrollableCard>
+        </View>
+      </Modal>
+
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconButton} accessibilityLabel="Back to driver dashboard">
           <ArrowLeft size={22} color={colors.gray800} />
@@ -389,155 +563,182 @@ export default function DriverActiveRideScreen() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.mapFrame}>
-        {Platform.OS === 'web' && LeafletMap && routePoints.length > 0 ? (
-          <LeafletMap
-            style={{ height: '100%', width: '100%' }}
-            center={[startPoint.latitude, startPoint.longitude]}
-            zoom={15}
-            zoomControl={false}
-            scrollWheelZoom={false}
-            dragging={true}
-            attributionControl={false}
-          >
-            <LeafletTileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-            <DriverMapUpdater routePoints={routePoints} />
-            <LeafletPolyline
-              positions={routePoints.map((point) => [point.latitude, point.longitude])}
-              pathOptions={{ color: '#2563EB', weight: 6, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }}
-            />
-            <LeafletMarker position={[startPoint.latitude, startPoint.longitude]} icon={driverLocationIcon} />
-            <LeafletMarker position={[endPoint.latitude, endPoint.longitude]} icon={pickupIcon} />
-            <LeafletMarker position={[carPosition.latitude, carPosition.longitude]} icon={markerIcon} />
-            <LeafletZoomControl position="topright" />
-          </LeafletMap>
-        ) : (
-          <View style={styles.nativeMap}>
-            <View style={styles.nativeMapContent}>
-              <Car size={48} color={colors.green} strokeWidth={1.5} />
-              <Text style={styles.nativeMapText}>Route loaded</Text>
-              <Text style={styles.nativeMapProgress}>{Math.round(progress * 100)}% to pickup</Text>
-            </View>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.infoPanelWrapper}>
-        <View style={styles.infoPanel}>
-          <View style={styles.routeHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.label}>FROM</Text>
-              <Text style={styles.value} numberOfLines={1}>{headingToPickup ? 'North Cape Mall' : (ride.pickupLocation || 'Pickup')}</Text>
-            </View>
-            <RouteIcon size={20} color={colors.greenDark} style={{ marginHorizontal: spacing.sm }} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.label}>TO</Text>
-              <Text style={styles.value} numberOfLines={1}>{headingToPickup ? (ride.pickupLocation || 'Pickup') : (ride.destination || 'Destination')}</Text>
-            </View>
-          </View>
-          <Text style={styles.status}>{routeError ? 'Using direct route preview' : `${Math.round(progress * 100)}% of this route`}</Text>
-
-          {/* Call and Message Buttons */}
-          <View style={styles.communicationButtons}>
-            <Pressable
-              style={({ pressed }) => [styles.callButton, (hoveredButton === 'call' || pressed) && styles.greenButtonHover]}
-              onPress={handleCallRider}
-              onHoverIn={() => setHoveredButton('call')}
-              onHoverOut={() => setHoveredButton(null)}
-              disabled={!ride?.riderPhone}
-              accessibilityLabel="Call rider"
+      {/* ===== MAP + INFO PANEL (map now flexes to fill space above the panel) ===== */}
+      <View style={styles.mapAndPanel}>
+        <View style={styles.mapFrame}>
+          {Platform.OS === 'web' && LeafletMap && routePoints.length > 0 ? (
+            <LeafletMap
+              style={{ height: '100%', width: '100%' }}
+              center={[startPoint.latitude, startPoint.longitude]}
+              zoom={15}
+              zoomControl={false}
+              scrollWheelZoom={false}
+              dragging={true}
+              attributionControl={false}
             >
-              {({ pressed }) => {
-                const inverted = hoveredButton === 'call' || pressed;
-                return <>
-                  <Phone size={18} color={inverted ? colors.greenDark : colors.white} strokeWidth={2} />
-                  <Text style={[styles.communicationButtonText, inverted && styles.greenButtonHoverText]}>Call Rider</Text>
-                </>;
-              }}
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [styles.messageButton, (hoveredButton === 'message' || pressed) && styles.greenButtonHover]}
-              onPress={handleMessageRider}
-              onHoverIn={() => setHoveredButton('message')}
-              onHoverOut={() => setHoveredButton(null)}
-              hitSlop={8}
-              accessibilityLabel="Message rider"
-            >
-              {({ pressed }) => {
-                const inverted = hoveredButton === 'message' || pressed;
-                return <>
-                  <MessageCircle size={18} color={inverted ? colors.greenDark : colors.white} strokeWidth={2} />
-                  <Text style={[styles.communicationButtonText, inverted && styles.greenButtonHoverText]}>Message</Text>
-                  {unreadCount > 0 && (
-                    <View pointerEvents="none" style={styles.unreadBadge}>
-                      <Text style={styles.unreadBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-                    </View>
-                  )}
-                </>;
-              }}
-            </Pressable>
-          </View>
-
-          {/* Status Buttons - Conditional Display */}
-          {showArriveButton && (
-            <TouchableOpacity
-              style={[styles.primaryButton, styles.arriveButton]}
-              onPress={() => updateStatus('ARRIVED')}
-              disabled={updating}
-            >
-              {updating ? <ActivityIndicator color={colors.white} /> : (
-                <>
-                  <Check size={19} color={colors.white} />
-                  <Text style={styles.primaryButtonText}>I Have Arrived!</Text>
-                </>
-              )}
-            </TouchableOpacity>
+              <LeafletTileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              <DriverMapUpdater routePoints={routePoints} />
+              <LeafletPolyline
+                positions={routePoints.map((point) => [point.latitude, point.longitude])}
+                pathOptions={{ color: '#2563EB', weight: 6, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }}
+              />
+              <LeafletMarker position={[startPoint.latitude, startPoint.longitude]} icon={driverLocationIcon} />
+              <LeafletMarker position={[endPoint.latitude, endPoint.longitude]} icon={pickupIcon} />
+              <LeafletMarker position={[carPosition.latitude, carPosition.longitude]} icon={markerIcon} />
+              <LeafletZoomControl position="topright" />
+            </LeafletMap>
+          ) : (
+            <View style={styles.nativeMap}>
+              <View style={styles.nativeMapContent}>
+                <Car size={48} color={colors.green} strokeWidth={1.5} />
+                <Text style={styles.nativeMapText}>Route loaded</Text>
+                <Text style={styles.nativeMapProgress}>{Math.round(progress * 100)}% to pickup</Text>
+              </View>
+            </View>
           )}
+        </View>
 
-          {showStartButton && (
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={() => updateStatus('STARTED')}
-              disabled={updating}
-            >
-              {updating ? <ActivityIndicator color={colors.white} /> : (
-                <>
-                  <Navigation size={19} color={colors.white} />
-                  <Text style={styles.primaryButtonText}>Start Trip</Text>
-                </>
+        <View style={styles.infoPanelWrapper}>
+          <View style={styles.infoPanel}>
+            <View style={styles.riderProfileRow}>
+              <View style={styles.riderAvatar}>
+                {ride.riderProfileImage ? (
+                  <Image source={{ uri: ride.riderProfileImage }} style={styles.riderAvatarImage} />
+                ) : (
+                  <Text style={styles.riderAvatarText}>{riderDisplayName.split(' ').filter(Boolean).map((part) => part[0]).slice(0, 2).join('').toUpperCase()}</Text>
+                )}
+              </View>
+              <View style={styles.riderIdentity}>
+                <Text style={styles.riderLabel}>RIDER</Text>
+                <Text style={styles.riderName} numberOfLines={1}>{riderDisplayName}</Text>
+              </View>
+              {['ACCEPTED', 'ENROUTE', 'ARRIVED', 'STARTED'].includes(phase) && (
+                <TouchableOpacity style={styles.sosButton} onPress={() => setSosVisible(true)} accessibilityRole="button" accessibilityLabel="Activate SOS alert" accessibilityHint="Alert Campus Security about this ride" testID="driver-sos-button">
+                  <Siren size={22} color={colors.white} strokeWidth={2} />
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
-          )}
+            </View>
+            <View style={styles.routeHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>FROM</Text>
+                <Text style={styles.value} numberOfLines={1}>{headingToPickup ? 'North Cape Mall' : (ride.pickupLocation || 'Pickup')}</Text>
+              </View>
+              <RouteIcon size={20} color={colors.greenDark} style={{ marginHorizontal: spacing.sm }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>TO</Text>
+                <Text style={styles.value} numberOfLines={1}>{headingToPickup ? (ride.pickupLocation || 'Pickup') : (ride.destination || 'Destination')}</Text>
+              </View>
+            </View>
+            <Text style={styles.status}>{routeError ? 'Using direct route preview' : `${Math.round(progress * 100)}% of this route`}</Text>
 
-          {showCompleteButton && (
-            <Pressable
-              style={({ pressed }) => [styles.primaryButton, styles.completeButton, (hoveredButton === 'complete' || pressed) && styles.greenButtonHover]}
-              onPress={() => updateStatus('COMPLETED')}
-              onHoverIn={() => setHoveredButton('complete')}
-              onHoverOut={() => setHoveredButton(null)}
-              disabled={updating}
-            >
-              {({ pressed }) => {
-                const inverted = hoveredButton === 'complete' || pressed;
-                return updating ? <ActivityIndicator color={inverted ? colors.greenDark : colors.white} /> : (
+            {/* Call and Message Buttons */}
+            <View style={styles.communicationButtons}>
+              <Pressable
+                style={({ pressed }) => [styles.callButton, (hoveredButton === 'call' || pressed) && styles.greenButtonHover]}
+                onPress={handleCallRider}
+                onHoverIn={() => setHoveredButton('call')}
+                onHoverOut={() => setHoveredButton(null)}
+                accessibilityLabel="Call rider"
+              >
+                {({ pressed }) => {
+                  const inverted = hoveredButton === 'call' || pressed;
+                  return <>
+                    <Phone size={18} color={inverted ? colors.greenDark : colors.white} strokeWidth={2} />
+                    <Text style={[styles.communicationButtonText, inverted && styles.greenButtonHoverText]}>Call Rider</Text>
+                  </>;
+                }}
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.messageButton, (hoveredButton === 'message' || pressed) && styles.greenButtonHover]}
+                onPress={handleMessageRider}
+                onHoverIn={() => setHoveredButton('message')}
+                onHoverOut={() => setHoveredButton(null)}
+                hitSlop={8}
+                accessibilityLabel="Message rider"
+              >
+                {({ pressed }) => {
+                  const inverted = hoveredButton === 'message' || pressed;
+                  return <>
+                    <MessageCircle size={18} color={inverted ? colors.greenDark : colors.white} strokeWidth={2} />
+                    <Text style={[styles.communicationButtonText, inverted && styles.greenButtonHoverText]}>Message</Text>
+                    {unreadCount > 0 && (
+                      <View pointerEvents="none" style={styles.unreadBadge}>
+                        <Text style={styles.unreadBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                      </View>
+                    )}
+                  </>;
+                }}
+              </Pressable>
+            </View>
+
+            {/* Status Buttons - Conditional Display */}
+            {showArriveButton && (
+              <TouchableOpacity
+                style={[styles.primaryButton, styles.arriveButton]}
+                onPress={() => updateStatus('ARRIVED')}
+                disabled={updating}
+              >
+                {updating ? <ActivityIndicator color={colors.white} /> : (
                   <>
-                    <Check size={19} color={inverted ? colors.greenDark : colors.white} />
-                    <Text style={[styles.primaryButtonText, inverted && styles.greenButtonHoverText]}>Complete Trip</Text>
+                    <Check size={19} color={colors.white} />
+                    <Text style={styles.primaryButtonText}>I Have Arrived!</Text>
                   </>
-                );
-              }}
-            </Pressable>
-          )}
+                )}
+              </TouchableOpacity>
+            )}
 
-          <Text style={styles.helper}>
-            {showArriveButton 
-              ? 'You are arriving at the pickup point!' 
-              : headingToPickup 
-              ? 'Follow the moving car to the rider pickup point.' 
-              : showStartButton
-              ? 'The rider is ready. Start the trip to the destination.'
-              : 'Drive the rider to the destination.'}
-          </Text>
+            {showStartButton && (
+              <TouchableOpacity
+                style={styles.primaryButton}
+                onPress={() => updateStatus('STARTED')}
+                disabled={updating}
+              >
+                {updating ? <ActivityIndicator color={colors.white} /> : (
+                  <>
+                    <Navigation size={19} color={colors.white} />
+                    <Text style={styles.primaryButtonText}>Start Trip</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {showCompleteButton && (
+              <Pressable
+                style={({ pressed }) => [styles.primaryButton, styles.completeButton, (hoveredButton === 'complete' || pressed) && styles.greenButtonHover]}
+                onPress={() => updateStatus('COMPLETED')}
+                onHoverIn={() => setHoveredButton('complete')}
+                onHoverOut={() => setHoveredButton(null)}
+                disabled={updating}
+              >
+                {({ pressed }) => {
+                  const inverted = hoveredButton === 'complete' || pressed;
+                  return updating ? <ActivityIndicator color={inverted ? colors.greenDark : colors.white} /> : (
+                    <>
+                      <Check size={19} color={inverted ? colors.greenDark : colors.white} />
+                      <Text style={[styles.primaryButtonText, inverted && styles.greenButtonHoverText]}>Complete Trip</Text>
+                    </>
+                  );
+                }}
+              </Pressable>
+            )}
+
+            {!['COMPLETED', 'CANCELLED'].includes(phase) && (
+              <TouchableOpacity style={styles.cancelRideButton} onPress={openCancellationDialog} disabled={updating || cancelSubmitting}>
+                <X size={17} color={colors.red} />
+                <Text style={styles.cancelRideButtonText}>Cancel ride</Text>
+              </TouchableOpacity>
+            )}
+
+            <Text style={styles.helper}>
+              {showArriveButton
+                ? 'You are arriving at the pickup point!'
+                : headingToPickup
+                ? 'Follow the moving car to the rider pickup point.'
+                : showStartButton
+                ? 'The rider is ready. Start the trip to the destination.'
+                : 'Drive the rider to the destination.'}
+            </Text>
+          </View>
         </View>
       </View>
     </View>
@@ -545,20 +746,67 @@ export default function DriverActiveRideScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, position: 'relative', backgroundColor: colors.gray50 },
+  container: { flex: 1, minWidth: 0, minHeight: 0, position: 'relative', backgroundColor: colors.gray50 },
+
+  // ===== Rating modal =====
+  ratingBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, backgroundColor: 'rgba(15,23,42,0.55)' },
+  ratingCard: { width: '100%', maxWidth: 380, padding: spacing.xl, backgroundColor: colors.white, borderRadius: radius.lg, ...shadow.lg },
+  ratingTitle: { textAlign: 'center', color: colors.gray900, fontFamily: font.bold, fontSize: 20 },
+  ratingRiderImage: { alignSelf: 'center', width: 64, height: 64, borderRadius: 32, marginTop: spacing.md },
+  ratingSubtitle: { textAlign: 'center', color: colors.gray600, fontFamily: font.regular, fontSize: 13, marginTop: spacing.sm },
+  ratingStars: { flexDirection: 'row', justifyContent: 'center', gap: spacing.sm, marginVertical: spacing.xl },
+  ratingStarButton: { padding: 2 },
+  ratingSubmitButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.green, borderRadius: radius.md },
+  ratingSubmitDisabled: { opacity: 0.5 },
+  ratingSubmitText: { color: colors.white, fontFamily: font.bold, fontSize: 14 },
+
+  // ===== Cancel dialog =====
+  cancelDialogBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, backgroundColor: 'rgba(15,23,42,0.55)' },
+  cancelDialogCard: { width: '100%', maxWidth: 400, padding: spacing.xl, borderRadius: radius.lg, backgroundColor: colors.white, ...shadow.lg },
+  cancelDialogIcon: { width: 42, height: 42, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: '#FEE2E2', marginBottom: spacing.md },
+  cancelDialogTitle: { color: colors.gray900, fontFamily: font.bold, fontSize: 19, textAlign: 'center' },
+  cancelDialogSubtitle: { color: colors.gray600, fontFamily: font.regular, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: spacing.xs },
+  cancelReasonInput: { minHeight: 104, maxHeight: 150, marginTop: spacing.md, padding: spacing.md, borderWidth: 1, borderColor: colors.gray200, borderRadius: radius.md, backgroundColor: colors.gray50, color: colors.gray900, fontFamily: font.regular, fontSize: 14 },
+  cancelReasonCount: { color: colors.gray400, fontFamily: font.medium, fontSize: 10, textAlign: 'right', marginTop: 4 },
+  cancelDialogActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
+  cancelKeepButton: { flex: 1, minHeight: 46, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.gray100 },
+  cancelKeepText: { color: colors.gray800, fontFamily: font.bold, fontSize: 13 },
+  cancelConfirmButton: { flex: 1, minHeight: 46, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.red },
+  cancelConfirmDisabled: { opacity: 0.5 },
+  cancelConfirmText: { color: colors.white, fontFamily: font.bold, fontSize: 13 },
+  cancelNoticeCard: { width: '100%', maxWidth: 360, padding: spacing.xl, alignItems: 'center', borderRadius: radius.lg, backgroundColor: colors.white, ...shadow.lg },
+  cancelNoticeIcon: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 23, backgroundColor: colors.green, marginBottom: spacing.md },
+  cancelNoticeText: { color: colors.gray700, fontFamily: font.medium, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: spacing.sm },
+  cancelNoticeHint: { color: colors.gray400, fontFamily: font.medium, fontSize: 11, textAlign: 'center', marginTop: spacing.md },
+  cancelRideButton: { minHeight: 48, marginTop: spacing.md, borderWidth: 1, borderColor: colors.red, borderRadius: radius.md, backgroundColor: colors.white, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  cancelRideButtonText: { color: colors.red, fontFamily: font.bold, fontSize: 14 },
+
+  // ===== Chat overlay =====
   chatOverlay: { flex: 1, justifyContent: 'flex-end' },
   chatBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(15,23,42,0.34)' },
   chatSheet: { height: '88%', overflow: 'hidden', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: colors.gray50 },
+
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   errorText: { color: colors.red, fontFamily: font.semibold },
+
+  // ===== Header =====
   header: { flexDirection: 'row', alignItems: 'center', padding: spacing.lg, paddingTop: spacing.xl, backgroundColor: colors.white, ...shadow.sm },
   iconButton: { padding: spacing.sm, marginRight: spacing.sm },
   headerText: { flex: 1 },
   eyebrow: { color: colors.greenDark, fontFamily: font.bold, fontSize: 10, letterSpacing: 0.7 },
   title: { color: colors.gray900, fontFamily: font.bold, fontSize: 20, marginTop: 3 },
+
+  // ===== Map + Info Panel (new layout) =====
+  // Parent column: map takes all remaining space, info panel sits naturally at the bottom.
+  mapAndPanel: {
+    flex: 1,
+    flexDirection: 'column',
+    backgroundColor: colors.gray50,
+  },
+  // Map grows to fill the space above the info panel — route is fully visible.
   mapFrame: {
     flex: 1,
-    minHeight: 300,
+    minHeight: 320,
     overflow: 'hidden',
     backgroundColor: colors.greenLight,
     zIndex: 0,
@@ -567,11 +815,10 @@ const styles = StyleSheet.create({
   nativeMapContent: { alignItems: 'center', justifyContent: 'center' },
   nativeMapText: { marginTop: spacing.md, color: colors.gray700, fontFamily: font.medium },
   nativeMapProgress: { marginTop: 2, color: colors.greenDark, fontFamily: font.semibold },
+
+  // Info panel is a normal flex child now — no overlap with the map.
   infoPanelWrapper: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+    flexShrink: 0,
     zIndex: 20,
     elevation: 20,
     backgroundColor: colors.white,
@@ -579,13 +826,21 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radius.xl,
     ...shadow.lg,
   },
-  infoPanel: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.xl },
+  infoPanel: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.lg },
+  riderProfileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
+  riderAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.blue, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  riderAvatarImage: { width: '100%', height: '100%' },
+  riderAvatarText: { color: colors.white, fontFamily: font.bold, fontSize: 15 },
+  riderIdentity: { flex: 1, minWidth: 0 },
+  sosButton: { width: 44, height: 44, borderRadius: 22, flexShrink: 0, backgroundColor: colors.red, alignItems: 'center', justifyContent: 'center' },
+  riderLabel: { color: colors.gray400, fontFamily: font.bold, fontSize: 10 },
+  riderName: { color: colors.gray900, fontFamily: font.semibold, fontSize: 14, marginTop: 2 },
   routeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   label: { color: colors.gray400, fontFamily: font.bold, fontSize: 10, letterSpacing: 0.7 },
   value: { color: colors.gray900, fontFamily: font.semibold, fontSize: 14, marginTop: 4, maxWidth: 170 },
   status: { color: colors.gray500, fontFamily: font.medium, fontSize: 12, marginTop: spacing.lg, marginBottom: spacing.md },
-  
-  // Communication Buttons
+
+  // ===== Communication buttons =====
   communicationButtons: {
     flexDirection: 'row',
     gap: spacing.md,
@@ -635,7 +890,8 @@ const styles = StyleSheet.create({
   },
   greenButtonHover: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.green },
   greenButtonHoverText: { color: colors.greenDark },
-  
+
+  // ===== Primary action buttons =====
   primaryButton: { minHeight: 52, marginTop: spacing.md, borderRadius: radius.md, backgroundColor: colors.greenDark, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   arriveButton: { backgroundColor: colors.green },
   completeButton: { backgroundColor: colors.green },

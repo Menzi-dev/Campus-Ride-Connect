@@ -1,7 +1,10 @@
 // mobile/src/navigation/AppNavigator.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
+import AppLayout from '../components/AppLayout';
+import { isRiderTab, RiderTab } from '../components/BottomNav';
+import { usesNativeHeader } from './screenChrome';
 import LandingScreen from '../screens/LandingScreen';
 import LoginScreen from '../screens/LoginScreen';
 import CreateAccountScreen from '../screens/CreateAccountScreen';
@@ -55,14 +58,22 @@ type RootStackParamList = {
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
+const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 export default function AppNavigator() {
+  const [routeName, setRouteName] = useState('Landing');
+  const updateRoute = () => setRouteName(navigationRef.getCurrentRoute()?.name || 'Landing');
+  const selectTab = (tab: RiderTab) => {
+    if (!navigationRef.isReady()) return;
+    navigationRef.resetRoot({ index: 0, routes: [{ name: tab, ...(tab === 'Home' ? { params: { skipActiveRideRestore: true } } : {}) }] });
+  };
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef} onReady={updateRoute} onStateChange={updateRoute}>
+      <AppLayout routeName={routeName} onSelectTab={selectTab}>
       <Stack.Navigator
         id="root"
         initialRouteName="Landing"
-        screenOptions={{ headerShown: false }}
+        screenOptions={({ route }) => ({ headerShown: usesNativeHeader(route.name), animationEnabled: !isRiderTab(route.name), cardStyle: { flex: 1, minHeight: 0, minWidth: 0 } })}
       >
         <Stack.Screen name="Landing" component={LandingScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
@@ -91,6 +102,7 @@ export default function AppNavigator() {
         <Stack.Screen name="RiderProfile" component={ProfileScreen} />
         <Stack.Screen name="RiderPaymentMethods" component={PaymentMethodsScreen} />
       </Stack.Navigator>
+      </AppLayout>
     </NavigationContainer>
   );
 }

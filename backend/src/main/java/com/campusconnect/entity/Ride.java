@@ -65,11 +65,23 @@ public class Ride {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Column(name = "cancellation_reason", length = 500)
+    private String cancellationReason;
+
+    @Column(name = "cancelled_by")
+    private Long cancelledBy;
+
     @Column(name = "rider_rating")
     private Integer riderRating;
 
     @Column(name = "rider_rating_comment", length = 500)
     private String riderRatingComment;
+
+    @Column(name = "driver_rating")
+    private Integer driverRating;
+
+    @Column(name = "driver_rating_comment", length = 500)
+    private String driverRatingComment;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -137,11 +149,23 @@ public class Ride {
     public LocalDateTime getCompletedAt() { return completedAt; }
     public void setCompletedAt(LocalDateTime completedAt) { this.completedAt = completedAt; }
 
+    public String getCancellationReason() { return cancellationReason; }
+    public void setCancellationReason(String cancellationReason) { this.cancellationReason = cancellationReason; }
+
+    public Long getCancelledBy() { return cancelledBy; }
+    public void setCancelledBy(Long cancelledBy) { this.cancelledBy = cancelledBy; }
+
     public Integer getRiderRating() { return riderRating; }
     public void setRiderRating(Integer riderRating) { this.riderRating = riderRating; }
 
     public String getRiderRatingComment() { return riderRatingComment; }
     public void setRiderRatingComment(String riderRatingComment) { this.riderRatingComment = riderRatingComment; }
+
+    public Integer getDriverRating() { return driverRating; }
+    public void setDriverRating(Integer driverRating) { this.driverRating = driverRating; }
+
+    public String getDriverRatingComment() { return driverRatingComment; }
+    public void setDriverRatingComment(String driverRatingComment) { this.driverRatingComment = driverRatingComment; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

@@ -2,16 +2,20 @@ import 'react-native-gesture-handler';
 import React from 'react';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, TouchableOpacity, View } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastProvider } from './src/components/Toast';
+import AppLayout from './src/components/AppLayout';
+import { isRiderTab, RiderTab } from './src/components/BottomNav';
+import { usesNativeHeader } from './src/navigation/screenChrome';
 
 // Import Screens
 import LandingScreen from './src/screens/LandingScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import CreateAccountScreen from './src/screens/CreateAccountScreen';
+import LegalDocumentScreen from './src/screens/LegalDocumentScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import TestConnectionScreen from './src/screens/TestConnectionScreen';
 import AdminDashboardScreen from './src/screens/AdminDashboardScreen';
@@ -37,12 +41,13 @@ import ActiveRidesMonitorScreen from './src/screens/ActiveRidesMonitorScreen';
 import SosAlertsScreen from './src/screens/SosAlertsScreen';
 import ResolvedSosScreen from './src/screens/ResolvedSosScreen';
 import UniversitySettingsScreen from './src/screens/UniversitySettingsScreen';
-import { ArrowLeft, ArrowRight } from 'lucide-react-native';
+import { ArrowLeft } from 'lucide-react-native';
 
 type RootStackParamList = {
   Landing: undefined;
   Login: undefined;
   CreateAccount: undefined;
+  Legal: { document: 'terms' | 'privacy' };
   FaceVerification: { fullName?: string; email?: string } | undefined;
   AdminDashboard: undefined;
   UserManagement: undefined;
@@ -75,9 +80,16 @@ type RootStackParamList = {
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
+const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 export default function App() {
   const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
+  const [routeName, setRouteName] = useState('Landing');
+  const updateRoute = () => setRouteName(navigationRef.getCurrentRoute()?.name || 'Landing');
+  const selectTab = (tab: RiderTab) => {
+    if (!navigationRef.isReady()) return;
+    navigationRef.resetRoot({ index: 0, routes: [{ name: tab, ...(tab === 'Home' ? { params: { skipActiveRideRestore: true } } : {}) }] });
+  };
 
   useEffect(() => {
     setInitialRoute('Landing');
@@ -97,15 +109,17 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#ffffff' }}>
       <SafeAreaProvider>
         <ToastProvider>
-          <NavigationContainer>
+          <NavigationContainer ref={navigationRef} onReady={updateRoute} onStateChange={updateRoute}>
+            <AppLayout routeName={routeName} onSelectTab={selectTab}>
             <Stack.Navigator
               id="Main"
               initialRouteName={initialRoute}
               screenOptions={({ navigation, route }) => ({
-                cardStyle: { backgroundColor: '#ffffff' },
+                cardStyle: { backgroundColor: '#ffffff', flex: 1, minHeight: 0, minWidth: 0 },
                 headerStyle: { backgroundColor: '#ffffff' },
                 headerTitle: '',
-                headerShown: route.name !== 'Landing' && route.name !== 'Home',
+                headerShown: usesNativeHeader(route.name),
+                animationEnabled: !isRiderTab(route.name),
                 headerLeft: ({ canGoBack }) => canGoBack ? (
                   <TouchableOpacity
                     onPress={() => navigation.goBack()}
@@ -116,21 +130,12 @@ export default function App() {
                     <ArrowLeft size={22} color="#1f2937" strokeWidth={2.2} />
                   </TouchableOpacity>
                 ) : null,
-                headerRight: route.name === 'Login' ? () => (
-                  <TouchableOpacity
-                    onPress={() => navigation.navigate('CreateAccount')}
-                    accessibilityLabel="Continue to create account"
-                    hitSlop={12}
-                    style={{ paddingHorizontal: 18, paddingVertical: 8 }}
-                  >
-                    <ArrowRight size={22} color="#16a34a" strokeWidth={2.2} />
-                  </TouchableOpacity>
-                ) : undefined,
               })}
             >
               <Stack.Screen name="Landing" component={LandingScreen} />
               <Stack.Screen name="Login" component={LoginScreen} />
               <Stack.Screen name="CreateAccount" component={CreateAccountScreen} />
+              <Stack.Screen name="Legal" component={LegalDocumentScreen} />
               <Stack.Screen name="FaceVerification" component={FaceVerificationScreen} />
               <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
               <Stack.Screen name="UserManagement" component={UserManagementScreen} />
@@ -157,6 +162,7 @@ export default function App() {
               <Stack.Screen name="RatingDriver" component={RatingDriverScreen} />
               <Stack.Screen name="Chat" component={ChatScreen} />
             </Stack.Navigator>
+            </AppLayout>
           </NavigationContainer>
         </ToastProvider>
       </SafeAreaProvider>

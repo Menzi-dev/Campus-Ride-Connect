@@ -81,7 +81,7 @@ export default function ResolvedSosScreen() {
           </View>
         ) : visibleAlerts.map((alert) => (
           <View style={styles.alertCard} key={alert.id}>
-            <View>
+            <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.reference}>{alert.reference}</Text>
               <Text style={styles.alertText}>{alert.riderName || 'Unknown rider'} · {formatDate(alert.createdAt)}</Text>
             </View>
@@ -96,7 +96,7 @@ export default function ResolvedSosScreen() {
           disabled={safePage === 0}
         >
           <ChevronLeft size={18} color={safePage === 0 ? colors.gray400 : colors.gray800} />
-          <Text style={[styles.pageButtonText, safePage === 0 && styles.disabledText]}>Back</Text>
+          <Text style={[styles.pageButtonText, safePage === 0 && styles.disabledText]}>Previous</Text>
         </TouchableOpacity>
         <Text style={styles.pageCount}>Page {safePage + 1} of {pageCount}</Text>
         <TouchableOpacity
@@ -114,13 +114,13 @@ export default function ResolvedSosScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.gray50 },
+  container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
   header: { padding: spacing.lg, paddingBottom: spacing.md, backgroundColor: colors.white, borderBottomWidth: 1, borderBottomColor: colors.gray200 },
   kicker: { color: colors.blue, fontFamily: font.bold, fontSize: 10, letterSpacing: 0.5 },
   title: { color: colors.gray900, fontFamily: font.extrabold, fontSize: 23, marginTop: spacing.xs },
   subtitle: { color: colors.gray500, fontFamily: font.regular, fontSize: 12, marginTop: spacing.xs },
   list: { flex: 1, marginHorizontal: spacing.lg },
-  listContent: { paddingTop: spacing.md, paddingBottom: 150 },
+  listContent: { paddingTop: spacing.md, paddingBottom: spacing.lg },
   loader: { marginTop: spacing.xxxl },
   alertCard: { backgroundColor: colors.white, padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.gray200, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   reference: { color: colors.gray900, fontFamily: font.extrabold, fontSize: 15 },
@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
   emptyTitle: { color: colors.gray600, fontFamily: font.semibold, fontSize: 14, textAlign: 'center' },
   retryButton: { marginTop: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.full, backgroundColor: colors.blue, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   retryText: { color: colors.white, fontFamily: font.semibold, fontSize: 13 },
-  pagination: { position: 'absolute', left: 0, right: 0, bottom: 72, height: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, borderTopWidth: 1, borderTopColor: colors.gray200, backgroundColor: colors.gray50, zIndex: 10, elevation: 10 },
+  pagination: { flexShrink: 0, minHeight: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, borderTopWidth: 1, borderTopColor: colors.gray200, backgroundColor: colors.gray50, zIndex: 10, elevation: 10 },
   pageButton: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.gray200, ...shadow.sm },
   disabledButton: { backgroundColor: colors.gray100, borderColor: colors.gray100 },
   pageButtonText: { color: colors.gray800, fontFamily: font.semibold, fontSize: 13 },

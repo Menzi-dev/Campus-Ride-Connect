@@ -7,7 +7,10 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, spacing, font } from '../theme/theme';
 
 type BottomSheetModalProps = {
@@ -19,21 +22,24 @@ type BottomSheetModalProps = {
 };
 
 export default function BottomSheetModal({ visible, onClose, title, subtitle, children }: BottomSheetModalProps) {
+  const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.overlay} />
       </TouchableWithoutFeedback>
-      <View style={styles.sheet}>
+      <KeyboardAvoidingView style={styles.sheetPosition} behavior={Platform.OS === 'ios' ? 'padding' : undefined} pointerEvents="box-none">
+      <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.md), paddingLeft: spacing.lg + insets.left, paddingRight: spacing.lg + insets.right }]}>
         <View style={styles.handle} />
         <Text style={styles.title}>{title}</Text>
         {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         <View style={styles.divider} />
-        <ScrollView contentContainerStyle={styles.content}>{children}</ScrollView>
+        <ScrollView style={{ minHeight: 0, flexShrink: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>{children}</ScrollView>
         <TouchableOpacity style={styles.closeButton} onPress={onClose} activeOpacity={0.8}>
           <Text style={styles.closeText}>Close</Text>
         </TouchableOpacity>
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -43,15 +49,15 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
+  sheetPosition: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end', alignItems: 'center' },
   sheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    width: '100%',
+    maxWidth: 640,
+    minHeight: 0,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     backgroundColor: colors.white,
-    maxHeight: '70%',
+    maxHeight: '85%',
     paddingTop: spacing.lg,
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xl,

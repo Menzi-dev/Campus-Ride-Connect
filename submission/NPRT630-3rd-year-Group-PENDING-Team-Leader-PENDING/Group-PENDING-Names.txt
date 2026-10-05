@@ -1,0 +1,10 @@
+Name and surname | Student number | Contribution
+Member 1: PENDING | PENDING | PENDING
+Member 2: PENDING | PENDING | PENDING
+Member 3: PENDING | PENDING | PENDING
+Member 4: PENDING | PENDING | PENDING
+
+Add members 5–6 if applicable.
+Group number: PENDING
+Team leader: PENDING
+Link to FORKED git repository: PENDING

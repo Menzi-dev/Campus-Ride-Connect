@@ -1,0 +1,98 @@
+﻿Table,Field,Type,Length / precision,Description,Source,Certainty
+messages,message_id,BIGINT,not specified,Primary key,backend/src/main/java/com/campusconnect/entity/ChatMessage.java,JPA logical mapping; live DDL not inspected
+messages,ride_id,BIGINT,not specified,ride Id,backend/src/main/java/com/campusconnect/entity/ChatMessage.java,JPA logical mapping; live DDL not inspected
+messages,sender_id,BIGINT,not specified,sender Id,backend/src/main/java/com/campusconnect/entity/ChatMessage.java,JPA logical mapping; live DDL not inspected
+messages,message_text,VARCHAR,1000,message Text,backend/src/main/java/com/campusconnect/entity/ChatMessage.java,JPA logical mapping; live DDL not inspected
+messages,sent_at,DATETIME,not specified,sent At,backend/src/main/java/com/campusconnect/entity/ChatMessage.java,JPA logical mapping; live DDL not inspected
+drivers,driver_id,BIGINT,not specified,Primary key,backend/src/main/java/com/campusconnect/entity/Driver.java,JPA logical mapping; live DDL not inspected
+drivers,user_id,BIGINT,not specified,user Id,backend/src/main/java/com/campusconnect/entity/Driver.java,JPA logical mapping; live DDL not inspected
+drivers,licence_plate,VARCHAR,255 (JPA default),licence Plate,backend/src/main/java/com/campusconnect/entity/Driver.java,JPA logical mapping; live DDL not inspected
+drivers,vehicle_make,VARCHAR,255 (JPA default),vehicle Make,backend/src/main/java/com/campusconnect/entity/Driver.java,JPA logical mapping; live DDL not inspected
+drivers,vehicle_year,INT,not specified,vehicle Year,backend/src/main/java/com/campusconnect/entity/Driver.java,JPA logical mapping; live DDL not inspected
+drivers,vehicle_photo,LONGTEXT,variable,vehicle Photo,backend/src/main/java/com/campusconnect/entity/Driver.java,JPA logical mapping; live DDL not inspected
+drivers,rating,DECIMAL (precision unspecified),not specified,rating,backend/src/main/java/com/campusconnect/entity/Driver.java,JPA logical mapping; live DDL not inspected
+drivers,total_trips,INT,not specified,total Trips,backend/src/main/java/com/campusconnect/entity/Driver.java,JPA logical mapping; live DDL not inspected
+drivers,online,BOOLEAN,not specified,online,backend/src/main/java/com/campusconnect/entity/Driver.java,JPA logical mapping; live DDL not inspected
+drivers,approval_status,ENUM ApprovalStatus,not specified,approval Status,backend/src/main/java/com/campusconnect/entity/Driver.java,JPA logical mapping; live DDL not inspected
+password_reset_codes,id,BIGINT,not specified,Primary key,backend/src/main/java/com/campusconnect/entity/PasswordResetCode.java,JPA logical mapping; live DDL not inspected
+password_reset_codes,email,VARCHAR,255,email,backend/src/main/java/com/campusconnect/entity/PasswordResetCode.java,JPA logical mapping; live DDL not inspected
+password_reset_codes,code_hash,VARCHAR,255,code Hash,backend/src/main/java/com/campusconnect/entity/PasswordResetCode.java,JPA logical mapping; live DDL not inspected
+password_reset_codes,expires_at,DATETIME,not specified,expires At,backend/src/main/java/com/campusconnect/entity/PasswordResetCode.java,JPA logical mapping; live DDL not inspected
+password_reset_codes,created_at,DATETIME,not specified,created At,backend/src/main/java/com/campusconnect/entity/PasswordResetCode.java,JPA logical mapping; live DDL not inspected
+password_reset_codes,attempts,INT,not specified,attempts,backend/src/main/java/com/campusconnect/entity/PasswordResetCode.java,JPA logical mapping; live DDL not inspected
+rides,ride_id,BIGINT,not specified,Primary key,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,rider_id,BIGINT,not specified,rider Id,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,driver_id,BIGINT,not specified,driver Id,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,pickup_location,VARCHAR,255 (JPA default),pickup Location,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,destination,VARCHAR,255 (JPA default),destination,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,pickup_lat,DOUBLE,not specified,pickup Lat,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,pickup_lng,DOUBLE,not specified,pickup Lng,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,dest_lat,DOUBLE,not specified,dest Lat,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,dest_lng,DOUBLE,not specified,dest Lng,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,current_lat,DOUBLE,not specified,current Lat,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,current_lng,DOUBLE,not specified,current Lng,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,fare,DECIMAL (precision unspecified),not specified,fare,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,distance_km,DOUBLE,not specified,distance Km,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,duration_min,DOUBLE,not specified,duration Minutes,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,status,ENUM RideStatus,not specified,status,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,scheduled_at,DATETIME,not specified,scheduled At,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,started_at,DATETIME,not specified,started At,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,completed_at,DATETIME,not specified,completed At,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,cancellation_reason,VARCHAR,500,cancellation Reason,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,cancelled_by,BIGINT,not specified,cancelled By,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,rider_rating,INT,not specified,rider Rating,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,rider_rating_comment,VARCHAR,500,rider Rating Comment,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,driver_rating,INT,not specified,driver Rating,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,driver_rating_comment,VARCHAR,500,driver Rating Comment,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+rides,created_at,DATETIME,not specified,created At,backend/src/main/java/com/campusconnect/entity/Ride.java,JPA logical mapping; live DDL not inspected
+sos_alerts,alert_id,BIGINT,not specified,Primary key,backend/src/main/java/com/campusconnect/entity/SosAlert.java,JPA logical mapping; live DDL not inspected
+sos_alerts,ride_id,BIGINT,not specified,ride Id,backend/src/main/java/com/campusconnect/entity/SosAlert.java,JPA logical mapping; live DDL not inspected
+sos_alerts,triggered_by,BIGINT,not specified,triggered By,backend/src/main/java/com/campusconnect/entity/SosAlert.java,JPA logical mapping; live DDL not inspected
+sos_alerts,gps_lat,DOUBLE,not specified,gps Lat,backend/src/main/java/com/campusconnect/entity/SosAlert.java,JPA logical mapping; live DDL not inspected
+sos_alerts,gps_lng,DOUBLE,not specified,gps Lng,backend/src/main/java/com/campusconnect/entity/SosAlert.java,JPA logical mapping; live DDL not inspected
+sos_alerts,audio_file_path,VARCHAR,500,audio File Path,backend/src/main/java/com/campusconnect/entity/SosAlert.java,JPA logical mapping; live DDL not inspected
+sos_alerts,recording_duration,INT,not specified,recording Duration,backend/src/main/java/com/campusconnect/entity/SosAlert.java,JPA logical mapping; live DDL not inspected
+sos_alerts,status,VARCHAR,30,status,backend/src/main/java/com/campusconnect/entity/SosAlert.java,JPA logical mapping; live DDL not inspected
+sos_alerts,created_at,DATETIME,not specified,created At,backend/src/main/java/com/campusconnect/entity/SosAlert.java,JPA logical mapping; live DDL not inspected
+users,user_id,BIGINT,not specified,Primary key,backend/src/main/java/com/campusconnect/entity/User.java,JPA logical mapping; live DDL not inspected
+users,full_name,VARCHAR,255 (JPA default),full Name,backend/src/main/java/com/campusconnect/entity/User.java,JPA logical mapping; live DDL not inspected
+users,email,VARCHAR,255 (JPA default),email,backend/src/main/java/com/campusconnect/entity/User.java,JPA logical mapping; live DDL not inspected
+users,password_hash,VARCHAR,255 (JPA default),password Hash,backend/src/main/java/com/campusconnect/entity/User.java,JPA logical mapping; live DDL not inspected
+users,role,ENUM Role,not specified,role,backend/src/main/java/com/campusconnect/entity/User.java,JPA logical mapping; live DDL not inspected
+users,year_of_study,INT,not specified,year Of Study,backend/src/main/java/com/campusconnect/entity/User.java,JPA logical mapping; live DDL not inspected
+users,emergency_contact,VARCHAR,255 (JPA default),emergency Contact,backend/src/main/java/com/campusconnect/entity/User.java,JPA logical mapping; live DDL not inspected
+users,student_number,VARCHAR,255 (JPA default),student Number,backend/src/main/java/com/campusconnect/entity/User.java,JPA logical mapping; live DDL not inspected
+users,phone,VARCHAR,255 (JPA default),phone,backend/src/main/java/com/campusconnect/entity/User.java,JPA logical mapping; live DDL not inspected
+users,profile_photo,LONGTEXT,variable,profile Photo,backend/src/main/java/com/campusconnect/entity/User.java,JPA logical mapping; live DDL not inspected
+users,licence_plate,VARCHAR,255 (JPA default),licence Plate,backend/src/main/java/com/campusconnect/entity/User.java,JPA logical mapping; live DDL not inspected
+users,vehicle_make,VARCHAR,255 (JPA default),vehicle Make,backend/src/main/java/com/campusconnect/entity/User.java,JPA logical mapping; live DDL not inspected
+users,vehicle_year,INT,not specified,vehicle Year,backend/src/main/java/com/campusconnect/entity/User.java,JPA logical mapping; live DDL not inspected
+users,face_verified,BOOLEAN,not specified,face Verified,backend/src/main/java/com/campusconnect/entity/User.java,JPA logical mapping; live DDL not inspected
+users,face_embedding,TEXT,variable,face Embedding,backend/src/main/java/com/campusconnect/entity/User.java,JPA logical mapping; live DDL not inspected
+users,status,ENUM UserStatus,not specified,status,backend/src/main/java/com/campusconnect/entity/User.java,JPA logical mapping; live DDL not inspected
+users,created_at,DATETIME,not specified,created At,backend/src/main/java/com/campusconnect/entity/User.java,JPA logical mapping; live DDL not inspected
+users,default_payment_method,VARCHAR,20,Default payment preference,database/mysql/schema.sql,SQL source; live DDL not inspected
+sos_alerts,resolved_at,DATETIME,-,Resolution time,database/mysql/schema.sql,SQL source; live DDL not inspected
+sos_alerts,resolved_by,BIGINT,-,Resolving user ID,database/mysql/schema.sql,SQL source; live DDL not inspected
+user_payment_methods,id,BIGINT,-,Primary key,database/mysql/schema.sql,SQL source; live DDL not inspected
+user_payment_methods,user_id,BIGINT,-,Owning user,database/mysql/schema.sql,SQL source; live DDL not inspected
+user_payment_methods,label,VARCHAR,80,Display label,database/mysql/schema.sql,SQL source; live DDL not inspected
+user_payment_methods,last_four,CHAR,4,Last four digits,database/mysql/schema.sql,SQL source; live DDL not inspected
+user_payment_methods,brand,VARCHAR,32,Card brand,database/mysql/schema.sql,SQL source; live DDL not inspected
+user_payment_methods,expiry,CHAR,5,MM/YY expiry,database/mysql/schema.sql,SQL source; live DDL not inspected
+user_payment_methods,cardholder,VARCHAR,120,Display name,database/mysql/schema.sql,SQL source; live DDL not inspected
+user_payment_methods,is_default,BOOLEAN,-,Default flag,database/mysql/schema.sql,SQL source; live DDL not inspected
+user_payment_methods,created_at,DATETIME,-,Creation time,database/mysql/schema.sql,SQL source; live DDL not inspected
+admin_platform_settings,id,BIGINT,-,Primary key,backend/src/main/java/com/campusconnect/CampusConnectApplication.java,SQL source; live DDL not inspected
+admin_platform_settings,university_name,VARCHAR,160,Institution label,backend/src/main/java/com/campusconnect/CampusConnectApplication.java,SQL source; live DDL not inspected
+admin_platform_settings,email_domain,VARCHAR,120,Configured email domain,backend/src/main/java/com/campusconnect/CampusConnectApplication.java,SQL source; live DDL not inspected
+admin_platform_settings,campus_security_phone,VARCHAR,40,Configured phone,backend/src/main/java/com/campusconnect/CampusConnectApplication.java,SQL source; live DDL not inspected
+admin_platform_settings,sos_response_time_seconds,INT,-,Configuration target,backend/src/main/java/com/campusconnect/CampusConnectApplication.java,SQL source; live DDL not inspected
+admin_platform_settings,first_year_priority_matching,BOOLEAN,-,Configured preference,backend/src/main/java/com/campusconnect/CampusConnectApplication.java,SQL source; live DDL not inspected
+admin_platform_settings,updated_at,DATETIME,-,Last save,backend/src/main/java/com/campusconnect/CampusConnectApplication.java,SQL source; live DDL not inspected
+payments,ride_id,ID type unverified,UNVERIFIED,Trip,backend/src/main/java/com/campusconnect/controller/PaymentController.java,Insert contract only; creation DDL missing
+payments,payer_id,ID type unverified,UNVERIFIED,Payer,backend/src/main/java/com/campusconnect/controller/PaymentController.java,Insert contract only; creation DDL missing
+payments,amount,Numeric type unverified,UNVERIFIED,Fare record,backend/src/main/java/com/campusconnect/controller/PaymentController.java,Insert contract only; creation DDL missing
+payments,method,ENUM/string unverified,UNVERIFIED,CASH/CARD; expanded enum migration,backend/src/main/java/com/campusconnect/controller/PaymentController.java,Insert contract only; creation DDL missing
+payments,status,String/enum unverified,UNVERIFIED,PENDING inserted,backend/src/main/java/com/campusconnect/controller/PaymentController.java,Insert contract only; creation DDL missing
+payments,transaction_ref,String unverified,UNVERIFIED,Reference; no settlement,backend/src/main/java/com/campusconnect/controller/PaymentController.java,Insert contract only; creation DDL missing

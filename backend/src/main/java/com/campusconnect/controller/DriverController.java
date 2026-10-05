@@ -174,7 +174,10 @@ public class DriverController {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
             "SELECT r.ride_id AS id, r.pickup_location AS pickup, r.destination, r.fare, " +
                 "COALESCE(r.completed_at, r.updated_at, r.created_at) AS completedAt, " +
-                "u.full_name AS riderName FROM rides r LEFT JOIN users u ON u.user_id = r.rider_id " +
+                "u.full_name AS riderName, r.rider_rating AS riderRating, " +
+                "r.rider_rating_comment AS riderRatingComment, r.driver_rating AS driverRating, " +
+                "r.driver_rating_comment AS driverRatingComment " +
+                "FROM rides r LEFT JOIN users u ON u.user_id = r.rider_id " +
                 "WHERE r.driver_id = ? AND r.status = 'COMPLETED' " +
                 "ORDER BY COALESCE(r.completed_at, r.updated_at, r.created_at) DESC", driverId);
             rows.forEach(row -> {
@@ -196,6 +199,7 @@ public class DriverController {
         profile.put("email", account.getEmail());
         profile.put("phone", account.getPhone());
         profile.put("faceVerified", Boolean.TRUE.equals(account.getFaceVerified()));
+        profile.put("profilePhoto", account.getProfilePhoto());
         driver.ifPresent(value -> {
             profile.put("rating", value.getRating());
             Long completedTrips = jdbcTemplate.queryForObject(
@@ -220,8 +224,9 @@ public class DriverController {
             Long driverId = currentUserId();
 
             // Get all PENDING rides that haven't been assigned to a driver
-            String sql = "SELECT r.ride_id AS id, r.rider_id, r.pickup_location, r.destination, r.fare, r.distance_km, " +
-                    "r.created_at, u.full_name, u.phone " +
+                String sql = "SELECT r.ride_id AS id, r.rider_id, r.pickup_location, r.destination, r.fare, r.distance_km, " +
+                    "r.created_at, u.full_name, u.phone, u.profile_photo, " +
+                    "(SELECT AVG(rr.driver_rating) FROM rides rr WHERE rr.rider_id = r.rider_id AND rr.status = 'COMPLETED') AS rider_rating " +
                     "FROM rides r " +
                     "LEFT JOIN users u ON u.user_id = r.rider_id " +
                     "WHERE r.status = 'PENDING' AND r.driver_id IS NULL " +
@@ -235,6 +240,8 @@ public class DriverController {
                 Map<String, Object> request = new LinkedHashMap<>();
                 request.put("id", String.valueOf(row.get("id")));
                 request.put("riderName", row.get("full_name"));
+                request.put("riderProfileImage", row.get("profile_photo"));
+                request.put("riderRating", row.get("rider_rating") == null ? 0.0 : row.get("rider_rating"));
                 
                 String fullName = (String) row.get("full_name");
                 String[] names = fullName != null ? fullName.split(" ") : new String[]{""};
@@ -299,7 +306,11 @@ public class DriverController {
             response.put("id", ride.getId());
             response.put("riderName", fullName);
             response.put("riderInitials", initials);
-            response.put("riderRating", 4.8); // TODO: Calculate from ride ratings
+                response.put("riderProfileImage", rider.getProfilePhoto());
+                Double riderRating = jdbcTemplate.queryForObject(
+                    "SELECT AVG(driver_rating) FROM rides WHERE rider_id = ? AND status = 'COMPLETED'",
+                    Double.class, rider.getId());
+                response.put("riderRating", riderRating == null ? 0.0 : riderRating);
             response.put("riderPhone", rider.getPhone());
             response.put("pickup", ride.getPickupLocation());
             response.put("destination", ride.getDestination());
@@ -333,6 +344,8 @@ public class DriverController {
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("id", ride.getId());
             response.put("status", ride.getStatus());
+                        response.put("cancellationReason", ride.getCancellationReason());
+                        response.put("cancelledBy", ride.getCancelledBy());
             response.put("pickupLocation", ride.getPickupLocation());
             response.put("destination", ride.getDestination());
             response.put("pickupLat", ride.getPickupLat());
@@ -344,6 +357,7 @@ public class DriverController {
                 response.put("riderId", rider.getId());
                 response.put("riderName", rider.getFullName());
                 response.put("riderPhone", rider.getPhone());
+                response.put("riderProfileImage", rider.getProfilePhoto());
             });
             return ResponseEntity.ok(response);
         } catch (Exception e) {

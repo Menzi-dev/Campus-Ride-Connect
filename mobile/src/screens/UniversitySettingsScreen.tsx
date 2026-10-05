@@ -1,7 +1,9 @@
+import ConfirmationDialog from '../components/ConfirmationDialog';
+import { useToast } from '../components/Toast';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { ArrowLeft, Building2, Check, ChevronRight, Clock3, Mail, Phone, Save, ShieldCheck, TriangleAlert } from 'lucide-react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NavigationAction, useFocusEffect, useNavigation, usePreventRemove } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import apiClient from '../services/ApiClient';
 import { colors, font, radius, shadow, spacing } from '../theme/theme';
@@ -25,6 +27,8 @@ const DEFAULT_SETTINGS: Settings = {
 
 export default function UniversitySettingsScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+  const { showToast } = useToast();
+  const [leaveAction, setLeaveAction] = useState<NavigationAction | null>(null);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -54,22 +58,22 @@ export default function UniversitySettingsScreen() {
     setDirty(true);
   };
 
+  usePreventRemove(dirty, ({ data }) => setLeaveAction(data.action));
+
   const handleBack = () => {
-    if (!dirty) { navigation.goBack(); return; }
-    Alert.alert('Unsaved changes', 'Leave without saving your changes?', [
-      { text: 'Stay', style: 'cancel' },
-      { text: 'Leave', style: 'destructive', onPress: () => navigation.goBack() },
-    ]);
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.navigate('AdminDashboard');
   };
 
   const saveSettings = async () => {
+    if (saving) return;
     setSaving(true);
     try {
       const response = await apiClient.put('/admin/settings', settings);
       setSettings({ ...DEFAULT_SETTINGS, ...response.data });
       setDirty(false);
       setError(null);
-      Alert.alert('Settings saved', 'University settings were updated successfully.');
+      showToast('University settings were updated successfully.', 'green');
     } catch (err: any) {
       setError(err?.response?.data?.error || 'Could not save university settings');
     } finally {
@@ -82,7 +86,7 @@ export default function UniversitySettingsScreen() {
   return <View style={styles.container}>
     <View style={styles.header}>
       <TouchableOpacity style={styles.backButton} onPress={handleBack} accessibilityLabel="Back to admin dashboard"><ArrowLeft size={19} color={colors.greenDark} /><Text style={styles.backText}>Back</Text></TouchableOpacity>
-      <View style={styles.headerRow}><View><Text style={styles.title}>University Settings</Text><Text style={styles.subtitle}>Manage platform details and safety rules</Text></View><View style={styles.headerIcon}><ShieldCheck size={22} color={colors.greenDark} /></View></View>
+      <View style={styles.headerRow}><View style={{ flex: 1, minWidth: 0 }}><Text style={styles.title}>University Settings</Text><Text style={styles.subtitle}>Manage platform details and safety rules</Text></View><View style={styles.headerIcon}><ShieldCheck size={22} color={colors.greenDark} /></View></View>
     </View>
     <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadSettings(true)} tintColor={colors.green} />} contentContainerStyle={styles.content}>
       {error && <View style={styles.errorBanner}><TriangleAlert size={16} color={colors.red} /><Text style={styles.errorText}>{error}</Text></View>}
@@ -96,21 +100,34 @@ export default function UniversitySettingsScreen() {
       <TouchableOpacity style={[styles.saveButton, saving && styles.disabledButton]} onPress={saveSettings} disabled={saving}><>{saving ? <ActivityIndicator color={colors.white} /> : <Save size={17} color={colors.white} />}<Text style={styles.saveText}>{saving ? 'Saving...' : 'Save Settings'}</Text></></TouchableOpacity>
       {dirty && <View style={styles.unsavedRow}><Check size={14} color={colors.orange} /><Text style={styles.unsavedText}>Unsaved changes</Text></View>}
     </ScrollView>
+    <ConfirmationDialog
+      visible={leaveAction !== null}
+      title="Unsaved changes"
+      message="Leave without saving your changes?"
+      confirmLabel="Leave"
+      cancelLabel="Stay"
+      onCancel={() => setLeaveAction(null)}
+      onConfirm={() => {
+        const action = leaveAction;
+        setLeaveAction(null);
+        if (action) navigation.dispatch(action);
+      }}
+    />
   </View>;
 }
 
 function SettingInput({ icon, label, value, onChangeText, ...props }: { icon: React.ReactNode; label: string; value: string; onChangeText: (value: string) => void; suffix?: string; [key: string]: any }) {
   const suffix = props.suffix;
-  return <View style={styles.inputCard}><View style={styles.inputIcon}>{icon}</View><View style={styles.inputContent}><Text style={styles.inputLabel}>{label}</Text><View style={styles.valueRow}><TextInput value={value} onChangeText={onChangeText} style={styles.input} {...props} /><ChevronRight size={18} color={colors.gray300} /></View></View>{suffix && <Text style={styles.suffix}>{suffix}</Text>}</View>;
+  return <View style={styles.inputCard}><View style={styles.inputIcon}>{icon}</View><View style={styles.inputContent}><Text style={styles.inputLabel}>{label}</Text><View style={styles.valueRow}><TextInput value={value} onChangeText={onChangeText} style={styles.input} accessibilityLabel={label} {...props} /><ChevronRight size={18} color={colors.gray300} /></View></View>{suffix && <Text style={styles.suffix}>{suffix}</Text>}</View>;
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.gray50 }, centered: { alignItems: 'center', justifyContent: 'center' }, loadingText: { color: colors.gray500, fontFamily: font.medium, marginTop: spacing.md },
+  container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 }, centered: { alignItems: 'center', justifyContent: 'center' }, loadingText: { color: colors.gray500, fontFamily: font.medium, marginTop: spacing.md },
   header: { backgroundColor: colors.white, paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.gray200 },
   backButton: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: spacing.sm }, backText: { color: colors.greenDark, fontFamily: font.semibold, fontSize: 14 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, title: { color: colors.gray900, fontFamily: font.extrabold, fontSize: 24 }, subtitle: { color: colors.gray500, fontFamily: font.regular, fontSize: 12, marginTop: 3 }, headerIcon: { width: 44, height: 44, borderRadius: radius.full, backgroundColor: colors.greenLight, alignItems: 'center', justifyContent: 'center' },
   content: { padding: spacing.lg, paddingBottom: spacing.xxxl }, sectionLabel: { color: colors.gray400, fontFamily: font.bold, fontSize: 11, letterSpacing: 0.7, marginTop: spacing.lg, marginBottom: spacing.sm },
-  inputCard: { minHeight: 68, backgroundColor: colors.white, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', ...shadow.sm }, inputIcon: { width: 38, height: 38, borderRadius: radius.md, backgroundColor: colors.gray50, alignItems: 'center', justifyContent: 'center', marginRight: spacing.md }, inputContent: { flex: 1 }, inputLabel: { color: colors.gray400, fontFamily: font.bold, fontSize: 10, letterSpacing: 0.5, textTransform: 'uppercase' }, valueRow: { flexDirection: 'row', alignItems: 'center' }, input: { flex: 1, color: colors.gray900, fontFamily: font.semibold, fontSize: 14, paddingVertical: 3, paddingHorizontal: 0 }, suffix: { color: colors.gray500, fontFamily: font.medium, fontSize: 11, marginLeft: spacing.xs },
+  inputCard: { minHeight: 68, backgroundColor: colors.white, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', ...shadow.sm }, inputIcon: { width: 38, height: 38, borderRadius: radius.md, backgroundColor: colors.gray50, alignItems: 'center', justifyContent: 'center', marginRight: spacing.md }, inputContent: { flex: 1, minWidth: 0 }, inputLabel: { color: colors.gray400, fontFamily: font.bold, fontSize: 10, letterSpacing: 0.5, textTransform: 'uppercase' }, valueRow: { flexDirection: 'row', alignItems: 'center' }, input: { flex: 1, color: colors.gray900, fontFamily: font.semibold, fontSize: 14, paddingVertical: 3, paddingHorizontal: 0 }, suffix: { color: colors.gray500, fontFamily: font.medium, fontSize: 11, marginLeft: spacing.xs },
   toggleRow: { backgroundColor: colors.white, borderRadius: radius.lg, minHeight: 68, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', ...shadow.sm }, toggleCopy: { flex: 1, paddingRight: spacing.md }, toggleTitle: { color: colors.gray900, fontFamily: font.bold, fontSize: 13 }, toggleSubtitle: { color: colors.gray500, fontFamily: font.regular, fontSize: 11, marginTop: 3 },
   saveButton: { minHeight: 48, borderRadius: radius.full, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7, marginTop: spacing.xl, ...shadow.sm }, disabledButton: { opacity: 0.65 }, saveText: { color: colors.white, fontFamily: font.bold, fontSize: 14 }, unsavedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: spacing.md }, unsavedText: { color: colors.orange, fontFamily: font.medium, fontSize: 12 }, errorBanner: { backgroundColor: colors.redLight, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, errorText: { flex: 1, color: colors.red, fontFamily: font.medium, fontSize: 12 },
 });

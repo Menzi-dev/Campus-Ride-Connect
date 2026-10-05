@@ -149,7 +149,7 @@ export default function IncidentReportsScreen() {
           accessibilityLabel="Previous incident reports"
         >
           <ChevronLeft size={17} color={page === 0 ? colors.gray400 : colors.gray800} />
-          <Text style={[styles.pageButtonText, page === 0 && styles.disabledPageText]}>Back</Text>
+          <Text style={[styles.pageButtonText, page === 0 && styles.disabledPageText]}>Previous</Text>
         </TouchableOpacity>
         <Text style={styles.pageCount}>Page {page + 1} of {pageCount}</Text>
         <TouchableOpacity
@@ -164,8 +164,8 @@ export default function IncidentReportsScreen() {
       </View>}
       <Modal visible={selected !== null} animationType="slide" transparent onRequestClose={() => setSelected(null)}>
         <View style={styles.modalOverlay}><Pressable style={StyleSheet.absoluteFill} onPress={() => setSelected(null)} /><View style={styles.modal}>
-          <View style={styles.modalHeader}><Text style={styles.modalTitle}>Incident Details</Text><TouchableOpacity onPress={() => setSelected(null)}><X size={22} color={colors.gray500} /></TouchableOpacity></View>
-          {selected && <ScrollView showsVerticalScrollIndicator={false}>
+          <View style={styles.modalHeader}><Text style={styles.modalTitle}>Incident Details</Text><TouchableOpacity onPress={() => setSelected(null)} accessibilityRole="button" accessibilityLabel="Close incident details" hitSlop={8}><X size={22} color={colors.gray500} /></TouchableOpacity></View>
+          {selected && <ScrollView style={{ minHeight: 0, flexShrink: 1 }} showsVerticalScrollIndicator={false}>
             <Text style={styles.modalReference}>#{selected.referenceNumber}</Text>
             <Detail label="Type" value={selected.typeLabel} /><Detail label="Status" value={selected.status} /><Detail label="Ride" value={`#${selected.rideReference}`} /><Detail label="Rider" value={selected.riderName || 'Unknown rider'} /><Detail label="Driver" value={selected.driverName || 'Unassigned driver'} /><Detail label="Route" value={`${selected.pickupLocation || 'Unknown pickup'} → ${selected.destination || 'Unknown destination'}`} /><Detail label="Reported" value={formatDate(selected.createdAt)} />
             {selected.hasAudio && <TouchableOpacity style={styles.modalAudioButton} onPress={() => { setSelected(null); navigation.navigate('AudioRecordings', { incidentId: selected.id }); }}><Headphones size={17} color={colors.white} /><Text style={styles.audioText}>Open Audio Recording</Text></TouchableOpacity>}
@@ -181,20 +181,20 @@ function Detail({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.gray50 },
+  container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
   header: { backgroundColor: colors.white, paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg, zIndex: 2, elevation: 4, borderBottomWidth: 1, borderBottomColor: colors.gray200 },
   backButton: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: spacing.sm },
   backText: { color: colors.greenDark, fontFamily: font.semibold, fontSize: 14 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  titleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center', justifyContent: 'space-between' },
   title: { color: colors.gray900, fontFamily: font.extrabold, fontSize: 24 },
   subtitle: { color: colors.gray500, fontFamily: font.regular, fontSize: 12, marginTop: 3 },
   refreshButton: { padding: 10, borderRadius: radius.full, backgroundColor: colors.gray100 },
   searchBox: { height: 46, marginTop: spacing.lg, paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.gray200, backgroundColor: colors.gray50, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   searchInput: { flex: 1, minWidth: 0, color: colors.gray900, fontFamily: font.regular, fontSize: 14, paddingVertical: 0, borderWidth: 0, outlineStyle: 'none' as any },
   resultsScroll: { flex: 1 },
-  content: { flexGrow: 1, padding: spacing.lg, paddingBottom: 88 },
+  content: { flexGrow: 1, padding: spacing.lg, paddingBottom: spacing.lg },
   listBottomSpace: { height: spacing.sm },
-  pagination: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 3, minHeight: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, borderTopWidth: 1, borderTopColor: colors.gray200, backgroundColor: colors.white, elevation: 8, shadowColor: colors.black, shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.08, shadowRadius: 4 },
+  pagination: { flexShrink: 0, minHeight: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, borderTopWidth: 1, borderTopColor: colors.gray200, backgroundColor: colors.white, elevation: 8, shadowColor: colors.black, shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.08, shadowRadius: 4 },
   pageButton: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.gray200 },
   disabledPageButton: { backgroundColor: colors.gray100, borderColor: colors.gray100 },
   pageButtonText: { color: colors.gray800, fontFamily: font.semibold, fontSize: 12 },
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
   retryButton: { backgroundColor: colors.green, borderRadius: radius.md, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, marginTop: spacing.lg },
   retryText: { color: colors.white, fontFamily: font.bold, fontSize: 13 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(17,24,39,0.45)', justifyContent: 'flex-end' },
-  modal: { backgroundColor: colors.white, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.xl, maxHeight: '80%' },
+  modal: { width: '100%', maxWidth: 720, alignSelf: 'center', minHeight: 0, backgroundColor: colors.white, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.xl, maxHeight: '80%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },
   modalTitle: { color: colors.gray900, fontFamily: font.extrabold, fontSize: 20 },
   modalReference: { color: colors.red, fontFamily: font.extrabold, fontSize: 24, marginBottom: spacing.md },

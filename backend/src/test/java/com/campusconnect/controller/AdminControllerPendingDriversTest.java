@@ -25,6 +25,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
+@org.springframework.transaction.annotation.Transactional
+@org.springframework.security.test.context.support.WithMockUser(roles = "ADMIN")
 public class AdminControllerPendingDriversTest {
 
     @Autowired

@@ -54,9 +54,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={contextValue}>
       {children}
       {toast && (
-        <Animated.View style={[styles.toast, { opacity }, toastStyles[toast.color]]} pointerEvents="none">
+        <Animated.View style={[styles.toast, { opacity }, toastStyles[toast.color]]} pointerEvents={visible ? 'auto' : 'none'}>
           <Text style={styles.message}>{toast.message}</Text>
-          <TouchableOpacity onPress={() => setVisible(false)} style={styles.closeArea} activeOpacity={0.8}>
+          <TouchableOpacity onPress={() => setVisible(false)} style={styles.closeArea} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="Dismiss notification" hitSlop={8}>
             <Text style={styles.closeText}>✕</Text>
           </TouchableOpacity>
         </Animated.View>

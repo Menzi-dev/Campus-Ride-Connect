@@ -7,7 +7,11 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "check:responsive": "node scripts/check-responsive.cjs",
+    "check:pages": "node scripts/check-pages.cjs",
+    "check:driver-sos": "node scripts/check-driver-sos.cjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.5",

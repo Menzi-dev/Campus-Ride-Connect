@@ -145,7 +145,7 @@ export default function ChatScreen({ rideId: rideIdProp, otherPartyName: otherPa
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.gray50 },
+  container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
   header: { padding: spacing.lg, paddingTop: spacing.xxl, backgroundColor: colors.white, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.gray200 },
   title: { flex: 1, textAlign: 'center', fontFamily: font.bold, fontSize: 17, color: colors.gray900 },
   headerSpacer: { width: 22 },

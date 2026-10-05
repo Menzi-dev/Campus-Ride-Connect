@@ -10,6 +10,7 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -451,11 +452,13 @@ public class AdminController {
     }
 
     @PostMapping("/driver-approvals/{id}/approve")
+    @Transactional
     public ResponseEntity<?> approveDriver(@PathVariable("id") Long id) {
         return updateDriverApproval(id, Driver.ApprovalStatus.APPROVED);
     }
 
     @PostMapping("/driver-approvals/{id}/reject")
+    @Transactional
     public ResponseEntity<?> rejectDriver(@PathVariable("id") Long id) {
         return updateDriverApproval(id, Driver.ApprovalStatus.REJECTED);
     }

@@ -77,12 +77,14 @@ apiClient.interceptors.response.use(
 // Attach the JWT to every request automatically once the user is logged in
 apiClient.interceptors.request.use(async (config) => {
   const isLoginRequest = config.url === '/auth/login' || config.url?.endsWith('/auth/login');
-  const token = isLoginRequest ? null : await AsyncStorage.getItem('authToken');
+  const isPasswordResetRequest = config.url?.startsWith('/auth/password-reset/');
+  const isUnauthenticatedAuthRequest = isLoginRequest || isPasswordResetRequest;
+  const token = isUnauthenticatedAuthRequest ? null : await AsyncStorage.getItem('authToken');
   
   // Debug logging
-  if (!token) {
+  if (!token && !isUnauthenticatedAuthRequest) {
     console.warn('[ApiClient] ⚠️ WARNING: No authToken found in AsyncStorage for request to', config.url);
-  } else {
+  } else if (token) {
     console.log('[ApiClient] ✓ Token found, adding to Authorization header for:', config.url);
   }
   
@@ -98,7 +100,7 @@ apiClient.interceptors.request.use(async (config) => {
       ...(config.headers ?? {}),
       Authorization: `Bearer ${token}`,
     } as AxiosRequestHeaders;
-  } else {
+  } else if (!isUnauthenticatedAuthRequest) {
     console.warn('[ApiClient] ⚠️ No token in AsyncStorage - request will be unauthenticated');
   }
   return config;

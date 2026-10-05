@@ -1,7 +1,7 @@
+import { useToast } from '../components/Toast';
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Linking,
   Modal,
@@ -33,7 +33,6 @@ import {
   Sparkles,
   UserRound,
 } from 'lucide-react-native';
-import BottomNav from '../components/BottomNav';
 import apiClient from '../services/ApiClient';
 import { colors, font, radius, shadow, spacing } from '../theme/theme';
 
@@ -64,11 +63,13 @@ type QuickAction = {
 };
 
 export default function ProfileScreen() {
+  const { showToast } = useToast();
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const [user, setUser] = useState<StoredUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tripCount, setTripCount] = useState(0);
+  const [riderRating, setRiderRating] = useState('—');
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editName, setEditName] = useState('');
@@ -91,16 +92,12 @@ export default function ProfileScreen() {
         (await AsyncStorage.getItem(`userProfileImage:${ownerKey}`)) ||
         storedUser?.profilePhoto ||
         null;
-      const [storedCardsRaw, selectedPayment] = await Promise.all([
-        AsyncStorage.getItem('saved_cards'),
-        AsyncStorage.getItem('default_payment_method'),
-      ]);
-      const storedCards: SavedCard[] = storedCardsRaw ? JSON.parse(storedCardsRaw) : [];
-      const selectedCard = storedCards.find((card) => card.isDefault) || storedCards[0] || null;
+      await AsyncStorage.multiRemove(['saved_cards', 'default_payment_method']);
 
-      const [profile, history] = await Promise.all([
+      const [profile, history, paymentMethods] = await Promise.all([
         apiClient.get('/users/me').catch(() => ({ data: storedUser || null })),
         apiClient.get('/rides/history').catch(() => ({ data: [] })),
+        apiClient.get('/users/me/payment-methods').catch(() => ({ data: [] })),
       ]);
 
       const account: StoredUser = {
@@ -112,7 +109,7 @@ export default function ProfileScreen() {
         yearOfStudy: profile.data?.yearOfStudy ?? storedUser?.yearOfStudy,
         role: profile.data?.role || storedUser?.role || 'Student',
         faceVerified: profile.data?.faceVerified ?? storedUser?.faceVerified ?? false,
-        profilePhoto: storedPhoto || profile.data?.profilePhoto,
+        profilePhoto: profile.data?.profilePhoto || storedPhoto,
       };
 
       setUser(account);
@@ -122,9 +119,17 @@ export default function ProfileScreen() {
       setEditPhone(account.phone || '');
       setEditYear(String(account.yearOfStudy || ''));
       setTripCount((history.data || []).filter((ride: any) => ride.status === 'COMPLETED').length);
-      setSavedCard(selectedCard);
-      setDefaultPayment(selectedPayment === 'CARD' && selectedCard ? 'CARD' : 'CASH');
-      await AsyncStorage.setItem('user', JSON.stringify(account));
+      const averageRating = Number(profile.data?.riderRating);
+      const ratingCount = Number(profile.data?.riderRatingCount || 0);
+      setRiderRating(ratingCount > 0 && Number.isFinite(averageRating) ? averageRating.toFixed(1) : '—');
+      const cards = (paymentMethods.data || []) as SavedCard[];
+      const accountDefaultCard = cards.find((card) => card.isDefault) || cards[0] || null;
+      const paymentChoice = profile.data?.defaultPaymentMethod;
+      setSavedCard(accountDefaultCard);
+      setDefaultPayment(paymentChoice === 'CARD' && accountDefaultCard ? 'CARD' : 'CASH');
+      const cachedPhoto = storedPhoto?.startsWith('data:') ? undefined : storedPhoto;
+      const cachedAccount = { ...account, profilePhoto: cachedPhoto };
+      await AsyncStorage.setItem('user', JSON.stringify(cachedAccount));
     } catch {
       const fallback: StoredUser = {
         fullName: 'Campus rider',
@@ -134,6 +139,7 @@ export default function ProfileScreen() {
       };
       setUser(fallback);
       setProfileImage(null);
+      setRiderRating('—');
       setEditName(fallback.fullName);
       setEditEmail(fallback.email);
       setEditPhone('');
@@ -175,13 +181,24 @@ export default function ProfileScreen() {
         await FileSystem.copyAsync({ from: asset.uri, to: permanentUri });
         uri = permanentUri;
       }
+      const mimeType = asset.mimeType || (asset.name?.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg');
+      const photoData = Platform.OS === 'web'
+        ? uri
+        : `data:${mimeType};base64,${await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 })}`;
+      if (photoData.length > 5_600_000) throw new Error('Profile photo must be 4 MB or smaller');
+      await apiClient.put('/users/me/profile-photo', { profilePhoto: photoData });
       const ownerKey = user?.id || user?.email || 'default';
-      await AsyncStorage.setItem(`userProfileImage:${ownerKey}`, uri);
-      await AsyncStorage.setItem('user', JSON.stringify({ ...(user || {}), profilePhoto: uri }));
+      if (Platform.OS === 'web') {
+        await AsyncStorage.removeItem(`userProfileImage:${ownerKey}`);
+        await AsyncStorage.setItem('user', JSON.stringify({ ...(user || {}), profilePhoto: undefined }));
+      } else {
+        await AsyncStorage.setItem(`userProfileImage:${ownerKey}`, uri);
+        await AsyncStorage.setItem('user', JSON.stringify({ ...(user || {}), profilePhoto: uri }));
+      }
       setProfileImage(uri);
       setUser((prev) => (prev ? { ...prev, profilePhoto: uri } : prev));
     } catch {
-      Alert.alert('Profile photo', 'Could not update your profile photo right now.');
+      showToast('Could not update your profile photo right now.', 'red');
     }
   };
 
@@ -210,13 +227,28 @@ export default function ProfileScreen() {
       profilePhoto: profileImage || user?.profilePhoto,
     };
 
-    setUser(nextUser);
-    if (profileImage) {
-      const ownerKey = nextUser.id || nextUser.email || 'default';
-      await AsyncStorage.setItem(`userProfileImage:${ownerKey}`, profileImage);
+    try {
+      const response = await apiClient.put('/users/me', {
+        fullName: nextUser.fullName,
+        email: nextUser.email,
+        phone: editPhone.trim() || null,
+        yearOfStudy: editYear ? Number(editYear) : null,
+      });
+      const savedUser = { ...nextUser, ...response.data, profilePhoto: profileImage || nextUser.profilePhoto };
+      setUser(savedUser);
+      if (profileImage && Platform.OS !== 'web') {
+        const ownerKey = savedUser.id || savedUser.email || 'default';
+        await AsyncStorage.setItem(`userProfileImage:${ownerKey}`, profileImage);
+      }
+      const cachedUser = {
+        ...savedUser,
+        profilePhoto: Platform.OS === 'web' && profileImage?.startsWith('data:') ? undefined : savedUser.profilePhoto,
+      };
+      await AsyncStorage.setItem('user', JSON.stringify(cachedUser));
+      setEditModalVisible(false);
+    } catch (error: any) {
+      showToast(error?.response?.data?.error || 'Could not save your profile. Please try again.', 'red');
     }
-    await AsyncStorage.setItem('user', JSON.stringify(nextUser));
-    setEditModalVisible(false);
   };
 
   const handleSignOut = async () => {
@@ -225,11 +257,10 @@ export default function ProfileScreen() {
   };
 
   const handleEmergencyCall = async () => {
-    const url = 'tel:10111';
-    if (await Linking.canOpenURL(url)) {
-      await Linking.openURL(url);
-    } else {
-      Alert.alert('Emergency services', 'Call 10111 from a phone in South Africa.');
+    try {
+      await Linking.openURL('tel:10111');
+    } catch {
+      showToast('Call 10111 from a phone in South Africa.', 'blue');
     }
   };
 
@@ -248,6 +279,7 @@ export default function ProfileScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
       <ScrollView
+        style={{ flex: 1, minHeight: 0 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.green} />}
         contentContainerStyle={styles.scrollContent}
       >
@@ -297,7 +329,7 @@ export default function ProfileScreen() {
 
             <View style={styles.stats}>
               <Stat value={tripCount} label="RIDES" />
-              <Stat value="0" label="RATINGS" />
+              <Stat value={riderRating} label="RATING" />
               <Stat value={defaultPayment === 'CARD' && savedCard ? `Card • ${savedCard.lastFour}` : 'Cash'} label="PAYMENT" />
               <Stat value="SPU" label="CAMPUS" />
             </View>
@@ -389,7 +421,7 @@ export default function ProfileScreen() {
       <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
         <View style={styles.modalBackdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setEditModalVisible(false)} />
-          <View style={styles.modalSheet}>
+          <ScrollView style={styles.modalSheet} contentContainerStyle={styles.modalSheetContent} keyboardShouldPersistTaps="handled">
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>Edit profile</Text>
             <Text style={styles.modalSubtitle}>Keep your details current for safer and smoother rides.</Text>
@@ -414,7 +446,7 @@ export default function ProfileScreen() {
                 <Text style={styles.primaryActionText}>Save</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </ScrollView>
         </View>
       </Modal>
 
@@ -496,7 +528,6 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      <BottomNav active="RiderProfile" />
     </View>
   );
 }
@@ -511,11 +542,11 @@ function Stat({ value, label }: { value: string | number; label: string }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.gray50 },
+  container: { flex: 1, minHeight: 0, minWidth: 0, backgroundColor: colors.gray50 },
   scrollContent: { paddingBottom: spacing.lg },
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.md, backgroundColor: colors.white },
   headerTitle: { color: colors.gray900, fontFamily: font.extrabold, fontSize: 22 },
-  profileCard: { flexDirection: 'row', alignItems: 'center', padding: spacing.lg, backgroundColor: colors.white, ...shadow.sm },
+  profileCard: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center', padding: spacing.lg, backgroundColor: colors.white, ...shadow.sm },
   avatarWrap: { position: 'relative' },
   avatar: {
     width: 60,
@@ -543,7 +574,7 @@ const styles = StyleSheet.create({
   plusButtonText: { color: colors.white, fontSize: 18, fontFamily: font.bold, lineHeight: 18 },
   name: { color: colors.gray900, fontFamily: font.extrabold, fontSize: 18 },
   email: { color: colors.gray600, fontFamily: font.medium, fontSize: 13, marginTop: 2 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 8 },
   badge: {
     alignSelf: 'flex-start',
     backgroundColor: colors.greenLight,
@@ -626,9 +657,10 @@ const styles = StyleSheet.create({
   signOutConfirmText: { color: colors.white, fontFamily: font.bold, fontSize: 13 },
   loader: { marginTop: spacing.xxxl },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(17, 24, 39, 0.45)', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.lg, paddingBottom: spacing.xxl },
-  infoSheet: { maxHeight: '88%', backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.lg, paddingBottom: spacing.xxl },
-  infoScroll: { marginTop: spacing.sm, marginBottom: spacing.md },
+  modalSheet: { width: '100%', maxWidth: 640, alignSelf: 'center', maxHeight: '85%', flexGrow: 0, backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  modalSheetContent: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  infoSheet: { width: '100%', maxWidth: 640, alignSelf: 'center', maxHeight: '88%', backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.lg, paddingBottom: spacing.xxl },
+  infoScroll: { minHeight: 0, flexShrink: 1, marginTop: spacing.sm, marginBottom: spacing.md },
   infoIntro: { color: colors.gray600, fontFamily: font.medium, fontSize: 13, marginBottom: spacing.md },
   emptyInfo: { alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.xxl },
   emptyInfoTitle: { color: colors.gray900, fontFamily: font.extrabold, fontSize: 16, textAlign: 'center', marginTop: spacing.md },

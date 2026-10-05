@@ -6,6 +6,7 @@ import com.campusconnect.dto.RegisterRequest;
 import com.campusconnect.entity.User;
 import com.campusconnect.repository.UserRepository;
 import com.campusconnect.service.AuthService;
+import com.campusconnect.service.PasswordResetService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +29,9 @@ public class AuthController {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private PasswordResetService passwordResetService;
 
     @PostMapping(value = "/register", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
@@ -172,6 +176,56 @@ public class AuthController {
             Map<String, String> error = new HashMap<>();
             error.put("error", e.getMessage());
             return ResponseEntity.status(401).body(error);
+        }
+    }
+
+    @PostMapping("/password-reset/request")
+    public ResponseEntity<?> requestPasswordReset(@RequestBody Map<String, String> request) {
+        String email = request.get("email");
+        if (email == null || email.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Email is required"));
+        }
+
+        passwordResetService.requestCode(email);
+        return ResponseEntity.ok(Map.of(
+                "message", "If an account exists for that email, a reset code has been sent"));
+    }
+
+    @PostMapping("/password-reset/verify")
+    public ResponseEntity<?> verifyPasswordResetCode(@RequestBody Map<String, String> request) {
+        String email = request.get("email");
+        String code = request.get("code");
+        if (email == null || email.isBlank() || code == null || !code.matches("\\d{6}")) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Email and a 6-digit code are required"));
+        }
+
+        try {
+            passwordResetService.verifyCode(email, code);
+            return ResponseEntity.ok(Map.of("message", "Reset code verified"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/password-reset/confirm")
+    public ResponseEntity<?> confirmPasswordReset(@RequestBody Map<String, String> request) {
+        String email = request.get("email");
+        String code = request.get("code");
+        String newPassword = request.get("newPassword");
+        String confirmPassword = request.get("confirmPassword");
+        if (email == null || email.isBlank() || code == null || newPassword == null || newPassword.length() < 8) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Email, reset code, and a password of at least 8 characters are required"));
+        }
+        if (confirmPassword == null || !newPassword.equals(confirmPassword)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Passwords do not match"));
+        }
+
+        try {
+            passwordResetService.resetPassword(email, code, newPassword);
+            return ResponseEntity.ok(Map.of("message", "Password updated successfully"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 }

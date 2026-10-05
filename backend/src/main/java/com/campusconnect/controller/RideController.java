@@ -128,6 +128,8 @@ public class RideController {
                 response.put("status", ride.getStatus());
                 response.put("driverId", ride.getDriverId());
                 response.put("createdAt", ride.getCreatedAt());
+                response.put("cancellationReason", ride.getCancellationReason());
+                response.put("cancelledBy", ride.getCancelledBy());
                 addDriverDetails(response, ride.getDriverId());
                 return ResponseEntity.ok(response);
             } else {
@@ -190,14 +192,43 @@ public class RideController {
      * Cancel a ride
      */
     @PostMapping("/{id}/cancel")
-    public ResponseEntity<?> cancelRide(@PathVariable Long id) {
+    public ResponseEntity<?> cancelRide(
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, String> request) {
         try {
-            Ride ride = rideService.cancelRide(id);
-            return ResponseEntity.ok(ride);
+            Long userId = currentUserId();
+            Ride ride = rideService.getRideById(id)
+                    .orElseThrow(() -> new IllegalArgumentException("Ride not found"));
+            if (!userId.equals(ride.getRiderId()) && !userId.equals(ride.getDriverId())) {
+                return ResponseEntity.status(403).body(Map.of("error", "You cannot cancel this ride"));
+            }
+            if (ride.getStatus() == Ride.RideStatus.COMPLETED || ride.getStatus() == Ride.RideStatus.CANCELLED) {
+                return ResponseEntity.status(409).body(Map.of("error", "This ride can no longer be cancelled"));
+            }
+
+            String reason = request == null ? null : request.get("reason");
+            reason = reason == null ? "" : reason.trim();
+            if (reason.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "A cancellation reason is required"));
+            }
+            if (reason.length() > 500) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Cancellation reason must be 500 characters or fewer"));
+            }
+
+            ride.setStatus(Ride.RideStatus.CANCELLED);
+            ride.setCancellationReason(reason);
+            ride.setCancelledBy(userId);
+            Ride saved = rideService.saveRide(ride);
+            Map<String, Object> response = new HashMap<>();
+            response.put("id", saved.getId());
+            response.put("status", saved.getStatus());
+            response.put("cancellationReason", saved.getCancellationReason());
+            response.put("cancelledBy", saved.getCancelledBy());
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             Map<String, String> error = new HashMap<>();
             error.put("error", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return ResponseEntity.status(e.getMessage() != null && e.getMessage().equals("Ride not found") ? 404 : 400).body(error);
         }
     }
 
@@ -267,6 +298,55 @@ public class RideController {
             });
 
             return ResponseEntity.ok(Map.of("success", true, "rating", rating));
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Rating must be a number from 1 to 5"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{id}/rider-rating")
+    public ResponseEntity<?> rateRider(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> request) {
+        try {
+            Long driverId = currentUserId();
+            Ride ride = rideService.getRideById(id)
+                    .orElseThrow(() -> new IllegalArgumentException("Ride not found"));
+
+            if (!driverId.equals(ride.getDriverId())) {
+                return ResponseEntity.status(403).body(Map.of("error", "You cannot rate this ride"));
+            }
+            if (ride.getStatus() != Ride.RideStatus.COMPLETED) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Only completed rides can be rated"));
+            }
+            if (ride.getDriverRating() != null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "This rider has already been rated for this ride"));
+            }
+
+            Object rawRating = request.get("rating");
+            int rating = rawRating instanceof Number
+                    ? ((Number) rawRating).intValue()
+                    : Integer.parseInt(String.valueOf(rawRating));
+            if (rating < 1 || rating > 5) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Rating must be between 1 and 5"));
+            }
+
+            Object comment = request.get("comment");
+            String ratingComment = comment == null ? null : String.valueOf(comment).trim();
+            if (ratingComment != null && ratingComment.length() > 500) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Comment must be 500 characters or fewer"));
+            }
+
+            ride.setDriverRating(rating);
+            ride.setDriverRatingComment(ratingComment);
+            rideService.saveRide(ride);
+
+            Double averageRating = jdbcTemplate.queryForObject(
+                    "SELECT AVG(driver_rating) FROM rides WHERE rider_id = ? AND status = 'COMPLETED'",
+                    Double.class, ride.getRiderId());
+            return ResponseEntity.ok(Map.of("success", true, "rating", rating,
+                    "riderRating", averageRating == null ? 0.0 : averageRating));
         } catch (NumberFormatException e) {
             return ResponseEntity.badRequest().body(Map.of("error", "Rating must be a number from 1 to 5"));
         } catch (Exception e) {
@@ -395,6 +475,8 @@ public class RideController {
         response.put("durationMinutes", ride.getDurationMinutes());
         response.put("status", ride.getStatus());
         response.put("createdAt", ride.getCreatedAt());
+        response.put("cancellationReason", ride.getCancellationReason());
+        response.put("cancelledBy", ride.getCancelledBy());
         addDriverDetails(response, ride.getDriverId());
         return response;
     }
@@ -409,10 +491,13 @@ public class RideController {
             driver.put("id", user.getId());
             driver.put("fullName", user.getFullName());
             driver.put("phone", user.getPhone());
+            driver.put("profilePhoto", user.getProfilePhoto());
             driverRepository.findByUserId(driverId).ifPresent(driverRecord -> {
                 driver.put("rating", driverRecord.getRating());
                 driver.put("vehicleMake", driverRecord.getVehicleMake());
+                driver.put("vehicleYear", driverRecord.getVehicleYear());
                 driver.put("licencePlate", driverRecord.getLicencePlate());
+                driver.put("vehiclePhoto", driverRecord.getVehiclePhoto());
             });
             response.put("driver", driver);
         });

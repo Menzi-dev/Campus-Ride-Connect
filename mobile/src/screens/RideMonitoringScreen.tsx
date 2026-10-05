@@ -1,3 +1,4 @@
+import useMapResize from '../hooks/useMapResize';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ArrowLeft, ChevronLeft, ChevronRight, Crosshair, MapPin, Radio, TriangleAlert } from 'lucide-react-native';
@@ -51,6 +52,7 @@ if (Platform.OS === 'web') {
 function MonitoringMapUpdater({ points }: { points: Coordinate[] }) {
 	if (!useMap) return null;
 	const map = useMap();
+  useMapResize(map);
 	useEffect(() => {
 		if (!map || points.length < 2) return;
 		const frame = window.setTimeout(() => {
@@ -259,7 +261,7 @@ export default function RideMonitoringScreen() {
 				</>}
 			</ScrollView>
 			<View style={styles.pagination}>
-				<TouchableOpacity style={[styles.pageButton, page === 0 && styles.disabledButton]} disabled={page === 0} onPress={() => setPage((current) => Math.max(0, current - 1))}><ChevronLeft size={17} color={page === 0 ? colors.gray500 : colors.gray800} /><Text style={[styles.pageButtonText, page === 0 && styles.disabledText]}>Back</Text></TouchableOpacity>
+				<TouchableOpacity style={[styles.pageButton, page === 0 && styles.disabledButton]} disabled={page === 0} onPress={() => setPage((current) => Math.max(0, current - 1))}><ChevronLeft size={17} color={page === 0 ? colors.gray500 : colors.gray800} /><Text style={[styles.pageButtonText, page === 0 && styles.disabledText]}>Previous</Text></TouchableOpacity>
 				<Text style={styles.pageCount}>Page {page + 1} of {pageCount}</Text>
 				<TouchableOpacity style={[styles.pageButton, page >= pageCount - 1 && styles.disabledButton]} disabled={page >= pageCount - 1} onPress={() => setPage((current) => Math.min(pageCount - 1, current + 1))}><Text style={[styles.pageButtonText, page >= pageCount - 1 && styles.disabledText]}>Next</Text><ChevronRight size={17} color={page >= pageCount - 1 ? colors.gray500 : colors.gray800} /></TouchableOpacity>
 			</View>
@@ -273,7 +275,7 @@ function RideCard({ ride, selected, onTrack }: { ride: ActiveRide; selected: boo
 }
 
 const styles = StyleSheet.create({
-	container: { flex: 1, backgroundColor: colors.gray50 },
+	container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
 	body: { flex: 1, minHeight: 0 },
 	header: { backgroundColor: colors.white, paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg },
 	backButton: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: spacing.sm },
@@ -287,7 +289,7 @@ const styles = StyleSheet.create({
 	mapFallbackText: { color: colors.greenDark, fontFamily: font.semibold, fontSize: 12 },
 	liveMapBadge: { position: 'absolute', top: 12, left: 12, backgroundColor: colors.white, borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 4 },
 	liveMapText: { color: colors.greenDark, fontFamily: font.bold, fontSize: 11 },
-	sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.lg, marginBottom: spacing.sm },
+	sectionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.lg, marginBottom: spacing.sm },
 	sectionTitle: { color: colors.gray600, fontFamily: font.bold, fontSize: 12 },
 	sectionHint: { color: colors.gray400, fontFamily: font.regular, fontSize: 10, marginTop: 2 },
 	refreshText: { color: colors.blue, fontFamily: font.semibold, fontSize: 12 },

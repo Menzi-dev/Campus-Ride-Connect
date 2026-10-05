@@ -1,9 +1,12 @@
+import ScrollableCard from '../components/ScrollableCard';
+import useMapResize from '../hooks/useMapResize';
 // mobile/src/screens/HomeScreen.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   TextInput,
+  Image,
   TouchableOpacity,
   StyleSheet,
   StatusBar,
@@ -11,7 +14,7 @@ import {
   ScrollView,
   Animated,
   Easing,
-  Dimensions,
+  useWindowDimensions,
   ActivityIndicator,
   Modal,
   Pressable,
@@ -32,11 +35,9 @@ import {
   Search,
   X,
   Car,
-  House,
   Clock,
   Clock as ClockIcon,
   CalendarDays,
-  CircleUserRound,
   Route,
   Check,
   Navigation,
@@ -64,7 +65,7 @@ const MAX_SOS_RECORDING_SECONDS = 60;
 const SOS_AUDIO_SEGMENT_SECONDS = 5;
 import apiClient from '../services/ApiClient';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 
 // Web - Use Leaflet with dynamic import
 let MapContainer: any = null;
@@ -480,6 +481,7 @@ const WebMap = ({
 
   const MapUpdater = () => {
     const map = useMap();
+    useMapResize(map);
     useEffect(() => {
       if (!map) return;
       let cancelled = false;
@@ -658,6 +660,9 @@ type RideRequest = {
     vehicleMake: string;
     vehicleModel: string;
     licencePlate: string;
+    profilePhoto?: string | null;
+    vehiclePhoto?: string | null;
+    vehicleYear?: number | string | null;
     phone?: string;
   };
 };
@@ -665,6 +670,7 @@ type RideRequest = {
 type SavedPaymentCard = { id: string; lastFour: string; label: string; expiry: string; isDefault?: boolean };
 
 export default function HomeScreen() {
+  const { height: windowHeight } = useWindowDimensions();
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'Home'>>();
   const skipActiveRideRestore = route.params?.skipActiveRideRestore === true;
@@ -702,6 +708,11 @@ export default function HomeScreen() {
   const [driverFound, setDriverFound] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [cancelling, setCancelling] = useState(false);
+  const [cancelDialogVisible, setCancelDialogVisible] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancellationNotice, setCancellationNotice] = useState('');
+  const [cancellationNoticeVisible, setCancellationNoticeVisible] = useState(false);
+  const cancellationNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [driverName, setDriverName] = useState('');
   const [driverRating, setDriverRating] = useState(0);
   const [driverCar, setDriverCar] = useState('');
@@ -710,6 +721,8 @@ export default function HomeScreen() {
   const [tripStatus, setTripStatus] = useState<'enroute' | 'arrived' | 'started' | 'completed'>('enroute');
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [showActiveTrip, setShowActiveTrip] = useState(false);
+  const activeTripTransitionRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeTripShownForRideRef = useRef<string | null>(null);
   const [sosVisible, setSosVisible] = useState(false);
   const [sosSending, setSosSending] = useState(false);
   const [sosDispatched, setSosDispatched] = useState(false);
@@ -772,6 +785,20 @@ export default function HomeScreen() {
   const progressAnim = useRef(new Animated.Value(0)).current;
   const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const rotateLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  const showActiveTripAfterDriverPreview = (rideId: string) => {
+    if (activeTripShownForRideRef.current === rideId) return;
+    activeTripShownForRideRef.current = rideId;
+    if (activeTripTransitionRef.current) clearTimeout(activeTripTransitionRef.current);
+    activeTripTransitionRef.current = setTimeout(() => {
+      activeTripTransitionRef.current = null;
+      setShowActiveTrip(true);
+    }, 3000);
+  };
+
+  useEffect(() => () => {
+    if (activeTripTransitionRef.current) clearTimeout(activeTripTransitionRef.current);
+  }, []);
 
   // ===== CLEAR DRIVER NAVIGATION =====
   // Wipes the route polyline, the car marker and stops the animation loop.
@@ -942,7 +969,8 @@ export default function HomeScreen() {
             }).start();
           }
 
-          setShowActiveTrip(true);
+          setShowActiveTrip(false);
+          showActiveTripAfterDriverPreview(String(response.data.id));
           setTripStatus(
             status === 'accepted'
               ? 'enroute'
@@ -1008,7 +1036,7 @@ export default function HomeScreen() {
               ? 'enroute'
               : (status as 'enroute' | 'arrived' | 'started' | 'completed')
           );
-          setShowActiveTrip(true);
+          showActiveTripAfterDriverPreview(String(ride.id || rideId));
 
           if (ride.duration) {
             setTimeRemaining(Math.min(100, ride.duration));
@@ -1019,6 +1047,10 @@ export default function HomeScreen() {
           setCurrentRideId(String(ride.id || rideId));
           setCurrentRide(ride);
           setTripStatus('completed');
+          if (activeTripTransitionRef.current) {
+            clearTimeout(activeTripTransitionRef.current);
+            activeTripTransitionRef.current = null;
+          }
           setShowActiveTrip(true);
           setFindingDriversVisible(true);
           clearInterval(interval);
@@ -1028,8 +1060,18 @@ export default function HomeScreen() {
           clearInterval(interval);
           setPollingInterval(null);
           clearDriverNavigation();
-          closeFindingDrivers();
-          showToast('Trip was cancelled', 'red');
+          const cancelledByOtherParty = String(ride.cancelledBy || '') !== String(userId);
+          if (cancelledByOtherParty) {
+            setCancellationNotice(`The driver cancelled this ride. Reason: ${ride.cancellationReason || 'No reason provided.'}`);
+            setCancellationNoticeVisible(true);
+            cancellationNoticeTimerRef.current = setTimeout(() => {
+              cancellationNoticeTimerRef.current = null;
+              setCancellationNoticeVisible(false);
+              closeFindingDrivers();
+            }, 3000);
+          } else {
+            closeFindingDrivers();
+          }
         }
       } catch (error) {
         console.error('Error polling ride:', error);
@@ -1355,11 +1397,12 @@ export default function HomeScreen() {
       setCurrentRideId(newRide.id);
       setCurrentRide(newRide);
       setPaymentRide(newRide);
-      const [cardsRaw, preferredMethod] = await Promise.all([
-        AsyncStorage.getItem('saved_cards'),
-        AsyncStorage.getItem('default_payment_method'),
+      const [remoteCards, account] = await Promise.all([
+        apiClient.get('/users/me/payment-methods').then((result) => result.data as SavedPaymentCard[]).catch(() => []),
+        apiClient.get('/users/me').then((result) => result.data).catch(() => null),
       ]);
-      const cards: SavedPaymentCard[] = cardsRaw ? JSON.parse(cardsRaw) : [];
+      const cards = remoteCards || [];
+      const preferredMethod = account?.defaultPaymentMethod || 'CASH';
       const preferredCard = cards.find((card) => card.isDefault) || cards[0];
       setSavedPaymentCards(cards);
       setSelectedCard(preferredCard?.id || '');
@@ -1413,6 +1456,11 @@ export default function HomeScreen() {
   };
 
   const startFindingDriversFlow = (rideId: string) => {
+    activeTripShownForRideRef.current = null;
+    if (activeTripTransitionRef.current) {
+      clearTimeout(activeTripTransitionRef.current);
+      activeTripTransitionRef.current = null;
+    }
     setFindingDriversVisible(true);
     setSearchingForDriver(true);
     setDriverFound(false);
@@ -1468,26 +1516,49 @@ export default function HomeScreen() {
     }).start();
   };
 
-  const handleCancelSearch = async () => {
+  const handleCancelSearch = () => {
+    setCancelReason('');
+    setCancelDialogVisible(true);
+  };
+
+  const handleConfirmRideCancellation = async () => {
     if (cancelling) return;
+    const reason = cancelReason.trim();
+    if (!reason || !currentRideId) return;
     setCancelling(true);
 
     try {
-      if (currentRideId) {
-        await apiClient.post(`/rides/${currentRideId}/cancel`);
+      await apiClient.post(`/rides/${currentRideId}/cancel`, { reason });
+      setCancelDialogVisible(false);
+      setCancellationNotice(`Ride cancelled. Reason: ${reason}`);
+      setCancellationNoticeVisible(true);
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+        setPollingInterval(null);
       }
-      showToast('Ride search cancelled', 'blue');
-
-      setTimeout(() => {
+      cancellationNoticeTimerRef.current = setTimeout(() => {
+        cancellationNoticeTimerRef.current = null;
+        setCancellationNoticeVisible(false);
         closeFindingDrivers();
-      }, 500);
-    } catch (error) {
-      showToast('Could not cancel ride', 'red');
+      }, 3000);
+    } catch (error: any) {
+      showToast(error?.response?.data?.error || 'Could not cancel ride', 'red');
       setCancelling(false);
     }
   };
 
   const closeFindingDrivers = () => {
+    if (cancellationNoticeTimerRef.current) {
+      clearTimeout(cancellationNoticeTimerRef.current);
+      cancellationNoticeTimerRef.current = null;
+    }
+    setCancelDialogVisible(false);
+    setCancellationNoticeVisible(false);
+    activeTripShownForRideRef.current = null;
+    if (activeTripTransitionRef.current) {
+      clearTimeout(activeTripTransitionRef.current);
+      activeTripTransitionRef.current = null;
+    }
     setFindingDriversVisible(false);
     setShowActiveTrip(false);
     setCancelling(false);
@@ -1786,20 +1857,6 @@ export default function HomeScreen() {
     if (sosToastTimerRef.current) clearTimeout(sosToastTimerRef.current);
   }, []);
 
-  const handleCancelTrip = async () => {
-    try {
-      if (currentRideId) {
-        await apiClient.post(`/rides/${currentRideId}/cancel`);
-      }
-      showToast('Trip cancelled', 'red');
-      // Clear navigation immediately so nothing lingers on the map
-      clearDriverNavigation();
-      closeFindingDrivers();
-    } catch (error) {
-      showToast('Could not cancel trip', 'red');
-    }
-  };
-
   // ===== COMPLETE TRIP: clear nav then go to rating =====
   const handleCompleteTrip = async () => {
     try {
@@ -2057,12 +2114,13 @@ export default function HomeScreen() {
                 {isDriverAssigned && currentRide?.driver && (
                   <Animated.View style={[styles.driverInfo, { opacity: driverFadeAnim }]}>
                     <View style={styles.driverAvatar}>
-                      <Text style={styles.driverAvatarText}>
-                        {currentRide.driver.fullName
-                          .split(' ')
-                          .map((n) => n[0])
-                          .join('')}
-                      </Text>
+                      {currentRide.driver.profilePhoto ? (
+                        <Image source={{ uri: currentRide.driver.profilePhoto }} style={styles.driverAvatarImage} />
+                      ) : (
+                        <Text style={styles.driverAvatarText}>
+                          {currentRide.driver.fullName.split(' ').map((n) => n[0]).join('')}
+                        </Text>
+                      )}
                     </View>
                     <View style={styles.driverDetails}>
                       <Text style={styles.driverName}>{currentRide.driver.fullName}</Text>
@@ -2073,10 +2131,19 @@ export default function HomeScreen() {
                         </Text>
                       </View>
                       <Text style={styles.driverCar}>
-                        {currentRide.driver.vehicleMake} {currentRide.driver.vehicleModel}
+                        {currentRide.driver.vehicleMake} {currentRide.driver.vehicleYear || currentRide.driver.vehicleModel || ''}
                       </Text>
-                      <Text style={styles.driverPlate}>
-                        {currentRide.driver.licencePlate}
+                    </View>
+                    <View style={styles.driverVehiclePreview}>
+                      {currentRide.driver.vehiclePhoto ? (
+                        <Image source={{ uri: currentRide.driver.vehiclePhoto }} style={styles.driverVehicleImage} resizeMode="cover" />
+                      ) : (
+                        <View style={[styles.driverVehicleImage, styles.driverVehiclePlaceholder]}>
+                          <Car size={26} color={colors.gray400} strokeWidth={1.6} />
+                        </View>
+                      )}
+                      <Text style={styles.driverVehiclePlate} numberOfLines={1}>
+                        {currentRide.driver.licencePlate || 'No plate'}
                       </Text>
                     </View>
                   </Animated.View>
@@ -2143,7 +2210,7 @@ export default function HomeScreen() {
             ) : (
               // ===== ACTIVE TRIP VIEW (mirrors driver screen navigation) =====
               <>
-                <View style={styles.activeMapContainer}>
+                <View style={[styles.activeMapContainer, { height: Math.min(320, Math.max(140, windowHeight * 0.3)) }]}>
                   {/* Once the trip is completed, we do not pass any driver route/marker,
                       so the map shows only the static pickup/destination markers. */}
                   {!tripCompleted ? (
@@ -2179,12 +2246,13 @@ export default function HomeScreen() {
                   <View style={styles.activeDriverCard}>
                     <View style={styles.driverHeader}>
                       <View style={styles.referenceDriverAvatar}>
-                        <Text style={styles.driverAvatarText}>
-                          {currentRide.driver.fullName
-                            .split(' ')
-                            .map((n) => n[0])
-                            .join('')}
-                        </Text>
+                        {currentRide.driver.profilePhoto ? (
+                          <Image source={{ uri: currentRide.driver.profilePhoto }} style={styles.referenceDriverAvatarImage} />
+                        ) : (
+                          <Text style={styles.driverAvatarText}>
+                            {currentRide.driver.fullName.split(' ').map((n) => n[0]).join('')}
+                          </Text>
+                        )}
                       </View>
                       <View style={styles.referenceDriverIdentity}>
                         <Text style={styles.driverName}>
@@ -2192,7 +2260,7 @@ export default function HomeScreen() {
                         </Text>
                         <Text style={styles.referenceDriverVehicle}>
                           {currentRide.driver.vehicleMake || 'Vehicle'}{' '}
-                          {currentRide.driver.vehicleModel || ''}
+                          {currentRide.driver.vehicleYear || currentRide.driver.vehicleModel || ''}
                         </Text>
                         <View style={styles.referenceDriverRating}>
                           <Star
@@ -2206,10 +2274,19 @@ export default function HomeScreen() {
                           </Text>
                         </View>
                       </View>
-                      <View style={styles.referencePlateBadge}>
-                        <Text style={styles.referencePlateText}>
-                          {currentRide.driver.licencePlate || 'No plate'}
-                        </Text>
+                      <View style={styles.referenceVehicleBlock}>
+                        {currentRide.driver.vehiclePhoto ? (
+                          <Image source={{ uri: currentRide.driver.vehiclePhoto }} style={styles.referenceVehiclePhoto} resizeMode="cover" />
+                        ) : (
+                          <View style={[styles.referenceVehiclePhoto, styles.referenceVehiclePlaceholder]}>
+                            <Car size={28} color={colors.gray400} strokeWidth={1.6} />
+                          </View>
+                        )}
+                        <View style={styles.referencePlateBadge}>
+                          <Text style={styles.referencePlateText}>
+                            {currentRide.driver.licencePlate || 'No plate'}
+                          </Text>
+                        </View>
                       </View>
                     </View>
                   </View>
@@ -2289,6 +2366,12 @@ export default function HomeScreen() {
                     <Text style={styles.actionButtonText}>Share Ride Link</Text>
                   </TouchableOpacity>
                 </View>
+                {!tripCompleted && (
+                  <TouchableOpacity style={styles.cancelRideAction} onPress={handleCancelSearch}>
+                    <X size={17} color={colors.red} strokeWidth={2} />
+                    <Text style={styles.cancelRideActionText}>Cancel ride</Text>
+                  </TouchableOpacity>
+                )}
               </>
             )}
           </ScrollView>
@@ -2395,6 +2478,52 @@ export default function HomeScreen() {
               </View>
             </View>
           )}
+          {(cancelDialogVisible || cancellationNoticeVisible) && (
+            <View style={[StyleSheet.absoluteFill, styles.cancelDialogBackdrop]}>
+              {cancelDialogVisible && (
+                <>
+                  <Pressable style={StyleSheet.absoluteFill} onPress={() => !cancelling && setCancelDialogVisible(false)} />
+                  <ScrollableCard style={styles.cancelDialogCard}>
+                    <View style={styles.cancelDialogIcon}><X size={21} color={colors.red} /></View>
+                    <Text style={styles.cancelDialogTitle}>Cancel this ride?</Text>
+                    <Text style={styles.cancelDialogSubtitle}>Please tell the driver why you need to cancel.</Text>
+                    <TextInput
+                      style={styles.cancelReasonInput}
+                      value={cancelReason}
+                      onChangeText={setCancelReason}
+                      placeholder="Enter a cancellation reason"
+                      placeholderTextColor={colors.gray400}
+                      multiline
+                      maxLength={500}
+                      textAlignVertical="top"
+                      editable={!cancelling}
+                    />
+                    <Text style={styles.cancelReasonCount}>{cancelReason.length}/500</Text>
+                    <View style={styles.cancelDialogActions}>
+                      <TouchableOpacity style={styles.cancelKeepButton} onPress={() => setCancelDialogVisible(false)} disabled={cancelling}>
+                        <Text style={styles.cancelKeepText}>Keep ride</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.cancelConfirmButton, (!cancelReason.trim() || cancelling) && styles.cancelConfirmDisabled]}
+                        onPress={handleConfirmRideCancellation}
+                        disabled={!cancelReason.trim() || cancelling}
+                      >
+                        {cancelling ? <ActivityIndicator color={colors.white} size="small" /> : <Text style={styles.cancelConfirmText}>Cancel ride</Text>}
+                      </TouchableOpacity>
+                    </View>
+                  </ScrollableCard>
+                </>
+              )}
+              {cancellationNoticeVisible && (
+                <ScrollableCard style={styles.cancelNoticeCard}>
+                  <View style={styles.cancelNoticeIcon}><Check size={24} color={colors.white} /></View>
+                  <Text style={styles.cancelDialogTitle}>Ride cancelled</Text>
+                  <Text style={styles.cancelNoticeText}>{cancellationNotice}</Text>
+                  <Text style={styles.cancelNoticeHint}>Returning to Home…</Text>
+                </ScrollableCard>
+              )}
+            </View>
+          )}
         </View>
       </Modal>
     );
@@ -2405,17 +2534,18 @@ export default function HomeScreen() {
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
 
       <ScrollView
-        contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
+        style={{ flex: 1, minHeight: 0 }}
+        contentContainerStyle={{ paddingBottom: spacing.lg }}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
+        <View style={[styles.header, { paddingTop: 14 }]}>
           <Text style={styles.greetingSmall}>{getGreeting()},</Text>
           <Text style={styles.greetingName}>{firstName || 'there'}</Text>
         </View>
 
         <Animated.View style={{ opacity: fadeAnim }}>
           {/* MAP */}
-          <View style={styles.mapCard}>
+          <View style={[styles.mapCard, { height: Math.min(400, Math.max(180, windowHeight * 0.35)) }]}>
             {renderMap()}
 
             <View style={styles.liveBadge}>
@@ -2514,30 +2644,6 @@ export default function HomeScreen() {
           </View>
         </Animated.View>
       </ScrollView>
-
-      {/* BOTTOM NAV */}
-      <View style={[styles.bottomNav, { paddingBottom: insets.bottom + 8 }]}>
-        <NavItem
-          icon={<House size={20} color={colors.green} strokeWidth={2} />}
-          label="Home"
-          active
-        />
-        <NavItem
-          icon={<Clock size={20} color={colors.gray400} strokeWidth={1.8} />}
-          label="History"
-          onPress={() => navigation.navigate('RiderHistory')}
-        />
-        <NavItem
-          icon={<CalendarDays size={20} color={colors.gray400} strokeWidth={1.8} />}
-          label="Schedule"
-          onPress={() => navigation.navigate('RiderSchedule')}
-        />
-        <NavItem
-          icon={<CircleUserRound size={20} color={colors.gray400} strokeWidth={1.8} />}
-          label="Profile"
-          onPress={() => navigation.navigate('RiderProfile')}
-        />
-      </View>
 
       {/* PICKUP SHEET */}
       <BottomSheetModal
@@ -2742,7 +2848,7 @@ export default function HomeScreen() {
         onRequestClose={() => undefined}
       >
         <View style={styles.ratingBackdrop}>
-          <View style={styles.ratingCard}>
+          <ScrollableCard style={styles.ratingCard}>
             <Text style={styles.ratingTitle}>Rate our driver</Text>
             <Text style={styles.ratingSubtitle}>
               How was your ride with {driverName}?
@@ -2777,13 +2883,13 @@ export default function HomeScreen() {
                 <Text style={styles.submitRatingText}>Submit rating</Text>
               )}
             </TouchableOpacity>
-          </View>
+          </ScrollableCard>
         </View>
       </Modal>
 
       <Modal visible={showRatingThankYou} transparent animationType="fade">
         <View style={styles.ratingBackdrop}>
-          <View style={styles.thankYouCard}>
+          <ScrollableCard style={styles.thankYouCard}>
             <View style={styles.thankYouIcon}>
               <Check size={30} color={colors.white} />
             </View>
@@ -2791,7 +2897,7 @@ export default function HomeScreen() {
             <Text style={styles.ratingSubtitle}>
               Your feedback helps keep CampusConnect safe.
             </Text>
-          </View>
+          </ScrollableCard>
         </View>
       </Modal>
 
@@ -2909,29 +3015,8 @@ export default function HomeScreen() {
   );
 }
 
-function NavItem({
-  icon,
-  label,
-  active,
-  onPress,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  active?: boolean;
-  onPress?: () => void;
-}) {
-  return (
-    <TouchableOpacity style={styles.navItem} onPress={onPress} activeOpacity={0.6}>
-      {icon}
-      <Text style={[styles.navItemLabel, active && styles.navItemLabelActive]}>
-        {label}
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.gray50 },
+  container: { flex: 1, minHeight: 0, minWidth: 0, backgroundColor: colors.gray50 },
   chatOverlay: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end', zIndex: 100 },
   chatBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(15,23,42,0.34)' },
   chatSheet: { height: '88%', overflow: 'hidden', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: colors.gray50 },
@@ -3014,7 +3099,7 @@ const styles = StyleSheet.create({
   },
 
   mapCard: {
-    height: Math.min(SCREEN_HEIGHT * 0.35, 350),
+    height: 240,
     marginHorizontal: spacing.lg,
     marginTop: spacing.lg,
     borderRadius: radius.lg,
@@ -3120,6 +3205,8 @@ const styles = StyleSheet.create({
 
   routeDetails: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
     justifyContent: 'space-around',
     paddingHorizontal: spacing.lg,
     marginTop: spacing.sm,
@@ -3143,26 +3230,6 @@ const styles = StyleSheet.create({
   actionsWrap: { paddingHorizontal: spacing.lg, marginTop: spacing.md },
   scheduleRideButton: { minHeight: 44, marginTop: spacing.sm, borderRadius: radius.full, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.green, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   scheduleRideText: { color: colors.greenDark, fontFamily: font.bold, fontSize: 13 },
-
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: colors.white,
-    borderTopWidth: 1,
-    borderTopColor: colors.gray100,
-    paddingTop: 10,
-  },
-  navItem: { flex: 1, alignItems: 'center', gap: 3 },
-  navItemLabel: {
-    fontFamily: font.medium,
-    fontSize: 10.5,
-    color: colors.gray400,
-    fontWeight: '500',
-  },
-  navItemLabelActive: {
-    color: colors.green,
-    fontFamily: font.semibold,
-    fontWeight: '600',
-  },
 
   searchRow: {
     flexDirection: 'row',
@@ -3411,20 +3478,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(76, 175, 80, 0.06)',
     borderRadius: radius.lg,
-    padding: spacing.lg,
+    padding: spacing.md,
     marginBottom: spacing.lg,
     width: '100%',
     borderWidth: 1,
     borderColor: 'rgba(76, 175, 80, 0.25)',
   },
   driverAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     backgroundColor: colors.blue,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.lg,
+    marginRight: spacing.sm,
     shadowColor: colors.blue,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -3437,8 +3504,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.white,
   },
+  driverAvatarImage: { width: '100%', height: '100%', borderRadius: 27 },
   driverDetails: {
     flex: 1,
+    minWidth: 0,
   },
   driverName: {
     fontFamily: font.bold,
@@ -3474,6 +3543,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     marginTop: 1,
   },
+  driverVehiclePreview: { width: 82, alignItems: 'center', gap: 4, marginLeft: spacing.xs },
+  driverVehicleImage: { width: 78, height: 48, borderRadius: radius.sm, backgroundColor: colors.gray100 },
+  driverVehiclePlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  driverVehiclePlate: { maxWidth: 82, paddingHorizontal: 6, paddingVertical: 4, overflow: 'hidden', borderRadius: radius.sm, backgroundColor: colors.gray900, color: colors.white, fontFamily: font.bold, fontSize: 9, textAlign: 'center' },
 
   // Trip Details
   tripDetails: {
@@ -3578,6 +3651,25 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#f44336',
   },
+  cancelRideAction: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.red, borderRadius: radius.md, backgroundColor: colors.white },
+  cancelRideActionText: { color: colors.red, fontFamily: font.bold, fontSize: 13 },
+  cancelDialogBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg, backgroundColor: 'rgba(15,23,42,0.55)', zIndex: 100, elevation: 100 },
+  cancelDialogCard: { width: '100%', maxWidth: 400, padding: spacing.xl, borderRadius: radius.lg, backgroundColor: colors.white, ...shadow.lg },
+  cancelDialogIcon: { width: 42, height: 42, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: '#FEE2E2', marginBottom: spacing.md },
+  cancelDialogTitle: { color: colors.gray900, fontFamily: font.bold, fontSize: 19, textAlign: 'center' },
+  cancelDialogSubtitle: { color: colors.gray600, fontFamily: font.regular, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: spacing.xs },
+  cancelReasonInput: { minHeight: 104, maxHeight: 150, marginTop: spacing.md, padding: spacing.md, borderWidth: 1, borderColor: colors.gray200, borderRadius: radius.md, backgroundColor: colors.gray50, color: colors.gray900, fontFamily: font.regular, fontSize: 14 },
+  cancelReasonCount: { color: colors.gray400, fontFamily: font.medium, fontSize: 10, textAlign: 'right', marginTop: 4 },
+  cancelDialogActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
+  cancelKeepButton: { flex: 1, minHeight: 46, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.gray100 },
+  cancelKeepText: { color: colors.gray800, fontFamily: font.bold, fontSize: 13 },
+  cancelConfirmButton: { flex: 1, minHeight: 46, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.red },
+  cancelConfirmDisabled: { opacity: 0.5 },
+  cancelConfirmText: { color: colors.white, fontFamily: font.bold, fontSize: 13 },
+  cancelNoticeCard: { width: '100%', maxWidth: 360, padding: spacing.xl, alignItems: 'center', borderRadius: radius.lg, backgroundColor: colors.white, ...shadow.lg },
+  cancelNoticeIcon: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 23, backgroundColor: colors.green, marginBottom: spacing.md },
+  cancelNoticeText: { color: colors.gray700, fontFamily: font.medium, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: spacing.sm },
+  cancelNoticeHint: { color: colors.gray400, fontFamily: font.medium, fontSize: 11, textAlign: 'center', marginTop: spacing.md },
 
   waitingContainer: {
     flexDirection: 'row',
@@ -3599,7 +3691,7 @@ const styles = StyleSheet.create({
 
   // Active Trip styles
   activeMapContainer: {
-    height: Math.min(SCREEN_HEIGHT * 0.3, 250),
+    height: 200,
     borderRadius: radius.lg,
     overflow: 'hidden',
     backgroundColor: colors.gray100,
@@ -3786,6 +3878,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.blue,
     ...shadow.sm,
   },
+  referenceDriverAvatarImage: { width: '100%', height: '100%', borderRadius: 28 },
   referenceDriverIdentity: { flex: 1, minWidth: 0 },
   referenceDriverVehicle: {
     marginTop: 2,
@@ -3804,8 +3897,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.yellowText,
   },
+  referenceVehicleBlock: { width: 100, alignItems: 'center', gap: 5, marginLeft: spacing.sm },
+  referenceVehiclePhoto: { width: 96, height: 58, borderRadius: radius.sm, backgroundColor: colors.gray100 },
+  referenceVehiclePlaceholder: { alignItems: 'center', justifyContent: 'center' },
   referencePlateBadge: {
-    maxWidth: 106,
+    maxWidth: 100,
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: radius.sm,

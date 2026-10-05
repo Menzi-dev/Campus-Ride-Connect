@@ -1,3 +1,4 @@
+import { useToast } from '../components/Toast';
 import React, { useState, useEffect } from 'react';
 import {
     View,
@@ -5,11 +6,11 @@ import {
     StyleSheet,
     TouchableOpacity,
     ActivityIndicator,
-    Alert,
-} from 'react-native';
+  } from 'react-native';
 import apiClient from '../services/ApiClient';
 
 const TestConnectionScreen = () => {
+    const { showToast } = useToast();
     const [loading, setLoading] = useState(false);
     const [connectionStatus, setConnectionStatus] = useState<string>('Not tested');
     const [users, setUsers] = useState<any[]>([]);
@@ -20,10 +21,10 @@ const TestConnectionScreen = () => {
         try {
             const response = await apiClient.get('/test/connection');
             setConnectionStatus(`✅ ${response.data.status} - ${response.data.message}`);
-            Alert.alert('Success', `Connected to ${response.data.database}`);
+            showToast(`Connected to ${response.data.database}`, 'green');
         } catch (error: any) {
             setConnectionStatus(`❌ Connection Failed: ${error.message}`);
-            Alert.alert('Error', `Could not connect to backend: ${error.message}`);
+            showToast(`Could not connect to backend: ${error.message}`, 'red');
         } finally {
             setLoading(false);
         }
@@ -35,7 +36,7 @@ const TestConnectionScreen = () => {
             const response = await apiClient.get('/hello');
             setBackendMessage(response.data);
         } catch (error: any) {
-            Alert.alert('Error', error.message);
+            showToast(error.message, 'red');
         } finally {
             setLoading(false);
         }
@@ -47,7 +48,7 @@ const TestConnectionScreen = () => {
             const response = await apiClient.get('/users');
             setUsers(Array.isArray(response.data) ? response.data : []);
         } catch (error: any) {
-            Alert.alert('Error', error.message);
+            showToast(error.message, 'red');
         } finally {
             setLoading(false);
         }
@@ -126,7 +127,7 @@ const TestConnectionScreen = () => {
 
 const styles = StyleSheet.create({
     container: {
-        flex: 1,
+        flex: 1, minWidth: 0, minHeight: 0,
         backgroundColor: '#0a0a1a',
         padding: 20,
     },

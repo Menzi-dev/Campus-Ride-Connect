@@ -116,9 +116,12 @@ public class SecurityController {
 
     private List<Map<String, Object>> sosRows(String condition) {
         String sql = "SELECT s.alert_id, s.status, s.gps_lat, s.gps_lng, s.created_at, s.audio_file_path, s.recording_duration, "
+                + "s.triggered_by, reporter.full_name AS triggered_by_name, reporter.role AS triggered_by_role, "
                 + "r.ride_id, r.pickup_location, r.destination, rider.full_name AS rider_name, driver.full_name AS driver_name "
                 + "FROM sos_alerts s JOIN rides r ON r.ride_id = s.ride_id LEFT JOIN users rider ON rider.user_id = r.rider_id "
-                + "LEFT JOIN users driver ON driver.user_id = r.driver_id WHERE " + condition + " ORDER BY s.created_at DESC";
+                + "LEFT JOIN users driver ON driver.user_id = r.driver_id "
+                + "LEFT JOIN users reporter ON reporter.user_id = s.triggered_by "
+                + "WHERE " + condition + " ORDER BY s.created_at DESC";
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map<String, Object> row : jdbcTemplate.queryForList(sql)) {
             Map<String, Object> alert = new LinkedHashMap<>();
@@ -132,6 +135,9 @@ public class SecurityController {
             alert.put("rideReference", String.format("R-%d", ((Number) row.get("ride_id")).longValue()));
             alert.put("riderName", row.get("rider_name"));
             alert.put("driverName", row.get("driver_name"));
+            alert.put("triggeredBy", row.get("triggered_by"));
+            alert.put("triggeredByName", row.get("triggered_by_name"));
+            alert.put("triggeredByRole", row.get("triggered_by_role"));
             alert.put("pickupLocation", row.get("pickup_location"));
             alert.put("destination", row.get("destination"));
             alert.put("hasAudio", row.get("audio_file_path") != null);

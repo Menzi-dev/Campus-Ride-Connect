@@ -1,38 +1,55 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ArrowDownToLine, ArrowLeft, Headphones, Pause, Play, TriangleAlert } from 'lucide-react-native';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../services/ApiClient';
+import { useToast } from '../components/Toast';
 import { colors, font, radius, shadow, spacing } from '../theme/theme';
 
 type RootStackParamList = { IncidentReports: undefined; SecurityDashboard: undefined; AudioRecordings: { incidentId: number; security?: boolean } };
 type Incident = { referenceNumber: string; typeLabel: string; status: string; rideReference: string; createdAt: string; hasAudio: boolean; recordingDuration?: number };
-
-type AudioRoute = RouteProp<RootStackParamList, 'AudioRecordings'>;
+const audioExtension = (mime: string) => mime.includes('webm') ? 'webm' : mime.includes('ogg') ? 'ogg' : mime.includes('mpeg') ? 'mp3' : mime.includes('wav') ? 'wav' : mime.includes('mp4') || mime.includes('m4a') ? 'm4a' : 'audio';
 
 export default function AudioRecordingsScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
-  const route = useRoute<AudioRoute>();
+  const route = useRoute<RouteProp<RootStackParamList, 'AudioRecordings'>>();
+  const { showToast } = useToast();
   const [incident, setIncident] = useState<Incident | null>(null);
-  const securityRecording = route.params.security === true;
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [playing, setPlaying] = useState(false);
-  const playerRef = useRef<HTMLAudioElement | null>(null);
-  const nativeSoundRef = useRef<Audio.Sound | null>(null);
-  const recordingUrl = `${apiClient.defaults.baseURL || ''}${securityRecording ? `/security/sos/${route.params.incidentId}/audio` : `/admin/incidents/${route.params.incidentId}/audio`}`;
   const [error, setError] = useState<string | null>(null);
+  const playerRef = useRef<HTMLAudioElement | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
+  const nativeSoundRef = useRef<Audio.Sound | null>(null);
+  const focused = useRef(false);
+  const openingRef = useRef(false);
+  const downloadingRef = useRef(false);
+  const securityRecording = route.params.security === true;
+  const audioPath = `${securityRecording ? '/security/sos' : '/admin/incidents'}/${route.params.incidentId}/audio`;
+  const recordingUrl = `${apiClient.defaults.baseURL || ''}${audioPath}`;
+
+  const releasePlayer = useCallback(() => {
+    playerRef.current?.pause();
+    playerRef.current = null;
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    objectUrlRef.current = null;
+    void nativeSoundRef.current?.unloadAsync().catch(() => {});
+    nativeSoundRef.current = null;
+  }, []);
 
   const loadIncident = useCallback(async () => {
     setLoading(true);
     try {
       if (securityRecording) {
         const response = await apiClient.get('/security/sos');
-        const alert = [...(response.data?.active || []), ...(response.data?.resolved || [])].find((item: any) => item.id === route.params.incidentId);
+        const alert = [...(response.data?.active || []), ...(response.data?.resolved || [])].find((item: any) => String(item.id) === String(route.params.incidentId));
         setIncident(alert ? { referenceNumber: alert.reference, typeLabel: 'SOS Alert', status: alert.status, rideReference: alert.rideReference, createdAt: alert.createdAt, hasAudio: alert.hasAudio, recordingDuration: alert.recordingDuration } : null);
       } else {
         const response = await apiClient.get(`/admin/incidents/${route.params.incidentId}`);
@@ -41,93 +58,135 @@ export default function AudioRecordingsScreen() {
       setError(null);
     } catch (err: any) {
       setError(err?.response?.data?.error || 'Could not load this recording');
-    } finally {
-      setLoading(false);
-    }
-  }, [route.params.incidentId]);
+    } finally { setLoading(false); }
+  }, [route.params.incidentId, securityRecording]);
 
-  useFocusEffect(useCallback(() => { loadIncident(); }, [loadIncident]));
+  useFocusEffect(useCallback(() => {
+    focused.current = true;
+    setPlaying(false);
+    void loadIncident();
+    return () => { focused.current = false; releasePlayer(); };
+  }, [loadIncident, releasePlayer]));
 
   const openRecording = async () => {
-    if (Platform.OS !== 'web' && nativeSoundRef.current) {
-      const status = await nativeSoundRef.current.getStatusAsync();
-      if (status.isLoaded) {
-        if (status.isPlaying) {
-          await nativeSoundRef.current.pauseAsync();
-          setPlaying(false);
-        } else {
-          await nativeSoundRef.current.playAsync();
-          setPlaying(true);
-        }
-      }
-      return;
-    }
-    if (playerRef.current) {
-      if (playing) { playerRef.current.pause(); setPlaying(false); } else { await playerRef.current.play(); setPlaying(true); }
-      return;
-    }
+    if (openingRef.current) return;
+    openingRef.current = true;
     setOpening(true);
     try {
+      if (nativeSoundRef.current) {
+        const status = await nativeSoundRef.current.getStatusAsync();
+        if (status.isLoaded) {
+          if (status.isPlaying) await nativeSoundRef.current.pauseAsync();
+          else await nativeSoundRef.current.playAsync();
+          setPlaying(!status.isPlaying);
+        }
+        return;
+      }
+      if (playerRef.current) {
+        if (playerRef.current.paused) { await playerRef.current.play(); setPlaying(true); }
+        else { playerRef.current.pause(); setPlaying(false); }
+        return;
+      }
       if (Platform.OS !== 'web') {
         const token = await AsyncStorage.getItem('authToken');
         const { sound } = await Audio.Sound.createAsync(
           { uri: recordingUrl, headers: token ? { Authorization: `Bearer ${token}` } : undefined },
-          { shouldPlay: true },
+          { shouldPlay: false },
           (status) => {
-            if (status.isLoaded && status.didJustFinish) {
-              setPlaying(false);
-              void sound.unloadAsync();
-              nativeSoundRef.current = null;
-            }
+            if (status.isLoaded && status.didJustFinish) { setPlaying(false); releasePlayer(); }
           },
         );
+        if (!focused.current) { await sound.unloadAsync(); return; }
         nativeSoundRef.current = sound;
-        setPlaying(true);
-        return;
-      }
-      const response = await apiClient.get(`${securityRecording ? '/security/sos' : '/admin/incidents'}/${securityRecording ? route.params.incidentId + '/audio' : route.params.incidentId + '/audio'}`, { responseType: 'blob' });
-      if (typeof window !== 'undefined' && response.data instanceof Blob) {
-        const objectUrl = URL.createObjectURL(response.data);
-        const player = new window.Audio(objectUrl);
-        playerRef.current = player;
-        player.onended = () => { setPlaying(false); URL.revokeObjectURL(objectUrl); playerRef.current = null; };
-        await player.play();
-        setPlaying(true);
+        await sound.playAsync();
       } else {
-        await Linking.openURL(recordingUrl);
+        const response = await apiClient.get(audioPath, { responseType: 'blob' });
+        if (!focused.current) return;
+        objectUrlRef.current = URL.createObjectURL(response.data);
+        const player = new window.Audio(objectUrlRef.current);
+        playerRef.current = player;
+        player.onended = () => { setPlaying(false); releasePlayer(); };
+        player.onerror = () => { setPlaying(false); releasePlayer(); showToast('Could not play this recording. Try downloading it.', 'red'); };
+        await player.play();
       }
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'Could not open this recording');
-    } finally {
-      setOpening(false);
+      setPlaying(true);
+    } catch {
+      releasePlayer();
+      setPlaying(false);
+      showToast('Could not play this recording. Please try again.', 'red');
+    } finally { openingRef.current = false; setOpening(false); }
+  };
+
+  const downloadRecording = async () => {
+    if (downloadingRef.current) return;
+    downloadingRef.current = true;
+    setDownloading(true);
+    let temporaryFile: string | undefined;
+    try {
+      const baseName = `recording-${String(incident?.referenceNumber || route.params.incidentId).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+      if (Platform.OS === 'web') {
+        const response = await apiClient.get(audioPath, { responseType: 'blob' });
+        const blob: Blob = response.data;
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = `${baseName}.${audioExtension(blob.type)}`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      } else {
+        if (!FileSystem.cacheDirectory) throw new Error('File storage is unavailable');
+        const token = await AsyncStorage.getItem('authToken');
+        temporaryFile = `${FileSystem.cacheDirectory}${baseName}-${Date.now()}`;
+        const result = await FileSystem.downloadAsync(recordingUrl, temporaryFile, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        if (result.status < 200 || result.status >= 300) throw new Error('Download failed');
+        const mime = Object.entries(result.headers || {}).find(([key]) => key.toLowerCase() === 'content-type')?.[1] || 'application/octet-stream';
+        const filename = `${baseName}.${audioExtension(mime)}`;
+        if (Platform.OS === 'android') {
+          const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+          if (!permission.granted) return;
+          const destination = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, filename, mime);
+          const contents = await FileSystem.readAsStringAsync(result.uri, { encoding: FileSystem.EncodingType.Base64 });
+          await FileSystem.writeAsStringAsync(destination, contents, { encoding: FileSystem.EncodingType.Base64 });
+          showToast('Recording downloaded.', 'green');
+        } else {
+          const namedFile = `${FileSystem.cacheDirectory}${filename}`;
+          await FileSystem.moveAsync({ from: result.uri, to: namedFile });
+          temporaryFile = namedFile;
+          await Share.share({ url: namedFile, title: filename });
+        }
+      }
+    } catch { showToast('Could not download this recording. Please try again.', 'red'); }
+    finally {
+      if (temporaryFile) await FileSystem.deleteAsync(temporaryFile, { idempotent: true }).catch(() => {});
+      downloadingRef.current = false;
+      setDownloading(false);
     }
   };
 
-  useFocusEffect(useCallback(() => () => {
-    void nativeSoundRef.current?.unloadAsync();
-    nativeSoundRef.current = null;
-  }, []));
-
   return <View style={styles.container}>
     <View style={styles.header}>
-      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}><ArrowLeft size={20} color={colors.greenDark} /><Text style={styles.backText}>Back</Text></TouchableOpacity>
+      <TouchableOpacity style={styles.backButton} onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate(securityRecording ? 'SecurityDashboard' : 'IncidentReports')} accessibilityRole="button" accessibilityLabel="Back from recording"><ArrowLeft size={20} color={colors.greenDark} /><Text style={styles.backText}>Back</Text></TouchableOpacity>
       <Text style={styles.title}>Audio Recordings</Text>
     </View>
-    {loading ? <ActivityIndicator size="large" color={colors.green} style={styles.loader} /> : error ? <View style={styles.state}><TriangleAlert size={32} color={colors.red} /><Text style={styles.stateTitle}>Could not load recording</Text><Text style={styles.stateText}>{error}</Text><TouchableOpacity style={styles.retry} onPress={loadIncident}><Text style={styles.retryText}>Retry</Text></TouchableOpacity></View> : !incident?.hasAudio ? <View style={styles.state}><TriangleAlert size={32} color={colors.gray400} /><Text style={styles.stateTitle}>No audio evidence</Text><Text style={styles.stateText}>This incident does not have an audio recording.</Text></View> : <View style={styles.content}>
-      <View style={styles.warning}><TriangleAlert size={17} color={colors.yellowText} /><Text style={styles.warningText}>Access is logged and auditable. Use only with authorisation.</Text></View>
-      <View style={styles.recordingCard}>
-        <View style={styles.iconCircle}><Headphones size={30} color={colors.blue} /></View>
-        <Text style={styles.reference}>#{incident.referenceNumber}</Text>
-        <Text style={styles.meta}>{incident.typeLabel}  •  Ride #{incident.rideReference}</Text>
-        <Text style={styles.meta}>{incident.status}  •  {incident.recordingDuration ? `${incident.recordingDuration}s` : 'Duration unavailable'}</Text>
-        <View style={styles.actionRow}><TouchableOpacity style={styles.playButton} onPress={openRecording} disabled={opening}>{playing ? <Pause size={18} color={colors.white} /> : <Play size={18} color={colors.white} />}<Text style={styles.playText}>{opening ? 'Loading...' : playing ? 'Pause' : 'Play'}</Text></TouchableOpacity><TouchableOpacity style={styles.downloadButton} onPress={() => Linking.openURL(recordingUrl)}><ArrowDownToLine size={18} color={colors.gray800} /><Text style={styles.downloadText}>Download</Text></TouchableOpacity></View>
-      </View>
-    </View>}
+    <ScrollView style={{ flex: 1, minHeight: 0 }} contentContainerStyle={styles.content}>
+      {loading ? <ActivityIndicator size="large" color={colors.green} style={styles.loader} /> : error ? <View style={styles.state}><TriangleAlert size={32} color={colors.red} /><Text style={styles.stateTitle}>Could not load recording</Text><Text style={styles.stateText}>{error}</Text><TouchableOpacity style={styles.retry} onPress={loadIncident}><Text style={styles.retryText}>Retry</Text></TouchableOpacity></View> : !incident?.hasAudio ? <View style={styles.state}><TriangleAlert size={32} color={colors.gray400} /><Text style={styles.stateTitle}>No audio evidence</Text><Text style={styles.stateText}>This incident does not have an audio recording.</Text></View> : <>
+        <View style={styles.warning}><TriangleAlert size={17} color={colors.yellowText} /><Text style={styles.warningText}>Access is logged and auditable. Use only with authorisation.</Text></View>
+        <View style={styles.recordingCard}>
+          <View style={styles.iconCircle}><Headphones size={30} color={colors.blue} /></View>
+          <Text style={styles.reference}>#{incident.referenceNumber}</Text>
+          <Text style={styles.meta}>{incident.typeLabel}  ·  Ride #{incident.rideReference}</Text>
+          <Text style={styles.meta}>{incident.status}  ·  {incident.recordingDuration ? `${incident.recordingDuration}s` : 'Duration unavailable'}</Text>
+          <View style={styles.actionRow}><TouchableOpacity style={styles.playButton} onPress={openRecording} disabled={opening} accessibilityRole="button" accessibilityLabel={playing ? 'Pause recording' : 'Play recording'}>{playing ? <Pause size={18} color={colors.white} /> : <Play size={18} color={colors.white} />}<Text style={styles.playText}>{opening ? 'Loading...' : playing ? 'Pause' : 'Play'}</Text></TouchableOpacity><TouchableOpacity style={styles.downloadButton} onPress={downloadRecording} disabled={downloading} accessibilityRole="button" accessibilityLabel="Download recording"><ArrowDownToLine size={18} color={colors.gray800} /><Text style={styles.downloadText}>{downloading ? 'Downloading...' : 'Download'}</Text></TouchableOpacity></View>
+        </View>
+      </>}
+    </ScrollView>
   </View>;
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.gray50 },
+  container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
   header: { backgroundColor: colors.white, paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg },
   backButton: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: spacing.sm },
   backText: { color: colors.greenDark, fontFamily: font.semibold, fontSize: 14 },
@@ -140,9 +199,9 @@ const styles = StyleSheet.create({
   iconCircle: { width: 72, height: 72, borderRadius: radius.full, backgroundColor: colors.blueLight, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg },
   reference: { color: colors.gray900, fontFamily: font.extrabold, fontSize: 22 },
   meta: { color: colors.gray500, fontFamily: font.medium, fontSize: 13, marginTop: spacing.sm, textAlign: 'center' },
-  actionRow: { flexDirection: 'row', gap: spacing.sm, alignSelf: 'stretch', marginTop: spacing.xl },
-  playButton: { flex: 1, minHeight: 50, backgroundColor: colors.blue, borderRadius: radius.full, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  downloadButton: { flex: 1, minHeight: 50, borderWidth: 1, borderColor: colors.gray200, borderRadius: radius.full, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignSelf: 'stretch', marginTop: spacing.xl },
+  playButton: { flexGrow: 1, flexBasis: 120, minHeight: 50, backgroundColor: colors.blue, borderRadius: radius.full, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  downloadButton: { flexGrow: 1, flexBasis: 120, minHeight: 50, borderWidth: 1, borderColor: colors.gray200, borderRadius: radius.full, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   playText: { color: colors.white, fontFamily: font.bold, fontSize: 14 },
   downloadText: { color: colors.gray800, fontFamily: font.bold, fontSize: 14 },
   state: { alignItems: 'center', padding: spacing.xxxl, marginTop: spacing.xxxl },

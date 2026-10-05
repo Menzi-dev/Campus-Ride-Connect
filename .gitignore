@@ -27,3 +27,9 @@ Thumbs.db
 # Environment files
 .env
 .env.*
+
+# Local documentation tools
+.report-tools/
+
+# Local uploaded photos, documents and SOS evidence
+backend/uploads/

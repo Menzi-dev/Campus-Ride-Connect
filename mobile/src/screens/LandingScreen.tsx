@@ -1,13 +1,13 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, StatusBar, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Animated, StatusBar, Image, useWindowDimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Navigation, ShieldCheck, MapPin, Siren } from 'lucide-react-native';
+import { ShieldCheck, MapPin, Siren } from 'lucide-react-native';
 import { colors, radius, spacing, font } from '../theme/theme';
 
-const { width } = Dimensions.get('window');
+const LOGO = require('../assets/icon.png');
 
 type RootStackParamList = {
   Landing: undefined;
@@ -21,16 +21,12 @@ const SPLASH_DURATION = 2400;
 export default function LandingScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const logoSize = Math.min(290, width * 0.64, height * 0.31);
 
   const logoAnim = useRef(new Animated.Value(0)).current;
-  const nameAnim = useRef(new Animated.Value(0)).current;
-  const taglineAnim = useRef(new Animated.Value(0)).current;
   const featuresAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
-
-  // Pulsing "live" ring behind the logo
-  const pulseScale = useRef(new Animated.Value(1)).current;
-  const pulseOpacity = useRef(new Animated.Value(0.5)).current;
 
   useEffect(() => {
     const rise = (val: Animated.Value, delay: number) =>
@@ -38,24 +34,8 @@ export default function LandingScreen() {
 
     Animated.stagger(120, [
       rise(logoAnim, 0),
-      rise(nameAnim, 0),
-      rise(taglineAnim, 0),
       rise(featuresAnim, 0),
     ]).start();
-
-    const pulseLoop = Animated.loop(
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(pulseScale, { toValue: 1.45, duration: 1400, useNativeDriver: true }),
-          Animated.timing(pulseScale, { toValue: 1, duration: 0, useNativeDriver: true }),
-        ]),
-        Animated.sequence([
-          Animated.timing(pulseOpacity, { toValue: 0, duration: 1400, useNativeDriver: true }),
-          Animated.timing(pulseOpacity, { toValue: 0.5, duration: 0, useNativeDriver: true }),
-        ]),
-      ])
-    );
-    pulseLoop.start();
 
     Animated.timing(progressAnim, {
       toValue: 1,
@@ -63,14 +43,11 @@ export default function LandingScreen() {
       useNativeDriver: false,
     }).start();
 
-    pulseLoop.start();
-
     const timer = setTimeout(() => {
       navigation.replace('Login');
     }, SPLASH_DURATION);
 
     return () => {
-      pulseLoop.stop();
       clearTimeout(timer);
     };
   }, []);
@@ -87,58 +64,35 @@ export default function LandingScreen() {
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
 
       <LinearGradient
-        colors={[colors.white, '#F3FBF6', colors.white]}
+        colors={['#F1FBF6', colors.white, '#F6F9FF']}
         start={{ x: 0.1, y: 0 }}
         end={{ x: 0.9, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Soft background blobs, on-brand but subtle */}
-      <View style={[styles.blob, styles.blobGreen]} pointerEvents="none" />
-      <View style={[styles.blob, styles.blobBlue]} pointerEvents="none" />
-
       <View style={[styles.content, { paddingTop: insets.top + spacing.xxl }]}>
-        {/* LOGO with live pulse ring */}
-        <Animated.View style={[styles.logoWrap, fadeUp(logoAnim)]}>
-          <Animated.View
-            style={[
-              styles.pulseRing,
-              { opacity: pulseOpacity, transform: [{ scale: pulseScale }] },
-            ]}
-          />
-          <LinearGradient
-            colors={[colors.green, colors.greenDark]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.logoCircle}
-          >
-            <Navigation size={40} color={colors.white} strokeWidth={2} fill={colors.white} />
-          </LinearGradient>
+        <Animated.View
+          style={[styles.logoWrap, { width: logoSize, height: logoSize }, fadeUp(logoAnim)]}
+        >
+          <Image source={LOGO} style={styles.logoImage} resizeMode="contain" />
         </Animated.View>
 
-        {/* APP NAME */}
-        <Animated.Text style={[styles.logoText, fadeUp(nameAnim)]}>CampusConnect</Animated.Text>
-
-        {/* TAGLINE */}
-        <Animated.Text style={[styles.tagline, fadeUp(taglineAnim)]}>
-          Safe campus rides, always
-        </Animated.Text>
-
-        {/* FEATURES */}
         <Animated.View style={[styles.featuresRow, fadeUp(featuresAnim)]}>
           <Feature
             iconBg={colors.greenLight}
-            icon={<ShieldCheck size={14} color={colors.green} strokeWidth={2.2} />}
+            icon={<ShieldCheck size={17} color={colors.green} strokeWidth={2.2} />}
             label="Verified Students"
           />
+          <View style={styles.featureSeparator} />
           <Feature
             iconBg={colors.blueLight}
-            icon={<MapPin size={14} color={colors.blue} strokeWidth={2.2} />}
+            icon={<MapPin size={17} color={colors.blue} strokeWidth={2.2} />}
             label="Live Tracking"
           />
+          <View style={styles.featureSeparator} />
           <Feature
             iconBg={colors.redLight}
-            icon={<Siren size={14} color={colors.red} strokeWidth={2.2} />}
+            icon={<Siren size={17} color={colors.red} strokeWidth={2.2} />}
             label="SOS Alert"
           />
         </Animated.View>
@@ -165,7 +119,7 @@ function Feature({
   label: string;
 }) {
   return (
-    <View style={styles.featurePill}>
+    <View style={styles.featureItem}>
       <View style={[styles.featureIconCircle, { backgroundColor: iconBg }]}>{icon}</View>
       <Text style={styles.featureText}>{label}</Text>
     </View>
@@ -173,109 +127,65 @@ function Feature({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.white, overflow: 'hidden' },
-
-  blob: { position: 'absolute', borderRadius: 999 },
-  blobGreen: {
-    width: width * 1.2,
-    height: width * 1.2,
-    backgroundColor: 'rgba(34,197,94,0.10)',
-    top: -width * 0.6,
-    left: -width * 0.4,
-  },
-  blobBlue: {
-    width: width * 0.95,
-    height: width * 0.95,
-    backgroundColor: 'rgba(37,99,235,0.08)',
-    bottom: -width * 0.5,
-    right: -width * 0.35,
-  },
+  container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.white, overflow: 'hidden' },
 
   content: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.xxxl,
+    paddingHorizontal: spacing.xl,
   },
 
   logoWrap: {
-    width: 100,
-    height: 100,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.xl,
   },
-  pulseRing: {
-    position: 'absolute',
-    width: 100,
-    height: 100,
-    borderRadius: 30,
-    borderWidth: 2,
-    borderColor: colors.green,
+  logoImage: {
+    width: '100%',
+    height: '100%',
   },
-  logoCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: radius.lg + 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: colors.green,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-
-  logoText: {
-    fontFamily: font.extrabold,
-    fontSize: 32,
-    fontWeight: '800',
-    color: colors.gray900,
-    letterSpacing: 0.2,
-    marginBottom: 6,
-  },
-  tagline: {
-    fontFamily: font.medium,
-    fontSize: 15,
-    fontWeight: '500',
-    color: colors.gray500,
-    marginBottom: spacing.xxxl + 4,
-  },
-
   featuresRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  featurePill: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
+    width: '100%',
+    maxWidth: 420,
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.md,
     backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.gray100,
-    borderRadius: radius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+    borderRadius: radius.md,
+    shadowColor: colors.gray900,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  featureItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xs,
   },
   featureIconCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 32,
+    height: 32,
+    borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  featureSeparator: {
+    width: 1,
+    height: 36,
+    backgroundColor: colors.gray200,
+  },
   featureText: {
     fontFamily: font.semibold,
-    fontSize: 11.5,
+    fontSize: 12,
     fontWeight: '600',
-    color: colors.gray700,
+    color: colors.gray800,
+    textAlign: 'center',
   },
 
   loaderWrap: {

@@ -5,7 +5,6 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import { ArrowUpRight, Check, ChevronLeft, ChevronRight, Clock3, MapPin, Star } from 'lucide-react-native';
 import { colors, font, radius, spacing } from '../theme/theme';
 import apiClient from '../services/ApiClient';
-import BottomNav from '../components/BottomNav';
 
 type RootStackParamList = {
   RatingDriver: { rideId: string; driverName?: string; returnToHistory?: boolean };
@@ -176,7 +175,7 @@ export default function TripHistoryScreen() {
         <View style={styles.pagination}>
           <TouchableOpacity disabled={page === 0} onPress={() => setPage((value) => Math.max(0, value - 1))} style={[styles.pageButton, page === 0 && styles.disabled]} accessibilityLabel="Previous page">
             <ChevronLeft size={17} color={page === 0 ? colors.gray400 : colors.gray800} />
-            <Text style={[styles.pageText, page === 0 && styles.disabledText]}>Back</Text>
+            <Text style={[styles.pageText, page === 0 && styles.disabledText]}>Previous</Text>
           </TouchableOpacity>
           <Text style={styles.pageLabel}>{page + 1} / {pageCount}</Text>
           <TouchableOpacity disabled={page >= pageCount - 1} onPress={() => setPage((value) => Math.min(pageCount - 1, value + 1))} style={[styles.pageButton, page >= pageCount - 1 && styles.disabled]} accessibilityLabel="Next page">
@@ -184,7 +183,6 @@ export default function TripHistoryScreen() {
             <ChevronRight size={17} color={page >= pageCount - 1 ? colors.gray400 : colors.gray800} />
           </TouchableOpacity>
         </View>
-        <BottomNav active="RiderHistory" />
       </View>
     </View>
   );
@@ -220,10 +218,10 @@ function formatFare(value?: number | string | null) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, minHeight: 0, backgroundColor: colors.gray50 },
+  container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
   scroll: { flex: 1, minHeight: 0 },
-  content: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: 132 },
-  headingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+  content: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.lg },
+  headingRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
   eyebrow: { color: colors.greenDark, fontFamily: font.bold, fontSize: 10, marginBottom: 5 },
   title: { color: colors.gray900, fontFamily: font.extrabold, fontSize: 23 },
   subtitle: { color: colors.gray500, fontFamily: font.medium, fontSize: 11, marginTop: 3 },
@@ -266,7 +264,7 @@ const styles = StyleSheet.create({
   stateText: { color: colors.gray500, fontFamily: font.medium, fontSize: 12, textAlign: 'center', lineHeight: 18 },
   retryButton: { marginTop: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, backgroundColor: colors.green, borderRadius: radius.sm },
   retryText: { color: colors.white, fontFamily: font.bold, fontSize: 12 },
-  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.white, zIndex: 5 },
+  footer: { flexShrink: 0, backgroundColor: colors.white },
   pagination: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: colors.gray200 },
   pageButton: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: spacing.sm, borderRadius: radius.sm, backgroundColor: colors.gray100 },
   disabled: { backgroundColor: colors.gray50 },

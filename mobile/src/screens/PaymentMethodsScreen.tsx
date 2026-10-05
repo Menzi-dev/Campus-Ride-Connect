@@ -1,7 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import ConfirmationDialog from '../components/ConfirmationDialog';
+import ScrollableCard from '../components/ScrollableCard';
+import { useToast } from '../components/Toast';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
+  ActivityIndicator,
   Modal,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -15,6 +19,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Banknote, Check, CheckCircle2, ChevronLeft, ChevronRight, CreditCard, Plus, ShieldCheck, Trash2 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
+import apiClient from '../services/ApiClient';
 import { colors, font, radius, shadow, spacing } from '../theme/theme';
 
 type CardRecord = {
@@ -27,12 +32,23 @@ type CardRecord = {
   isDefault?: boolean;
 };
 
-const DEFAULT_CARD_KEY = 'saved_cards';
-const DEFAULT_PAYMENT_KEY = 'default_payment_method';
 const MAX_SAVED_CARDS = 3;
 
 export default function PaymentMethodsScreen() {
   const navigation = useNavigation();
+  const { showToast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [updating, setUpdating] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<CardRecord | null>(null);
+  const updateInProgress = useRef(false);
+  const beginUpdate = () => {
+    if (updateInProgress.current || loading || loadError) return false;
+    updateInProgress.current = true;
+    setUpdating(true);
+    return true;
+  };
+  const endUpdate = () => { updateInProgress.current = false; setUpdating(false); };
   const [cards, setCards] = useState<CardRecord[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD'>('CASH');
   const [addCardVisible, setAddCardVisible] = useState(false);
@@ -47,27 +63,25 @@ export default function PaymentMethodsScreen() {
   }, []);
 
   const loadSavedCards = async () => {
+    setLoading(true);
+    setLoadError('');
     try {
-      const stored = await AsyncStorage.getItem(DEFAULT_CARD_KEY);
-      const selected = await AsyncStorage.getItem(DEFAULT_PAYMENT_KEY);
-      const parsed = stored ? (JSON.parse(stored) as CardRecord[]) : [];
-
-      if (parsed.length) {
-        setCards(parsed);
-        setPaymentMethod(selected === 'CARD' ? 'CARD' : 'CASH');
-      } else {
-        setCards([]);
-        setPaymentMethod('CASH');
-      }
+      await AsyncStorage.multiRemove(['saved_cards', 'default_payment_method']);
+      const [cardsResponse, profileResponse] = await Promise.all([
+        apiClient.get('/users/me/payment-methods'),
+        apiClient.get('/users/me'),
+      ]);
+      const savedCards = (cardsResponse.data || []) as CardRecord[];
+      const nextMethod = profileResponse.data?.defaultPaymentMethod === 'CARD' && savedCards.length
+        ? 'CARD'
+        : 'CASH';
+      setCards(savedCards);
+      setPaymentMethod(nextMethod);
     } catch {
-      setCards([]);
-      setPaymentMethod('CASH');
+      setLoadError('Could not load your payment methods. Try again before making changes.');
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const saveCards = async (nextCards: CardRecord[]) => {
-    await AsyncStorage.setItem(DEFAULT_CARD_KEY, JSON.stringify(nextCards));
-    setCards(nextCards);
   };
 
   const handleAddCard = async () => {
@@ -114,12 +128,15 @@ export default function PaymentMethodsScreen() {
     };
 
     const nextCards = [...cards.map((card) => ({ ...card, isDefault: false })), newCard];
+    if (!beginUpdate()) return;
     try {
-      await saveCards(nextCards);
-      await AsyncStorage.setItem(DEFAULT_PAYMENT_KEY, 'CARD');
-    } catch {
-      setCardError('Could not save this card on your device. Please try again.');
+      const response = await apiClient.post('/users/me/payment-methods', newCard);
+      setCards(response.data || nextCards);
+    } catch (error: any) {
+      setCardError(error?.response?.data?.error || 'Could not save this card to your account. Please try again.');
       return;
+    } finally {
+      endUpdate();
     }
     setPaymentMethod('CARD');
     setCardholder('');
@@ -131,13 +148,18 @@ export default function PaymentMethodsScreen() {
   };
 
   const setDefaultCard = async (cardId: string) => {
-    const nextCards = cards.map((card) => ({ ...card, isDefault: card.id === cardId }));
-    await saveCards(nextCards);
-    await AsyncStorage.setItem(DEFAULT_PAYMENT_KEY, 'CARD');
-    setPaymentMethod('CARD');
+    if (!beginUpdate()) return;
+    try {
+      const response = await apiClient.put(`/users/me/payment-methods/${cardId}/default`);
+      setCards(response.data || cards.map((card) => ({ ...card, isDefault: card.id === cardId })));
+      setPaymentMethod('CARD');
+    } catch (error: any) {
+      showToast(error?.response?.data?.error || 'Could not update your default card.', 'red');
+    } finally { endUpdate(); }
   };
 
   const handleDeleteCard = async (cardId: string) => {
+    if (!beginUpdate()) return;
     const currentDefault = cards.find((card) => card.isDefault) || cards[0];
     const removingDefault = currentDefault?.id === cardId;
     const remainingCards = cards.filter((card) => card.id !== cardId);
@@ -146,34 +168,36 @@ export default function PaymentMethodsScreen() {
       isDefault: removingDefault ? index === 0 : card.id === currentDefault?.id,
     }));
 
-    await saveCards(nextCards);
-    if (nextCards.length === 0) {
-      await AsyncStorage.setItem(DEFAULT_PAYMENT_KEY, 'CASH');
-      setPaymentMethod('CASH');
-    }
-  };
-
-  const confirmDeleteCard = (card: CardRecord) => {
-    const message = `Remove ${card.label} from saved cards?`;
-    if (Platform.OS === 'web') {
-      if (typeof window !== 'undefined' && window.confirm(message)) {
-        void handleDeleteCard(card.id);
+    try {
+      const response = await apiClient.delete(`/users/me/payment-methods/${cardId}`);
+      const savedCards = (response.data || nextCards) as CardRecord[];
+      setCards(savedCards);
+      if (savedCards.length === 0) {
+        setPaymentMethod('CASH');
       }
-      return;
-    }
-
-    Alert.alert('Delete saved card?', message, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => { void handleDeleteCard(card.id); } },
-    ]);
+    } catch (error: any) {
+      showToast(error?.response?.data?.error || 'Could not remove this card.', 'red');
+    } finally { setPendingDelete(null); endUpdate(); }
   };
+
+  const selectPaymentMethod = async (method: 'CASH' | 'CARD') => {
+    if (method === paymentMethod || !beginUpdate()) return;
+    try {
+      await apiClient.put('/users/me/payment-method', { method });
+      setPaymentMethod(method);
+    } catch (error: any) {
+      showToast(error?.response?.data?.error || 'Could not update your payment method.', 'red');
+    } finally { endUpdate(); }
+  };
+
+  const confirmDeleteCard = (card: CardRecord) => setPendingDelete(card);
 
   const defaultCard = useMemo(() => cards.find((card) => card.isDefault) || cards[0], [cards]);
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView style={{ flex: 1, minHeight: 0 }} contentContainerStyle={styles.content}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.back}>
           <ChevronLeft size={18} color={colors.greenDark} />
           <Text style={styles.backText}>Back</Text>
@@ -181,15 +205,15 @@ export default function PaymentMethodsScreen() {
 
         <Text style={styles.title}>Payment Methods</Text>
         <Text style={styles.subtitle}>Choose how you pay for your rides.</Text>
+        {loading && <ActivityIndicator color={colors.green} />}
+        {loadError ? <View><Text accessibilityRole="alert" style={styles.cardError}>{loadError}</Text><TouchableOpacity onPress={loadSavedCards} accessibilityRole="button"><Text style={styles.backText}>Try again</Text></TouchableOpacity></View> : null}
 
         <Text style={styles.section}>AVAILABLE PAYMENT</Text>
 
         <TouchableOpacity
           style={[styles.paymentCard, paymentMethod === 'CASH' && styles.activePaymentCard]}
-          onPress={() => {
-            setPaymentMethod('CASH');
-            AsyncStorage.setItem(DEFAULT_PAYMENT_KEY, 'CASH');
-          }}
+          disabled={updating || loading || !!loadError}
+          onPress={() => { void selectPaymentMethod('CASH'); }}
         >
           <View style={[styles.paymentIcon, paymentMethod === 'CASH' && styles.invoiceActive]}>
             <Banknote size={24} color={colors.white} />
@@ -203,13 +227,13 @@ export default function PaymentMethodsScreen() {
 
         <TouchableOpacity
           style={[styles.paymentCard, paymentMethod === 'CARD' && styles.activePaymentCard]}
+          disabled={updating || loading || !!loadError}
           onPress={() => {
             if (!defaultCard) {
               setAddCardVisible(true);
               return;
             }
-            setPaymentMethod('CARD');
-            AsyncStorage.setItem(DEFAULT_PAYMENT_KEY, 'CARD');
+            void selectPaymentMethod('CARD');
           }}
         >
           <View style={[styles.paymentIcon, paymentMethod === 'CARD' && styles.cardActive]}>
@@ -227,7 +251,7 @@ export default function PaymentMethodsScreen() {
           <TouchableOpacity
             style={[styles.addButton, cards.length >= MAX_SAVED_CARDS && styles.addButtonDisabled]}
             onPress={() => setAddCardVisible(true)}
-            disabled={cards.length >= MAX_SAVED_CARDS}
+            disabled={updating || loading || !!loadError || cards.length >= MAX_SAVED_CARDS}
             accessibilityState={{ disabled: cards.length >= MAX_SAVED_CARDS }}
           >
             <Plus size={16} color={colors.greenDark} />
@@ -243,7 +267,7 @@ export default function PaymentMethodsScreen() {
         ) : (
           cards.map((card) => (
             <View key={card.id} style={[styles.savedCard, card.isDefault && styles.defaultSavedCard]}>
-              <TouchableOpacity style={styles.savedCardContent} onPress={() => setDefaultCard(card.id)}>
+              <TouchableOpacity disabled={updating || loading || !!loadError} style={styles.savedCardContent} onPress={() => setDefaultCard(card.id)}>
                 <View style={styles.cardBadge}>
                   <CreditCard size={18} color={colors.white} />
                 </View>
@@ -258,7 +282,7 @@ export default function PaymentMethodsScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.deleteButton}
-                onPress={() => confirmDeleteCard(card)}
+                disabled={updating || loading || !!loadError} onPress={() => confirmDeleteCard(card)}
                 accessibilityRole="button"
                 accessibilityLabel={`Delete ${card.label}`}
                 hitSlop={8}
@@ -274,14 +298,14 @@ export default function PaymentMethodsScreen() {
             <ShieldCheck size={16} color={colors.greenDark} />
             <Text style={styles.noteTitle}>Secure payment</Text>
           </View>
-          <Text style={styles.noteText}>This demo saves only the card label, expiry, and last four digits on this device. The full card number and security code are not stored or charged.</Text>
+          <Text style={styles.noteText}>Your account saves only the card label, expiry, and last four digits. The full card number and security code are never stored.</Text>
         </View>
       </ScrollView>
 
-      <Modal visible={addCardVisible} transparent animationType="slide" onRequestClose={() => setAddCardVisible(false)}>
-        <View style={styles.modalBackdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setAddCardVisible(false)} />
-          <View style={styles.modalSheet}>
+      <Modal visible={addCardVisible} transparent animationType="slide" onRequestClose={() => !updating && setAddCardVisible(false)}>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => !updating && setAddCardVisible(false)} />
+          <ScrollableCard style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>Add card</Text>
             <Text style={styles.modalSubtitle}>Save a card so you can choose it before ride payment.</Text>
@@ -328,22 +352,32 @@ export default function PaymentMethodsScreen() {
             {cardError ? <Text style={styles.cardError} accessibilityRole="alert">{cardError}</Text> : null}
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.secondaryAction} onPress={() => setAddCardVisible(false)}>
+              <TouchableOpacity style={styles.secondaryAction} onPress={() => !updating && setAddCardVisible(false)}>
                 <Text style={styles.secondaryActionText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryAction} onPress={handleAddCard}>
-                <Text style={styles.primaryActionText}>Save card</Text>
+              <TouchableOpacity style={styles.primaryAction} onPress={handleAddCard} disabled={updating}>
+                <Text style={styles.primaryActionText}>{updating ? 'Saving...' : 'Save card'}</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+          </ScrollableCard>
+        </KeyboardAvoidingView>
       </Modal>
+      <ConfirmationDialog
+        visible={pendingDelete !== null}
+        title="Delete saved card?"
+        message={`Remove ${pendingDelete?.label || 'this card'} from saved cards?`}
+        confirmLabel="Delete"
+        destructive
+        busy={updating}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => { if (pendingDelete) void handleDeleteCard(pendingDelete.id); }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.gray50 },
+  container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
   content: { padding: spacing.lg, paddingBottom: 40 },
   back: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   backText: { color: colors.greenDark, fontFamily: font.bold, fontSize: 13 },
@@ -406,7 +440,7 @@ const styles = StyleSheet.create({
   noteTitle: { color: colors.gray900, fontFamily: font.bold, fontSize: 13 },
   noteText: { color: colors.gray600, fontFamily: font.medium, fontSize: 11, marginTop: 5, lineHeight: 17 },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(17, 24, 39, 0.45)', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.lg, paddingBottom: spacing.xxl },
+  modalSheet: { width: '100%', maxWidth: 640, alignSelf: 'center', backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.lg, paddingBottom: spacing.xxl },
   modalHandle: { width: 42, height: 4, borderRadius: 999, backgroundColor: colors.gray200, alignSelf: 'center', marginBottom: spacing.md },
   modalTitle: { color: colors.gray900, fontFamily: font.extrabold, fontSize: 22 },
   modalSubtitle: { color: colors.gray600, fontFamily: font.medium, fontSize: 12, marginTop: 4, marginBottom: spacing.md },

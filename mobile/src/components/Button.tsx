@@ -27,6 +27,9 @@ export default function Button({ label, onPress, style, loading = false, icon, d
       onPress={onPress}
       activeOpacity={0.85}
       disabled={disabled || loading}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!disabled || loading, busy: loading }}
     >
       {loading ? (
         <ActivityIndicator color={variant === 'white' || variant === 'secondary' ? colors.gray800 : colors.white} />
@@ -46,6 +49,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 52,
+    paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
     borderRadius: radius.md,
     backgroundColor: colors.green,
@@ -70,6 +74,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gray300,
   },
   label: {
+    flexShrink: 1,
+    textAlign: 'center',
     fontFamily: font.semibold,
     color: colors.white,
     fontSize: 16,

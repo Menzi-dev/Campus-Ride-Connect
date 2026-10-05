@@ -14,7 +14,6 @@ import {
   StatusBar,
   Image,
   Linking,
-  Dimensions,
   ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -66,6 +65,7 @@ type RootStackParamList = {
   DriverDashboard: undefined;
   SecurityDashboard: undefined;
   Home: undefined;
+  Legal: { document: 'terms' | 'privacy' };
 };
 
 type Role = 'RIDER' | 'DRIVER';
@@ -90,7 +90,6 @@ const YEAR_OPTIONS: YearOption[] = [
 const TOTAL_STEPS = 4;
 const CAMPUS_EMAIL_DOMAIN = '@spu.ac.za';
 const MAX_ATTEMPTS_PER_STEP = 3;
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function CreateAccountScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
@@ -438,7 +437,8 @@ export default function CreateAccountScreen() {
 
   const goBack = () => {
     if (step === 1) {
-      navigation.goBack();
+      if (navigation.canGoBack()) navigation.goBack();
+      else navigation.replace('Login');
       return;
     }
     setStep((s) => Math.max(s - 1, 1));
@@ -578,6 +578,7 @@ export default function CreateAccountScreen() {
         return;
       }
 
+      await AsyncStorage.multiRemove(['authToken', 'user', 'saved_cards', 'default_payment_method']);
       if (response.data?.token) {
         await AsyncStorage.setItem('authToken', response.data.token);
       }
@@ -1116,16 +1117,37 @@ export default function CreateAccountScreen() {
                 />
               </Field>
 
-              <TouchableOpacity style={styles.termsRow} onPress={() => setAgreeTerms((v) => !v)} activeOpacity={0.7}>
-                <View style={[styles.checkbox, agreeTerms && styles.checkboxChecked]}>
-                  {agreeTerms && <Check size={12} color={colors.white} strokeWidth={3} />}
-                </View>
+              <View style={styles.termsRow}>
+                <TouchableOpacity
+                  onPress={() => setAgreeTerms((value) => !value)}
+                  activeOpacity={0.7}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: agreeTerms }}
+                  accessibilityLabel="Agree to Terms of Service and Privacy Policy"
+                >
+                  <View style={[styles.checkbox, agreeTerms && styles.checkboxChecked]}>
+                    {agreeTerms && <Check size={12} color={colors.white} strokeWidth={3} />}
+                  </View>
+                </TouchableOpacity>
                 <Text style={styles.termsText}>
-                  I agree to the <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
-                  <Text style={styles.termsLink}>Privacy Policy</Text>. I understand my biometric data may be used for
+                  I agree to the{' '}
+                  <Text
+                    style={styles.termsLink}
+                    accessibilityRole="link"
+                    onPress={() => navigation.navigate('Legal', { document: 'terms' })}
+                  >
+                    Terms of Service
+                  </Text>{' '}and{' '}
+                  <Text
+                    style={styles.termsLink}
+                    accessibilityRole="link"
+                    onPress={() => navigation.navigate('Legal', { document: 'privacy' })}
+                  >
+                    Privacy Policy
+                  </Text>. I understand my biometric data may be used for
                   verification.
                 </Text>
-              </TouchableOpacity>
+              </View>
 
               <Button
                 label="Continue to Face Verification"
@@ -1233,7 +1255,7 @@ function UploadZone({ file, onPress }: { file: DocumentPicker.DocumentPickerAsse
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.white },
+  container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.white },
   scrollView: { flex: 1 },
   blob: { position: 'absolute', borderRadius: 999 },
   blobGreen: {
@@ -1241,7 +1263,7 @@ const styles = StyleSheet.create({
     height: 260,
     backgroundColor: 'rgba(34,197,94,0.07)',
     top: -120,
-    right: -100,
+    right: 0,
   },
 
   header: { paddingHorizontal: 0, paddingBottom: 2 },
@@ -1285,7 +1307,16 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 
-  scrollContainer: { flexGrow: 1, paddingHorizontal: 18, paddingTop: 24, paddingBottom: 24, minHeight: '100%' },
+  scrollContainer: {
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
+    flexGrow: 1,
+    paddingHorizontal: 18,
+    paddingTop: 24,
+    paddingBottom: 24,
+    minHeight: '100%',
+  },
 
   inputContainer: { marginBottom: 12 },
   inputLabel: { fontFamily: font.semibold, color: colors.gray700, fontSize: 12, marginBottom: 4, fontWeight: '600' },
@@ -1479,8 +1510,9 @@ const styles = StyleSheet.create({
   },
 
   cameraWrapper: {
-    width: SCREEN_WIDTH - 48,
-    height: SCREEN_WIDTH - 48,
+    width: '100%',
+    maxWidth: 420,
+    aspectRatio: 1,
     borderRadius: 24,
     overflow: 'hidden',
     backgroundColor: colors.gray900,

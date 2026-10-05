@@ -1,5 +1,5 @@
 // mobile/src/screens/AdminDashboardScreen.tsx
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
   Image,
   Linking,
   FlatList,
+  AppState,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -105,24 +106,34 @@ export default function AdminDashboardScreen() {
   const [selectedApproval, setSelectedApproval] = useState<PendingApproval | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showAllApprovals, setShowAllApprovals] = useState(false);
+  const loadingRef = useRef(false);
+  const decisionRef = useRef<string | null>(null);
+  const loadVersion = useRef(0);
 
-  const loadData = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
+  const loadData = useCallback(async (isRefresh = false, silent = false) => {
+    if (loadingRef.current || decisionRef.current) return;
+    loadingRef.current = true;
+    const version = loadVersion.current;
+    if (!silent) {
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+    }
     setError(null);
     setUnauthorized(false);
 
     try {
-      // Fetch dashboard stats
-      const statsResponse = await apiClient.get('/admin/dashboard/stats');
-      setStats(statsResponse.data ?? null);
-
-      // Fetch pending driver approvals
-      const approvalsResponse = await apiClient.get('/admin/driver-approvals/pending');
-      setApprovals(approvalsResponse.data ?? []);
+      const [statsResponse, approvalsResponse] = await Promise.all([
+        apiClient.get('/admin/dashboard/stats'),
+        apiClient.get('/admin/driver-approvals/pending'),
+      ]);
+      if (version !== loadVersion.current) return;
+      const applications = approvalsResponse.data ?? [];
+      setStats(statsResponse.data ? { ...statsResponse.data, pendingApprovals: applications.length } : null);
+      setApprovals(applications);
       
       console.log('Pending approvals loaded:', approvalsResponse.data?.length || 0);
     } catch (err: any) {
+      if (version !== loadVersion.current) return;
       console.error('Load data error:', err);
       const status = err?.response?.status;
       if (status === 401 || status === 403) {
@@ -135,20 +146,33 @@ export default function AdminDashboardScreen() {
         setError(err?.response?.data?.error || 'Could not load dashboard data');
       }
     } finally {
+      loadingRef.current = false;
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  // Load data on focus
+  // New registrations should appear while the admin is reviewing applications.
   useFocusEffect(
     useCallback(() => {
       loadData();
-      return () => {};
-    }, [])
+      const interval = setInterval(() => {
+        if (AppState.currentState === 'active') loadData(true, true);
+      }, 15000);
+      const subscription = AppState.addEventListener('change', state => {
+        if (state === 'active') loadData(true, true);
+      });
+      return () => {
+        clearInterval(interval);
+        subscription.remove();
+      };
+    }, [loadData])
   );
 
   const handleDecision = async (id: string, decision: 'approve' | 'reject') => {
+    if (decisionRef.current) return;
+    decisionRef.current = id;
+    loadVersion.current += 1;
     setActioningId(id);
     try {
       const response = await apiClient.post(`/admin/driver-approvals/${id}/${decision}`);
@@ -163,6 +187,8 @@ export default function AdminDashboardScreen() {
           decision === 'approve' ? 'Driver approved successfully!' : 'Application rejected',
           decision === 'approve' ? 'green' : 'red'
         );
+        decisionRef.current = null;
+        await loadData(true, true);
       } else {
         showToast(response.data?.message || `Could not ${decision} this application`, 'red');
       }
@@ -173,6 +199,7 @@ export default function AdminDashboardScreen() {
                      `Could not ${decision} this application. Please try again.`;
       showToast(message, 'red');
     } finally {
+      decisionRef.current = null;
       setActioningId(null);
       setShowDetailsModal(false);
     }
@@ -693,7 +720,7 @@ function NavCard({ icon, label, onPress }: { icon: React.ReactNode; label: strin
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.gray50 },
+  container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
   centered: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xxxl },
   loadingText: { fontFamily: font.medium, fontSize: 13, color: colors.gray500, marginTop: spacing.md },
   errorTitle: { fontFamily: font.bold, fontSize: 16, fontWeight: '700', color: colors.gray900, marginTop: spacing.md },
@@ -742,7 +769,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   statCard: {
-    width: '31%',
+    flexBasis: 120,
+    flexGrow: 1,
+    minWidth: 0,
     backgroundColor: colors.white,
     borderRadius: radius.lg,
     padding: spacing.md,
@@ -938,7 +967,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
   },
   navCard: {
-    width: '47%',
+    flexBasis: 140,
+    flexGrow: 1,
+    minWidth: 0,
     backgroundColor: colors.white,
     borderRadius: radius.lg,
     padding: spacing.lg,
@@ -969,6 +1000,10 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
+    width: '100%',
+    maxWidth: 800,
+    alignSelf: 'center',
+    minHeight: 0,
     backgroundColor: colors.white,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
@@ -990,6 +1025,8 @@ const styles = StyleSheet.create({
     color: colors.gray900,
   },
   modalBody: {
+    minHeight: 0,
+    flexShrink: 1,
     padding: spacing.xl,
     paddingBottom: spacing.lg,
   },

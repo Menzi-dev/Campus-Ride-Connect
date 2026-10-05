@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 // Design tokens — ported 1:1 from the HTML prototype's :root CSS variables.
 // Every screen and component should pull from here instead of hardcoding
 // hex values, so the whole app stays visually consistent and easy to re-theme.
@@ -83,14 +85,17 @@ export const shadow = {
 // The HTML uses 'DM Sans' + 'DM Mono' from Google Fonts. In React Native these
 // need to be loaded as custom fonts (e.g. via `expo-font` + `@expo-google-fonts/dm-sans`
 // and `@expo-google-fonts/dm-mono`), then referenced by their loaded family name below.
-// Until fonts are loaded, RN falls back to the system font automatically.
+// Web needs an explicit fallback when the optional custom fonts are not loaded.
+const fontFamily = (family: string, monospace = false) => Platform.OS === 'web'
+  ? `${family}, ${monospace ? 'ui-monospace, monospace' : 'system-ui, sans-serif'}`
+  : family;
 export const font = {
-  regular: 'DMSans_400Regular',
-  medium: 'DMSans_500Medium',
-  semibold: 'DMSans_600SemiBold',
-  bold: 'DMSans_700Bold',
-  extrabold: 'DMSans_800ExtraBold',
-  mono: 'DMMono_500Medium',
+  regular: fontFamily('DMSans_400Regular'),
+  medium: fontFamily('DMSans_500Medium'),
+  semibold: fontFamily('DMSans_600SemiBold'),
+  bold: fontFamily('DMSans_700Bold'),
+  extrabold: fontFamily('DMSans_800ExtraBold'),
+  mono: fontFamily('DMMono_500Medium', true),
 } as const;
 
 export const theme = { colors, radius, spacing, shadow, font };

@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 ﻿import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, Text, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -9,7 +10,7 @@ import { colors, font, radius, spacing, shadow } from '../theme/theme';
 
 type RootStackParamList = { SecurityDashboard: undefined; ActiveRidesMonitor: undefined; SosAlerts: undefined };
 type Ride = { id: number; riderName?: string; driverName?: string; pickupLocation?: string; destination?: string; status: string };
-type Alert = { id: number; reference: string; riderName?: string; driverName?: string; gpsLat?: number; gpsLng?: number; rideReference: string; createdAt: string };
+type Alert = { id: number; reference: string; triggeredByName?: string; triggeredByRole?: string; riderName?: string; driverName?: string; gpsLat?: number; gpsLng?: number; rideReference: string; createdAt: string };
 
 export default function SecurityCentreDashboardScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
@@ -31,10 +32,10 @@ export default function SecurityCentreDashboardScreen() {
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={colors.green} /></View>;
   return (
     <View style={styles.container}><ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadData(true)} tintColor={colors.green} />} contentContainerStyle={styles.content}>
-      <View style={styles.header}><View style={styles.icon}><Shield size={22} color={colors.greenDark} /></View><View><Text style={styles.kicker}>Security Centre</Text><Text style={styles.title}>Campus Security Officer</Text></View></View>
+      <View style={styles.header}><View style={styles.icon}><Shield size={22} color={colors.greenDark} /></View><View style={{ flex: 1, minWidth: 0 }}><Text style={styles.kicker}>Security Centre</Text><Text style={styles.title}>Campus Security Officer</Text></View></View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <View style={styles.stats}><Stat icon={<Car size={20} color={colors.blue} />} value={rides.length} label="ACTIVE RIDES" /><Stat icon={<Siren size={20} color={colors.red} />} value={alerts.length} label="SOS ALERTS" /></View>
-      {activeAlert ? <View style={styles.alertCard}><View style={styles.alertHeading}><Text style={styles.alertTitle}>SOS ALERT</Text><Text style={styles.alertTime}>{formatDate(activeAlert.createdAt)}</Text></View><Text style={styles.alertLabel}>RIDER</Text><Text style={styles.alertValue}>{activeAlert.riderName || 'Unknown rider'}</Text><Text style={styles.alertLabel}>DRIVER</Text><Text style={styles.alertValue}>{activeAlert.driverName || 'Unassigned driver'}</Text><Text style={styles.alertMeta}>#{activeAlert.rideReference}  •  {activeAlert.gpsLat ?? '-'}, {activeAlert.gpsLng ?? '-'}</Text><TouchableOpacity style={styles.lightButton} onPress={() => navigation.navigate('SosAlerts')}><Siren size={16} color={colors.red} /><Text style={styles.lightButtonText}>Respond Now</Text></TouchableOpacity></View> : <View style={styles.empty}><Text style={styles.emptyTitle}>No active SOS alerts</Text><Text style={styles.emptyText}>New emergency alerts will appear here.</Text></View>}
+      {activeAlert ? <View style={styles.alertCard}><View style={styles.alertHeading}><Text style={styles.alertTitle}>SOS ALERT</Text><Text style={styles.alertTime}>{formatDate(activeAlert.createdAt)}</Text></View>{activeAlert.triggeredByName ? <><Text style={styles.alertLabel}>REPORTED BY {activeAlert.triggeredByRole === 'DRIVER' ? 'DRIVER' : 'RIDER'}</Text><Text style={styles.alertValue}>{activeAlert.triggeredByName}</Text></> : null}<Text style={styles.alertLabel}>RIDER</Text><Text style={styles.alertValue}>{activeAlert.riderName || 'Unknown rider'}</Text><Text style={styles.alertLabel}>DRIVER</Text><Text style={styles.alertValue}>{activeAlert.driverName || 'Unassigned driver'}</Text><Text style={styles.alertMeta}>#{activeAlert.rideReference}  •  {activeAlert.gpsLat ?? '-'}, {activeAlert.gpsLng ?? '-'}</Text><TouchableOpacity style={styles.lightButton} onPress={() => navigation.navigate('SosAlerts')}><Siren size={16} color={colors.red} /><Text style={styles.lightButtonText}>Respond Now</Text></TouchableOpacity></View> : <View style={styles.empty}><Text style={styles.emptyTitle}>No active SOS alerts</Text><Text style={styles.emptyText}>New emergency alerts will appear here.</Text></View>}
       <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>LIVE RIDES</Text><TouchableOpacity onPress={() => navigation.navigate('ActiveRidesMonitor')}><Text style={styles.link}>View monitor</Text></TouchableOpacity></View>
       {rides.slice(0, 4).map((ride) => <View style={styles.rideCard} key={ride.id}><View style={styles.rideTop}><Text style={styles.rideId}>#R-{ride.id}</Text><Text style={styles.time}>{ride.status}</Text></View><Text style={styles.rideNames}>{ride.riderName || 'Unknown rider'} <Text style={styles.arrow}>→</Text> {ride.driverName || 'Unassigned driver'}</Text><Text style={styles.route}>{ride.pickupLocation || 'Pickup'} → {ride.destination || 'Destination'}</Text><TouchableOpacity style={styles.trackButton} onPress={() => navigation.navigate('ActiveRidesMonitor')}><Crosshair size={15} color={colors.white} /><Text style={styles.trackText}>Track</Text></TouchableOpacity></View>)}
     </ScrollView><SecurityNav active="dashboard" onDashboard={() => navigation.navigate('SecurityDashboard')} onRides={() => navigation.navigate('ActiveRidesMonitor')} onAlerts={() => navigation.navigate('SosAlerts')} /></View>
@@ -43,15 +44,15 @@ export default function SecurityCentreDashboardScreen() {
 
 function Stat({ icon, value, label }: { icon: React.ReactNode; value: number; label: string }) { return <View style={styles.stat}><View>{icon}</View><Text style={styles.statValue}>{value}</Text><Text style={styles.statLabel}>{label}</Text></View>; }
 
-export function SecurityNav({ active, onDashboard, onRides, onAlerts }: { active: string; onDashboard: () => void; onRides: () => void; onAlerts: () => void }) { return <View style={styles.nav}><NavItem icon={<Shield size={19} />} label="Dashboard" active={active === 'dashboard'} onPress={onDashboard} /><NavItem icon={<Car size={19} />} label="Active Rides" active={active === 'rides'} onPress={onRides} /><NavItem icon={<Siren size={19} />} label="SOS Alerts" active={active === 'alerts'} onPress={onAlerts} /></View>; }
+export function SecurityNav({ active, onDashboard, onRides, onAlerts }: { active: string; onDashboard: () => void; onRides: () => void; onAlerts: () => void }) { const insets = useSafeAreaInsets(); return <View testID="security-bottom-nav" style={[styles.nav, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}><NavItem icon={<Shield size={19} />} label="Dashboard" active={active === 'dashboard'} onPress={onDashboard} /><NavItem icon={<Car size={19} />} label="Active Rides" active={active === 'rides'} onPress={onRides} /><NavItem icon={<Siren size={19} />} label="SOS Alerts" active={active === 'alerts'} onPress={onAlerts} /></View>; }
 function NavItem({ icon, label, active, onPress }: { icon: React.ReactElement<any>; label: string; active: boolean; onPress: () => void }) { return <TouchableOpacity style={styles.navItem} onPress={onPress}>{React.cloneElement(icon, { color: active ? colors.green : colors.gray400 })}<Text style={[styles.navText, active && styles.navActive]}>{label}</Text></TouchableOpacity>; }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flex: 1, minWidth: 0, minHeight: 0,
     backgroundColor: colors.gray50,
   },
-  content: { padding: spacing.lg, paddingBottom: 100 },
+  content: { padding: spacing.lg, paddingBottom: spacing.lg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.gray50 },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
   icon: { width: 42, height: 42, borderRadius: radius.md, backgroundColor: colors.greenLight, alignItems: 'center', justifyContent: 'center' },
@@ -97,8 +98,8 @@ const styles = StyleSheet.create({
   route: { color: colors.gray500, fontFamily: font.regular, fontSize: 11, marginTop: 4 },
   trackButton: { backgroundColor: colors.blue, borderRadius: radius.full, minHeight: 36, marginTop: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
   trackText: { color: colors.white, fontFamily: font.bold, fontSize: 12 },
-  nav: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 72, backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: colors.gray200, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', zIndex: 10, elevation: 10 },
-  navItem: { alignItems: 'center', gap: 3, minWidth: 90 },
+  nav: { flexShrink: 0, minHeight: 64, paddingTop: spacing.sm, backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: colors.gray200, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', zIndex: 10, elevation: 10 },
+  navItem: { flex: 1, minWidth: 0, minHeight: 44, justifyContent: 'center', alignItems: 'center', gap: 3 },
   navText: { color: colors.gray400, fontFamily: font.medium, fontSize: 10 },
   navActive: { color: colors.green, fontFamily: font.bold },
 });

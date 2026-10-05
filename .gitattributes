@@ -1,0 +1,8 @@
+# Preserve exported documents and images byte-for-byte.
+*.pdf binary
+*.docx binary
+*.zip binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webm binary

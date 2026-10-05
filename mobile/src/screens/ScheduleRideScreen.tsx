@@ -1,9 +1,12 @@
+import ScrollableCard from '../components/ScrollableCard';
+import useMapResize from '../hooks/useMapResize';
 // mobile/src/screens/ScheduleScreen.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   TextInput,
+  Image,
   TouchableOpacity,
   StyleSheet,
   StatusBar,
@@ -11,7 +14,7 @@ import {
   ScrollView,
   Animated,
   Easing,
-  Dimensions,
+  useWindowDimensions,
   ActivityIndicator,
   Modal,
   Pressable,
@@ -35,7 +38,6 @@ import {
   CalendarDays,
   Clock,
   Clock as ClockIcon,
-  CircleUserRound,
   Route as RouteIcon,
   Check,
   Navigation,
@@ -51,7 +53,6 @@ import {
   Banknote,
   Circle,
   CheckCircle2,
-  House,
 } from 'lucide-react-native';
 import Button from '../components/Button';
 import BottomSheetModal from '../components/BottomSheetModal';
@@ -60,7 +61,7 @@ import { useToast } from '../components/Toast';
 import { colors, radius, spacing, font, shadow } from '../theme/theme';
 import apiClient from '../services/ApiClient';
 
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
+
 
 // ---------- Leaflet (web only) ----------
 let MapContainer: any = null;
@@ -135,6 +136,8 @@ type ScheduledRide = {
   durationMinutes?: number;
   scheduledAt?: string;
   status: string;
+  cancellationReason?: string | null;
+  cancelledBy?: string | number | null;
   createdAt: string;
   updatedAt: string;
   currentLat?: number;
@@ -145,7 +148,10 @@ type ScheduledRide = {
     rating: number;
     vehicleMake: string;
     vehicleModel: string;
+    vehicleYear?: number | string | null;
     licencePlate: string;
+    profilePhoto?: string | null;
+    vehiclePhoto?: string | null;
     phone?: string;
   };
 };
@@ -178,6 +184,9 @@ const HELD_RIDES_KEY = 'scheduledRidesHeldPayloads';
 const MIN_AGE_BEFORE_DISPATCH_MS = 30_000;
 const MAX_SOS_RECORDING_SECONDS = 60;
 const SOS_AUDIO_SEGMENT_SECONDS = 5;
+const TIME_WHEEL_ROW_HEIGHT = 44;
+const TIME_WHEEL_VISIBLE_HEIGHT = TIME_WHEEL_ROW_HEIGHT * 5;
+const TIME_WHEEL_VERTICAL_PADDING = (TIME_WHEEL_VISIBLE_HEIGHT - TIME_WHEEL_ROW_HEIGHT) / 2;
 
 // ---------- helpers ----------
 function distanceKm(a: Coords, b: Coords): number {
@@ -496,6 +505,7 @@ const WebMap = ({
 
   const MapUpdater = () => {
     const map = useMap();
+    useMapResize(map);
     useEffect(() => {
       if (!map) return;
       let cancelled = false;
@@ -669,6 +679,7 @@ const WebMap = ({
 
 // ================= MAIN SCREEN =================
 export default function ScheduleScreen() {
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
@@ -694,8 +705,10 @@ export default function ScheduleScreen() {
 
   const [destination, setDestination] = useState<CampusLocation | null>(null);
   const [date, setDate] = useState<Date>(new Date());
-  const [timeString, setTimeString] = useState<string>('08:00');
+  const [timeString, setTimeString] = useState<string>(() => formatTimeHHMM(new Date()));
   const [timePickerVisible, setTimePickerVisible] = useState(false);
+  const hourWheelRef = useRef<ScrollView | null>(null);
+  const minuteWheelRef = useRef<ScrollView | null>(null);
 
   const [routePoints, setRoutePoints] = useState<Coords[]>([]);
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
@@ -723,6 +736,10 @@ export default function ScheduleScreen() {
   const [driverFound, setDriverFound] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [cancelling, setCancelling] = useState(false);
+  const [cancelDialogVisible, setCancelDialogVisible] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancellationNotice, setCancellationNotice] = useState('');
+  const [cancellationNoticeVisible, setCancellationNoticeVisible] = useState(false);
   const [driverName, setDriverName] = useState('');
   const [driverRating, setDriverRating] = useState(0);
   const [driverCar, setDriverCar] = useState('');
@@ -785,6 +802,7 @@ export default function ScheduleScreen() {
   const findingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messagePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const showActiveTripTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancellationNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seenMessageIdsRef = useRef<Set<number>>(new Set());
   const riderToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -939,6 +957,7 @@ export default function ScheduleScreen() {
       if (showActiveTripTimeoutRef.current) clearTimeout(showActiveTripTimeoutRef.current);
       if (sosTimerRef.current) clearInterval(sosTimerRef.current);
       if (sosToastTimerRef.current) clearTimeout(sosToastTimerRef.current);
+      if (cancellationNoticeTimerRef.current) clearTimeout(cancellationNoticeTimerRef.current);
       clearScheduledDispatchAlarm();
       pulseLoopRef.current?.stop();
       rotateLoopRef.current?.stop();
@@ -1149,18 +1168,8 @@ export default function ScheduleScreen() {
     return formatTimeHHMM(scheduledDateTime);
   }, [formMsRemaining, nextScheduledMsRemaining, nextScheduledRide, scheduledDateTime]);
 
-  const webTimeInputRef = useRef<HTMLInputElement | null>(null);
   const onPickTime = () => {
-    if (Platform.OS === 'web') {
-      if (webTimeInputRef.current) {
-        (webTimeInputRef.current as any).showPicker?.();
-        webTimeInputRef.current.click();
-      } else {
-        setTimePickerVisible(true);
-      }
-    } else {
-      setTimePickerVisible(true);
-    }
+    setTimePickerVisible(true);
   };
 
   const adjustTime = (deltaMinutes: number) => {
@@ -1241,11 +1250,12 @@ export default function ScheduleScreen() {
       const response = await apiClient.post('/rides/request', payload);
       const newRide: ScheduledRide = response.data;
       setPaymentRide(newRide);
-      const [cardsRaw, preferredMethod] = await Promise.all([
-        AsyncStorage.getItem('saved_cards'),
-        AsyncStorage.getItem('default_payment_method'),
+      const [remoteCards, account] = await Promise.all([
+        apiClient.get('/users/me/payment-methods').then((result) => result.data as SavedPaymentCard[]).catch(() => []),
+        apiClient.get('/users/me').then((result) => result.data).catch(() => null),
       ]);
-      const cards: SavedPaymentCard[] = cardsRaw ? JSON.parse(cardsRaw) : [];
+      const cards = remoteCards || [];
+      const preferredMethod = account?.defaultPaymentMethod || 'CASH';
       const preferredCard = cards.find((card) => card.isDefault) || cards[0];
       setSavedPaymentCards(cards);
       setSelectedCard(preferredCard?.id || '');
@@ -1290,7 +1300,7 @@ export default function ScheduleScreen() {
       setRoutePoints([]);
       setRouteDistance(null);
       setRouteDuration(null);
-      setTimeString('08:00');
+      setTimeString(formatTimeHHMM(new Date()));
       setDate(new Date());
 
       await loadScheduledRides();
@@ -1343,7 +1353,6 @@ export default function ScheduleScreen() {
   const checkAndDispatchDueRides = async () => {
     const now = Date.now();
     const list = scheduledRidesRef.current;
-    const held = await loadHeldPayloads();
     const due: ScheduledRide[] = [];
 
     for (const r of list) {
@@ -1429,8 +1438,24 @@ export default function ScheduleScreen() {
     const st = String(seed?.status || 'scheduled').toLowerCase();
 
     if (['accepted', 'enroute', 'arrived', 'started', 'completed'].includes(st)) {
-      setFindingDriversVisible(false);
-      setActiveTripVisible(true);
+      setFindingDriversVisible(st !== 'completed');
+      setSearchingForDriver(false);
+      setDriverFound(st !== 'completed');
+      setActiveTripVisible(st === 'completed');
+      if (st !== 'completed') {
+        activeTripShownForRideRef.current = rideId;
+        if (showActiveTripTimeoutRef.current) clearTimeout(showActiveTripTimeoutRef.current);
+        showActiveTripTimeoutRef.current = setTimeout(() => {
+          showActiveTripTimeoutRef.current = null;
+          setFindingDriversVisible(false);
+          setActiveTripVisible(true);
+          stopFindingDriversAnimations();
+          if (findingTimerRef.current) {
+            clearInterval(findingTimerRef.current);
+            findingTimerRef.current = null;
+          }
+        }, 3000);
+      }
       clearDriverNavigation();
     } else {
       setFindingDriversVisible(true);
@@ -1466,6 +1491,12 @@ export default function ScheduleScreen() {
     setActiveRide(null);
     setActiveRideId(null);
     setActiveRideLoaded(false);
+    setCancelDialogVisible(false);
+    setCancellationNoticeVisible(false);
+    if (cancellationNoticeTimerRef.current) {
+      clearTimeout(cancellationNoticeTimerRef.current);
+      cancellationNoticeTimerRef.current = null;
+    }
     clearDriverNavigation();
     stopFindingDriversAnimations();
     if (findingTimerRef.current) {
@@ -1480,6 +1511,28 @@ export default function ScheduleScreen() {
       clearTimeout(showActiveTripTimeoutRef.current);
       showActiveTripTimeoutRef.current = null;
     }
+  };
+
+  /**
+   * Resets navigation to Home so the rider can request a new ride.
+   * Called after a ride is cancelled by EITHER the rider or the driver.
+   */
+  const goHome = (reason: string) => {
+    setCancellationNotice(reason);
+    setCancellationNoticeVisible(true);
+    if (cancellationNoticeTimerRef.current) {
+      clearTimeout(cancellationNoticeTimerRef.current);
+    }
+    cancellationNoticeTimerRef.current = setTimeout(() => {
+      cancellationNoticeTimerRef.current = null;
+      setCancellationNoticeVisible(false);
+      closeFindingDrivers();
+      void loadScheduledRides();
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Home', params: { skipActiveRideRestore: true } }],
+      });
+    }, 2500);
   };
 
   const startStatusPolling = (rideId: string, opts?: { fromFinding?: boolean }) => {
@@ -1542,6 +1595,7 @@ export default function ScheduleScreen() {
             activeTripShownForRideRef.current = rideId;
             if (showActiveTripTimeoutRef.current) clearTimeout(showActiveTripTimeoutRef.current);
             showActiveTripTimeoutRef.current = setTimeout(() => {
+              showActiveTripTimeoutRef.current = null;
               setFindingDriversVisible(false);
               setActiveTripVisible(true);
               stopFindingDriversAnimations();
@@ -1549,8 +1603,8 @@ export default function ScheduleScreen() {
                 clearInterval(findingTimerRef.current);
                 findingTimerRef.current = null;
               }
-            }, 900);
-          } else {
+            }, 3000);
+          } else if (!showActiveTripTimeoutRef.current) {
             setFindingDriversVisible(false);
             setActiveTripVisible(true);
           }
@@ -1559,6 +1613,10 @@ export default function ScheduleScreen() {
 
         if (status === 'completed') {
           setTripStatus('completed');
+          if (showActiveTripTimeoutRef.current) {
+            clearTimeout(showActiveTripTimeoutRef.current);
+            showActiveTripTimeoutRef.current = null;
+          }
           setFindingDriversVisible(false);
           setActiveTripVisible(true);
           if (statusPollRef.current) {
@@ -1574,9 +1632,21 @@ export default function ScheduleScreen() {
             clearInterval(statusPollRef.current);
             statusPollRef.current = null;
           }
-          closeFindingDrivers();
-          showToast('Trip was cancelled', 'red');
-          void loadScheduledRides();
+
+          const cancelledByOtherParty =
+            String(ride.cancelledBy || '') !== String(userId);
+
+          if (cancelledByOtherParty) {
+            // Driver cancelled — show the notice, then reset to Home.
+            goHome(
+              `The driver cancelled this ride. Reason: ${
+                ride.cancellationReason || 'No reason provided.'
+              }`
+            );
+          } else {
+            // Rider cancelled (edge case — normally handled by the rider flow).
+            goHome('Ride cancelled.');
+          }
         }
       } catch (err) {
         // keep polling
@@ -1744,17 +1814,83 @@ export default function ScheduleScreen() {
     };
   }, [activeRideId, userId, activeTripVisible]);
 
-  const handleCancelSearch = async () => {
+  const handleCancelSearch = () => {
+    setCancelReason('');
+    setCancelDialogVisible(true);
+  };
+
+  const handleConfirmRideCancellation = async () => {
     if (cancelling) return;
+    const reason = cancelReason.trim();
+    if (!reason || !activeRideId) return;
     setCancelling(true);
     try {
-      if (activeRideId) await apiClient.post(`/rides/${activeRideId}/cancel`);
-      showToast('Ride search cancelled', 'blue');
-      setTimeout(() => closeFindingDrivers(), 400);
-    } catch {
-      showToast('Could not cancel ride', 'red');
+      await apiClient.post(`/rides/${activeRideId}/cancel`, { reason });
+      if (String(activeRide?.status || '').toLowerCase() === 'scheduled') {
+        await removeHeldPayload(activeRideId);
+      }
+
+      setCancelDialogVisible(false);
+
+      if (statusPollRef.current) {
+        clearInterval(statusPollRef.current);
+        statusPollRef.current = null;
+      }
+
+      goHome(`Ride cancelled. Reason: ${reason}`);
+    } catch (error: any) {
+      showToast(error?.response?.data?.error || 'Could not cancel ride', 'red');
       setCancelling(false);
     }
+  };
+
+  const renderCancelOverlay = () => {
+    if (!cancelDialogVisible && !cancellationNoticeVisible) return null;
+    return (
+      <View style={[StyleSheet.absoluteFill, styles.cancelDialogBackdrop, styles.cancelDialogLayer]}>
+        {cancelDialogVisible ? (
+          <>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => !cancelling && setCancelDialogVisible(false)} />
+            <ScrollableCard style={styles.cancelDialogCard}>
+              <View style={styles.cancelDialogIcon}><X size={21} color={colors.red} /></View>
+              <Text style={styles.cancelDialogTitle}>Cancel this ride?</Text>
+              <Text style={styles.cancelDialogSubtitle}>Please tell the driver why you need to cancel.</Text>
+              <TextInput
+                style={styles.cancelReasonInput}
+                value={cancelReason}
+                onChangeText={setCancelReason}
+                placeholder="Enter a cancellation reason"
+                placeholderTextColor={colors.gray400}
+                multiline
+                maxLength={500}
+                textAlignVertical="top"
+                editable={!cancelling}
+              />
+              <Text style={styles.cancelReasonCount}>{cancelReason.length}/500</Text>
+              <View style={styles.cancelDialogActions}>
+                <TouchableOpacity style={styles.cancelKeepButton} onPress={() => setCancelDialogVisible(false)} disabled={cancelling}>
+                  <Text style={styles.cancelKeepText}>Keep ride</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.cancelConfirmButton, (!cancelReason.trim() || cancelling) && styles.cancelConfirmDisabled]}
+                  onPress={handleConfirmRideCancellation}
+                  disabled={!cancelReason.trim() || cancelling}
+                >
+                  {cancelling ? <ActivityIndicator color={colors.white} size="small" /> : <Text style={styles.cancelConfirmText}>Cancel ride</Text>}
+                </TouchableOpacity>
+              </View>
+            </ScrollableCard>
+          </>
+        ) : (
+          <ScrollableCard style={styles.cancelNoticeCard}>
+            <View style={styles.cancelNoticeIcon}><Check size={24} color={colors.white} /></View>
+            <Text style={styles.cancelDialogTitle}>Ride cancelled</Text>
+            <Text style={styles.cancelNoticeText}>{cancellationNotice}</Text>
+            <Text style={styles.cancelNoticeHint}>Returning to Home…</Text>
+          </ScrollableCard>
+        )}
+      </View>
+    );
   };
 
   const handleCallDriver = () => {
@@ -1811,25 +1947,6 @@ export default function ScheduleScreen() {
   const resolveCurrentRideId = () => {
     const rideId = activeRideId ?? (activeRide?.id ? String(activeRide.id) : null);
     return rideId ? String(rideId) : null;
-  };
-
-  const clearSosSession = () => {
-    sosAlertIdRef.current = null;
-    sosRecordingRef.current = null;
-    sosWebRecorderRef.current = null;
-    sosWebStreamRef.current = null;
-    sosWebChunksRef.current = [];
-    sosWebSegmentChunksRef.current = [];
-    sosUploadingRef.current = false;
-    if (sosTimerRef.current) {
-      clearInterval(sosTimerRef.current);
-      sosTimerRef.current = null;
-    }
-    setSosDispatched(false);
-    setSosVisible(false);
-    setSosRecordingSeconds(0);
-    sosRecordingSecondsRef.current = 0;
-    setShowSosRecordingToast(false);
   };
 
   const handleSOS = async () => {
@@ -2105,15 +2222,13 @@ export default function ScheduleScreen() {
     }
   };
 
-  const cancelScheduledRide = async (rideId: string | number) => {
-    try {
-      await apiClient.post(`/rides/${rideId}/cancel`);
-      await removeHeldPayload(String(rideId));
-      showToast('Scheduled ride cancelled', 'blue');
-      await loadScheduledRides();
-    } catch {
-      showToast('Could not cancel scheduled ride', 'red');
-    }
+  const cancelScheduledRide = (rideId: string | number) => {
+    const ride = scheduledRides.find((candidate) => String(candidate.id) === String(rideId)) || null;
+    setActiveRide(ride);
+    setActiveRideId(String(rideId));
+    setScheduledListVisible(false);
+    setCancelReason('');
+    setCancelDialogVisible(true);
   };
 
   const trackScheduledRide = (ride: ScheduledRide) => {
@@ -2181,7 +2296,7 @@ export default function ScheduleScreen() {
 
   const spin = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 
-  // ===== FINDING DRIVERS OVERLAY (matches screenshot 1) =====
+  // ===== FINDING DRIVERS OVERLAY =====
   const renderFindingDriversOverlay = () => {
     if (!findingDriversVisible) return null;
     const isDriverAssigned =
@@ -2239,9 +2354,13 @@ export default function ScheduleScreen() {
             {isDriverAssigned && activeRide?.driver && (
               <Animated.View style={[styles.driverInfo, { opacity: driverFadeAnim }]}>
                 <View style={styles.driverAvatar}>
-                  <Text style={styles.driverAvatarText}>
-                    {activeRide.driver.fullName.split(' ').map((n) => n[0]).join('')}
-                  </Text>
+                  {activeRide.driver.profilePhoto ? (
+                    <Image source={{ uri: activeRide.driver.profilePhoto }} style={styles.driverAvatarImage} />
+                  ) : (
+                    <Text style={styles.driverAvatarText}>
+                      {activeRide.driver.fullName.split(' ').map((n) => n[0]).join('')}
+                    </Text>
+                  )}
                 </View>
                 <View style={styles.driverDetails}>
                   <Text style={styles.driverName}>{activeRide.driver.fullName}</Text>
@@ -2249,8 +2368,19 @@ export default function ScheduleScreen() {
                     <Star size={14} color={colors.orange} strokeWidth={2} fill={colors.orange} />
                     <Text style={styles.driverRating}>{activeRide.driver.rating || 0}</Text>
                   </View>
-                  <Text style={styles.driverCar}>{activeRide.driver.vehicleMake} {activeRide.driver.vehicleModel}</Text>
-                  <Text style={styles.driverPlate}>{activeRide.driver.licencePlate}</Text>
+                  <Text style={styles.driverCar}>{activeRide.driver.vehicleMake} {activeRide.driver.vehicleYear || activeRide.driver.vehicleModel || ''}</Text>
+                </View>
+                <View style={styles.driverVehiclePreview}>
+                  {activeRide.driver.vehiclePhoto ? (
+                    <Image source={{ uri: activeRide.driver.vehiclePhoto }} style={styles.driverVehicleImage} resizeMode="cover" />
+                  ) : (
+                    <View style={[styles.driverVehicleImage, styles.driverVehiclePlaceholder]}>
+                      <Car size={26} color={colors.gray400} strokeWidth={1.6} />
+                    </View>
+                  )}
+                  <Text style={styles.driverVehiclePlate} numberOfLines={1}>
+                    {activeRide.driver.licencePlate || 'No plate'}
+                  </Text>
                 </View>
               </Animated.View>
             )}
@@ -2308,7 +2438,7 @@ export default function ScheduleScreen() {
     );
   };
 
-  // ===== SOS overlay (matches screenshot 3) =====
+  // ===== SOS overlay =====
   const renderSosOverlay = () => {
     if (!sosVisible) return null;
     return (
@@ -2413,7 +2543,7 @@ export default function ScheduleScreen() {
     );
   };
 
-  // ===== Rating modal (matches screenshots 5 & 6) =====
+  // ===== Rating modal =====
   const renderRatingModal = () => (
     <>
       <Modal visible={showRatingModal} transparent animationType="slide" onRequestClose={() => undefined}>
@@ -2495,13 +2625,13 @@ export default function ScheduleScreen() {
 
       <Modal visible={showRatingThankYou} transparent animationType="fade">
         <View style={styles.ratingBackdrop}>
-          <View style={styles.thankYouCard}>
+          <ScrollableCard style={styles.thankYouCard}>
             <View style={styles.thankYouIcon}>
               <Check size={30} color={colors.white} />
             </View>
             <Text style={styles.ratingTitle}>Thank you for rating!</Text>
             <Text style={styles.ratingSubtitle}>Your feedback helps keep CampusConnect safe.</Text>
-          </View>
+          </ScrollableCard>
         </View>
       </Modal>
     </>
@@ -2511,23 +2641,9 @@ export default function ScheduleScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
 
-      {Platform.OS === 'web' && (
-        // @ts-ignore web-only
-        <input
-          ref={webTimeInputRef}
-          type="time"
-          value={timeString}
-          onChange={(e: any) => setTimeString(e.target.value || '08:00')}
-          style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
-        />
-      )}
-
       <ScrollView style={styles.formScroll} contentContainerStyle={styles.formContent} showsVerticalScrollIndicator={false}>
-        <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backPill}>
-            <ArrowLeft size={16} color={colors.greenDark} strokeWidth={2.4} />
-            <Text style={styles.backPillText}>Back</Text>
-          </TouchableOpacity>
+        <View style={[styles.header, { paddingTop: 14 }]}>
+
           <Text style={styles.title}>Schedule Ride</Text>
           <Text style={styles.subtitle}>Book your ride in advance</Text>
 
@@ -2561,7 +2677,7 @@ export default function ScheduleScreen() {
           </View>
         </View>
 
-        <View style={styles.mapCard}>
+        <View style={[styles.mapCard, { height: Math.min(320, Math.max(150, windowHeight * 0.25)) }]}>
           <WebMap
             userLocation={pickupCoords}
             destination={
@@ -2641,7 +2757,7 @@ export default function ScheduleScreen() {
           </ScrollView>
 
           <Text style={[styles.sectionLabel, styles.timeSectionLabel]}>TIME</Text>
-          <View style={styles.timeRow}>
+          <View style={[styles.timeRow, windowWidth < 360 && { flexDirection: 'column', alignItems: 'stretch' }]}>
             <TouchableOpacity style={styles.timePill} onPress={onPickTime} activeOpacity={0.85}>
               <Clock size={19} color={colors.greenDark} strokeWidth={2.4} />
               <Text style={styles.timePillText}>{timeString}</Text>
@@ -2694,24 +2810,6 @@ export default function ScheduleScreen() {
             icon={<CalendarDays size={18} color={colors.white} strokeWidth={2} />}
             style={styles.scheduleActionButton}
           />
-        </View>
-        <View style={[styles.bottomNav, { paddingBottom: insets.bottom + 6 }]}>
-        <NavItem
-          icon={<House size={20} color={colors.gray400} strokeWidth={1.8} />}
-          label="Home"
-          onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Home', params: { skipActiveRideRestore: true } }] })}
-        />
-        <NavItem
-          icon={<Clock size={20} color={colors.gray400} strokeWidth={1.8} />}
-          label="History"
-          onPress={() => navigation.reset({ index: 0, routes: [{ name: 'RiderHistory' }] })}
-        />
-        <NavItem icon={<CalendarDays size={20} color={colors.green} strokeWidth={2} />} label="Schedule" active />
-        <NavItem
-          icon={<CircleUserRound size={20} color={colors.gray400} strokeWidth={1.8} />}
-          label="Profile"
-          onPress={() => navigation.reset({ index: 0, routes: [{ name: 'RiderProfile' }] })}
-        />
         </View>
       </View>
 
@@ -2847,43 +2945,101 @@ export default function ScheduleScreen() {
       </BottomSheetModal>
 
       {/* Native time picker modal */}
-      <Modal visible={timePickerVisible} transparent animationType="fade" onRequestClose={() => setTimePickerVisible(false)}>
+      <Modal
+        visible={timePickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTimePickerVisible(false)}
+        onShow={() => {
+          const [hour, minute] = timeString.split(':').map(Number);
+          hourWheelRef.current?.scrollTo({ y: hour * TIME_WHEEL_ROW_HEIGHT, animated: false });
+          minuteWheelRef.current?.scrollTo({ y: minute * TIME_WHEEL_ROW_HEIGHT, animated: false });
+        }}
+      >
         <Pressable style={styles.timeModalBackdrop} onPress={() => setTimePickerVisible(false)}>
           <View style={styles.timeModalCard}>
             <Text style={styles.timeModalTitle}>Select time</Text>
             <Text style={styles.timeModalValue}>{timeString}</Text>
-            <View style={styles.timeModalGrid}>
-              {[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23].map((h) => (
-                <TouchableOpacity
-                  key={h}
-                  style={[styles.timeModalCell, timeString.startsWith(String(h).padStart(2, '0')) && styles.timeModalCellSelected]}
-                  onPress={() => {
-                    const mm = timeString.split(':')[1] || '00';
-                    setTimeString(`${String(h).padStart(2, '0')}:${mm}`);
+            <View style={styles.timeWheels}>
+              <View style={styles.timeWheelGroup}>
+                <Text style={styles.timeWheelLabel}>HOUR</Text>
+                <ScrollView
+                  ref={hourWheelRef}
+                  style={styles.timeWheel}
+                  contentContainerStyle={styles.timeWheelContent}
+                  showsVerticalScrollIndicator={false}
+                  snapToInterval={TIME_WHEEL_ROW_HEIGHT}
+                  decelerationRate="fast"
+                  onMomentumScrollEnd={(event) => {
+                    const hour = Math.max(0, Math.min(23, Math.round(event.nativeEvent.contentOffset.y / TIME_WHEEL_ROW_HEIGHT)));
+                    const minute = timeString.split(':')[1] || '00';
+                    setTimeString(`${String(hour).padStart(2, '0')}:${minute}`);
+                  }}
+                  onScrollEndDrag={(event) => {
+                    const hour = Math.max(0, Math.min(23, Math.round(event.nativeEvent.contentOffset.y / TIME_WHEEL_ROW_HEIGHT)));
+                    const minute = timeString.split(':')[1] || '00';
+                    setTimeString(`${String(hour).padStart(2, '0')}:${minute}`);
                   }}
                 >
-                  <Text style={[styles.timeModalCellText, timeString.startsWith(String(h).padStart(2, '0')) && styles.timeModalCellTextSelected]}>
-                    {String(h).padStart(2, '0')}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={styles.timeModalMinutesRow}>
-              {['00', '15', '30', '45'].map((m) => {
-                const selected = timeString.endsWith(`:${m}`);
+                  {Array.from({ length: 24 }, (_, hour) => {
+                    const hourText = String(hour).padStart(2, '0');
+                    const selected = timeString.startsWith(`${hourText}:`);
+                    return (
+                      <TouchableOpacity
+                        key={hour}
+                        style={[styles.timeWheelItem, selected && styles.timeWheelItemSelected]}
+                        onPress={() => {
+                          const minute = timeString.split(':')[1] || '00';
+                          setTimeString(`${hourText}:${minute}`);
+                          hourWheelRef.current?.scrollTo({ y: hour * TIME_WHEEL_ROW_HEIGHT, animated: true });
+                        }}
+                      >
+                        <Text style={[styles.timeWheelItemText, selected && styles.timeWheelItemTextSelected]}>{hourText}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+              <Text style={styles.timeWheelSeparator}>:</Text>
+              <View style={styles.timeWheelGroup}>
+                <Text style={styles.timeWheelLabel}>MINUTE</Text>
+                <ScrollView
+                  ref={minuteWheelRef}
+                  style={styles.timeWheel}
+                  contentContainerStyle={styles.timeWheelContent}
+                  showsVerticalScrollIndicator={false}
+                  snapToInterval={TIME_WHEEL_ROW_HEIGHT}
+                  decelerationRate="fast"
+                  onMomentumScrollEnd={(event) => {
+                    const minute = Math.max(0, Math.min(59, Math.round(event.nativeEvent.contentOffset.y / TIME_WHEEL_ROW_HEIGHT)));
+                    const hour = timeString.split(':')[0] || '00';
+                    setTimeString(`${hour}:${String(minute).padStart(2, '0')}`);
+                  }}
+                  onScrollEndDrag={(event) => {
+                    const minute = Math.max(0, Math.min(59, Math.round(event.nativeEvent.contentOffset.y / TIME_WHEEL_ROW_HEIGHT)));
+                    const hour = timeString.split(':')[0] || '00';
+                    setTimeString(`${hour}:${String(minute).padStart(2, '0')}`);
+                  }}
+                >
+                  {Array.from({ length: 60 }, (_, minute) => {
+                    const minuteText = String(minute).padStart(2, '0');
+                    const selected = timeString.endsWith(`:${minuteText}`);
                 return (
                   <TouchableOpacity
-                    key={m}
-                    style={[styles.timeModalCell, selected && styles.timeModalCellSelected]}
+                    key={minute}
+                    style={[styles.timeWheelItem, selected && styles.timeWheelItemSelected]}
                     onPress={() => {
-                      const hh = timeString.split(':')[0] || '08';
-                      setTimeString(`${hh}:${m}`);
+                      const hour = timeString.split(':')[0] || '00';
+                      setTimeString(`${hour}:${minuteText}`);
+                      minuteWheelRef.current?.scrollTo({ y: minute * TIME_WHEEL_ROW_HEIGHT, animated: true });
                     }}
                   >
-                    <Text style={[styles.timeModalCellText, selected && styles.timeModalCellTextSelected]}>:{m}</Text>
+                    <Text style={[styles.timeWheelItemText, selected && styles.timeWheelItemTextSelected]}>{minuteText}</Text>
                   </TouchableOpacity>
                 );
-              })}
+                  })}
+                </ScrollView>
+              </View>
             </View>
             <TouchableOpacity style={styles.timeModalConfirm} onPress={() => setTimePickerVisible(false)}>
               <Text style={styles.timeModalConfirmText}>Done</Text>
@@ -2990,7 +3146,7 @@ export default function ScheduleScreen() {
                 <Text style={styles.listEmptySub}>Book one and it will show up here.</Text>
               </View>
             ) : (
-              <ScrollView style={{ maxHeight: SCREEN_HEIGHT * 0.62 }} showsVerticalScrollIndicator={false}>
+              <ScrollView style={{ maxHeight: windowHeight * 0.62 }} showsVerticalScrollIndicator={false}>
                 {scheduledRides.map((ride) => {
                   const st = String(ride.status || '').toLowerCase();
                   const canCancel = st === 'scheduled';
@@ -3072,9 +3228,15 @@ export default function ScheduleScreen() {
 
       {renderFindingDriversOverlay()}
 
-      {/* ===== Active Trip overlay (matches screenshots 2 & 4) ===== */}
+      {/* ===== Active Trip overlay ===== */}
       {activeTripVisible && activeRideId && (
-        <Modal visible transparent animationType="slide" onRequestClose={() => {}}>
+        <Modal
+          visible
+          transparent
+          animationType="slide"
+          presentationStyle="overFullScreen"
+          onRequestClose={() => {}}
+        >
           <View style={styles.overlayContainer}>
             <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
             {riderMessageToast ? (
@@ -3098,7 +3260,7 @@ export default function ScheduleScreen() {
               </View>
             ) : (
               <ScrollView style={styles.overlayContent} contentContainerStyle={{ paddingBottom: insets.bottom + 10 }} showsVerticalScrollIndicator={false}>
-                <View style={styles.activeMapContainer}>
+                <View style={[styles.activeMapContainer, { height: Math.min(320, Math.max(140, windowHeight * 0.3)) }]}>
                   {!tripCompleted ? (
                     <WebMap
                       userLocation={{
@@ -3144,22 +3306,35 @@ export default function ScheduleScreen() {
                   <View style={styles.activeDriverCard}>
                     <View style={styles.driverHeader}>
                       <View style={styles.referenceDriverAvatar}>
-                        <Text style={styles.driverAvatarText}>
-                          {String(activeRide.driver.fullName || driverName || 'D').split(' ').map((n) => n[0]).join('')}
-                        </Text>
+                        {activeRide.driver.profilePhoto ? (
+                          <Image source={{ uri: activeRide.driver.profilePhoto }} style={styles.referenceDriverAvatarImage} />
+                        ) : (
+                          <Text style={styles.driverAvatarText}>
+                            {String(activeRide.driver.fullName || driverName || 'D').split(' ').map((n) => n[0]).join('')}
+                          </Text>
+                        )}
                       </View>
                       <View style={styles.referenceDriverIdentity}>
                         <Text style={styles.driverName}>{activeRide.driver.fullName || driverName}</Text>
                         <Text style={styles.referenceDriverVehicle}>
-                          {activeRide.driver.vehicleMake} {activeRide.driver.vehicleModel}
+                          {activeRide.driver.vehicleMake} {activeRide.driver.vehicleYear || activeRide.driver.vehicleModel}
                         </Text>
                         <View style={styles.referenceDriverRating}>
                           <Star size={14} color={colors.orange} strokeWidth={2} fill={colors.orange} />
                           <Text style={styles.referenceDriverRatingText}>{activeRide.driver.rating || 0} · Driver</Text>
                         </View>
                       </View>
-                      <View style={styles.referencePlateBadge}>
-                        <Text style={styles.referencePlateText}>{activeRide.driver.licencePlate || driverPlate || 'No plate'}</Text>
+                      <View style={styles.referenceVehicleBlock}>
+                        {activeRide.driver.vehiclePhoto ? (
+                          <Image source={{ uri: activeRide.driver.vehiclePhoto }} style={styles.referenceVehiclePhoto} resizeMode="cover" />
+                        ) : (
+                          <View style={[styles.referenceVehiclePhoto, styles.referenceVehiclePlaceholder]}>
+                            <Car size={28} color={colors.gray400} strokeWidth={1.6} />
+                          </View>
+                        )}
+                        <View style={styles.referencePlateBadge}>
+                          <Text style={styles.referencePlateText}>{activeRide.driver.licencePlate || driverPlate || 'No plate'}</Text>
+                        </View>
                       </View>
                     </View>
                   </View>
@@ -3193,7 +3368,6 @@ export default function ScheduleScreen() {
                   </View>
                 </View>
 
-                {/* SOS + Call side by side (matches screenshots 2 & 4) */}
                 <View style={styles.referenceActionRow}>
                   <TouchableOpacity style={styles.referenceSosButton} onPress={handleSOS}>
                     <AlertTriangle size={17} color={colors.white} strokeWidth={2.3} />
@@ -3220,6 +3394,13 @@ export default function ScheduleScreen() {
                     <Text style={styles.actionButtonText}>Share Ride Link</Text>
                   </TouchableOpacity>
                 </View>
+
+                {tripStatus !== 'completed' && (
+                  <TouchableOpacity style={styles.cancelRideAction} onPress={handleCancelSearch} disabled={cancelling}>
+                    {cancelling ? <ActivityIndicator size="small" color={colors.red} /> : <X size={16} color={colors.red} />}
+                    <Text style={styles.cancelRideActionText}>Cancel ride</Text>
+                  </TouchableOpacity>
+                )}
 
                 {tripStatus === 'completed' && (
                   <View style={styles.buttonContainer}>
@@ -3276,7 +3457,7 @@ export default function ScheduleScreen() {
                 <Pressable style={styles.chatBackdrop} onPress={() => setChatVisible(false)} />
                 <View style={styles.chatSheet}>
                   <ChatScreen
-                    rideId={activeRideId || (activeRide?.id ? String(activeRide.id) : undefined)}
+                    rideId={activeRideId || (activeRide?.id ? String(activeRide.id) : null) || undefined}
                     otherPartyName={driverName || activeRide?.driver?.fullName || 'Driver'}
                     onClose={() => setChatVisible(false)}
                   />
@@ -3285,7 +3466,59 @@ export default function ScheduleScreen() {
             )}
 
             {renderSosOverlay()}
+            {renderCancelOverlay()}
             {renderRatingModal()}
+          </View>
+        </Modal>
+      )}
+
+      {/* Cancel dialog / notice for the Scheduled Rides list case (no Active Trip modal open) */}
+      {!activeTripVisible && cancelDialogVisible && (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setCancelDialogVisible(false)}>
+          <View style={styles.cancelDialogBackdrop}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => !cancelling && setCancelDialogVisible(false)} />
+            <ScrollableCard style={styles.cancelDialogCard}>
+              <View style={styles.cancelDialogIcon}><X size={21} color={colors.red} /></View>
+              <Text style={styles.cancelDialogTitle}>Cancel this ride?</Text>
+              <Text style={styles.cancelDialogSubtitle}>Please tell the driver why you need to cancel.</Text>
+              <TextInput
+                style={styles.cancelReasonInput}
+                value={cancelReason}
+                onChangeText={setCancelReason}
+                placeholder="Enter a cancellation reason"
+                placeholderTextColor={colors.gray400}
+                multiline
+                maxLength={500}
+                textAlignVertical="top"
+                editable={!cancelling}
+              />
+              <Text style={styles.cancelReasonCount}>{cancelReason.length}/500</Text>
+              <View style={styles.cancelDialogActions}>
+                <TouchableOpacity style={styles.cancelKeepButton} onPress={() => setCancelDialogVisible(false)} disabled={cancelling}>
+                  <Text style={styles.cancelKeepText}>Keep ride</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.cancelConfirmButton, (!cancelReason.trim() || cancelling) && styles.cancelConfirmDisabled]}
+                  onPress={handleConfirmRideCancellation}
+                  disabled={!cancelReason.trim() || cancelling}
+                >
+                  {cancelling ? <ActivityIndicator color={colors.white} size="small" /> : <Text style={styles.cancelConfirmText}>Cancel ride</Text>}
+                </TouchableOpacity>
+              </View>
+            </ScrollableCard>
+          </View>
+        </Modal>
+      )}
+
+      {!activeTripVisible && cancellationNoticeVisible && (
+        <Modal visible transparent animationType="fade" onRequestClose={() => undefined}>
+          <View style={styles.cancelDialogBackdrop}>
+            <ScrollableCard style={styles.cancelNoticeCard}>
+              <View style={styles.cancelNoticeIcon}><Check size={24} color={colors.white} /></View>
+              <Text style={styles.cancelDialogTitle}>Ride cancelled</Text>
+              <Text style={styles.cancelNoticeText}>{cancellationNotice}</Text>
+              <Text style={styles.cancelNoticeHint}>Returning to Home…</Text>
+            </ScrollableCard>
           </View>
         </Modal>
       )}
@@ -3295,27 +3528,12 @@ export default function ScheduleScreen() {
   );
 }
 
-function NavItem({ icon, label, active, onPress }: { icon: React.ReactNode; label: string; active?: boolean; onPress?: () => void }) {
-  return (
-    <TouchableOpacity style={styles.navItem} onPress={onPress} activeOpacity={0.6}>
-      {icon}
-      <Text style={[styles.navItemLabel, active && styles.navItemLabelActive]}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
-// ================= STYLES =================
 const styles = StyleSheet.create({
-  container: { flex: 1, minHeight: 0, backgroundColor: colors.gray50 },
+  container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
   formScroll: { flex: 1, minHeight: 0 },
   formContent: { paddingBottom: spacing.sm },
 
   header: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm, backgroundColor: colors.white },
-  backPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
-    paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full, backgroundColor: colors.greenLight,
-  },
-  backPillText: { color: colors.greenDark, fontFamily: font.bold, fontSize: 12 },
   title: { color: colors.gray900, fontFamily: font.extrabold, fontSize: 22, marginTop: spacing.sm },
   subtitle: { color: colors.gray500, fontFamily: font.medium, fontSize: 12, marginTop: 2 },
   scheduledButton: {
@@ -3324,7 +3542,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.full, backgroundColor: colors.green, ...shadow.sm,
   },
   scheduledButtonText: { color: colors.white, fontFamily: font.bold, fontSize: 12, flexShrink: 1 },
-  scheduledActionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginTop: spacing.sm },
+  scheduledActionsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginTop: spacing.sm },
   scheduledBadge: {
     minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4,
     alignItems: 'center', justifyContent: 'center', backgroundColor: colors.red, marginLeft: 4,
@@ -3332,7 +3550,7 @@ const styles = StyleSheet.create({
   scheduledBadgeText: { color: colors.white, fontFamily: font.bold, fontSize: 10 },
 
   mapCard: {
-    height: Math.min(Math.max(SCREEN_HEIGHT * 0.22, 170), 230),
+    height: 200,
     marginHorizontal: spacing.md, marginTop: spacing.sm,
     borderRadius: radius.md, overflow: 'hidden', backgroundColor: '#e8eaed',
     ...shadow.md, position: 'relative',
@@ -3399,7 +3617,7 @@ const styles = StyleSheet.create({
   timeError: { color: colors.red, fontFamily: font.semibold, fontSize: 10, marginTop: 4 },
   timeOk: { color: colors.greenDark, fontFamily: font.semibold, fontSize: 10, marginTop: 4 },
 
-  routeDetails: { flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: spacing.sm, marginTop: 4 },
+  routeDetails: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, justifyContent: 'space-around', paddingHorizontal: spacing.sm, marginTop: 4 },
   routeDetailItem: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: colors.gray50, paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.sm,
@@ -3409,11 +3627,6 @@ const styles = StyleSheet.create({
   fixedFooter: { flexShrink: 0, backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: colors.gray100, paddingTop: 2 },
   actionsWrap: { paddingHorizontal: spacing.md, marginTop: 4, marginBottom: 4 },
   scheduleActionButton: { minHeight: 44, borderRadius: radius.md },
-
-  bottomNav: { flexDirection: 'row', backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: colors.gray100, paddingTop: 7 },
-  navItem: { flex: 1, alignItems: 'center', gap: 3 },
-  navItemLabel: { fontFamily: font.medium, fontSize: 10.5, color: colors.gray400, fontWeight: '500' },
-  navItemLabelActive: { color: colors.green, fontFamily: font.semibold, fontWeight: '600' },
 
   searchRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -3455,15 +3668,16 @@ const styles = StyleSheet.create({
   timeModalCard: { width: '100%', maxWidth: 380, backgroundColor: colors.white, borderRadius: radius.xl, padding: spacing.lg, ...shadow.lg },
   timeModalTitle: { fontFamily: font.bold, fontSize: 16, color: colors.gray900, textAlign: 'center' },
   timeModalValue: { fontFamily: font.extrabold, fontSize: 40, color: colors.greenDark, textAlign: 'center', marginVertical: spacing.md, letterSpacing: 1 },
-  timeModalGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6 },
-  timeModalCell: {
-    minWidth: 46, paddingVertical: 8, borderRadius: radius.md, borderWidth: 1,
-    borderColor: colors.gray200, backgroundColor: colors.white, alignItems: 'center', marginBottom: 4,
-  },
-  timeModalCellSelected: { backgroundColor: colors.green, borderColor: colors.green },
-  timeModalCellText: { fontFamily: font.bold, fontSize: 13, color: colors.gray800 },
-  timeModalCellTextSelected: { color: colors.white },
-  timeModalMinutesRow: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: spacing.md },
+  timeWheels: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: spacing.sm, marginBottom: spacing.xs },
+  timeWheelGroup: { flex: 1, alignItems: 'center' },
+  timeWheelLabel: { fontFamily: font.semibold, fontSize: 10, color: colors.gray500, marginBottom: spacing.xs },
+  timeWheel: { height: TIME_WHEEL_VISIBLE_HEIGHT, width: '100%' },
+  timeWheelContent: { paddingVertical: TIME_WHEEL_VERTICAL_PADDING },
+  timeWheelItem: { height: TIME_WHEEL_ROW_HEIGHT, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md },
+  timeWheelItemSelected: { backgroundColor: colors.greenLight },
+  timeWheelItemText: { fontFamily: font.medium, fontSize: 22, color: colors.gray500 },
+  timeWheelItemTextSelected: { fontFamily: font.bold, color: colors.greenDark },
+  timeWheelSeparator: { width: 24, marginTop: 18, textAlign: 'center', fontFamily: font.bold, fontSize: 26, color: colors.gray700 },
   timeModalConfirm: { marginTop: spacing.lg, backgroundColor: colors.green, borderRadius: radius.md, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   timeModalConfirmText: { color: colors.white, fontFamily: font.bold, fontSize: 14 },
 
@@ -3562,6 +3776,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', marginRight: spacing.lg,
     shadowColor: colors.blue, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6,
   },
+  driverAvatarImage: { width: '100%', height: '100%', borderRadius: 30 },
   driverAvatarText: { fontFamily: font.bold, fontSize: 22, fontWeight: '700', color: colors.white },
   driverDetails: { flex: 1 },
   driverName: { fontFamily: font.bold, fontSize: 16, fontWeight: '700', color: colors.gray900, marginBottom: 4 },
@@ -3569,6 +3784,10 @@ const styles = StyleSheet.create({
   driverRating: { fontFamily: font.semibold, fontSize: 13, fontWeight: '600', color: colors.orange },
   driverCar: { fontFamily: font.regular, fontSize: 13, color: colors.gray700, marginTop: 2 },
   driverPlate: { fontFamily: font.semibold, fontSize: 12, fontWeight: '600', color: colors.gray600, letterSpacing: 0.8, marginTop: 1 },
+  driverVehiclePreview: { width: 82, alignItems: 'center', gap: 4, marginLeft: spacing.xs },
+  driverVehicleImage: { width: 78, height: 48, borderRadius: radius.sm, backgroundColor: colors.gray100 },
+  driverVehiclePlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  driverVehiclePlate: { maxWidth: 82, paddingHorizontal: 6, paddingVertical: 4, overflow: 'hidden', borderRadius: radius.sm, backgroundColor: colors.gray900, color: colors.white, fontFamily: font.bold, fontSize: 9, textAlign: 'center' },
 
   tripDetails: {
     width: '100%', backgroundColor: colors.gray50, borderRadius: radius.lg,
@@ -3598,9 +3817,29 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(244, 67, 54, 0.08)',
   },
   cancelButtonText: { fontFamily: font.semibold, fontSize: 15, fontWeight: '600', color: '#f44336' },
+  cancelRideAction: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.red, borderRadius: radius.md, backgroundColor: colors.white },
+  cancelRideActionText: { color: colors.red, fontFamily: font.bold, fontSize: 13 },
+  cancelDialogBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg, backgroundColor: 'rgba(15,23,42,0.55)' },
+  cancelDialogLayer: { zIndex: 500, elevation: 500 },
+  cancelDialogCard: { width: '100%', maxWidth: 400, padding: spacing.xl, borderRadius: radius.lg, backgroundColor: colors.white, ...shadow.lg },
+  cancelDialogIcon: { width: 42, height: 42, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: '#FEE2E2', marginBottom: spacing.md },
+  cancelDialogTitle: { color: colors.gray900, fontFamily: font.bold, fontSize: 19, textAlign: 'center' },
+  cancelDialogSubtitle: { color: colors.gray600, fontFamily: font.regular, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: spacing.xs },
+  cancelReasonInput: { minHeight: 104, maxHeight: 150, marginTop: spacing.md, padding: spacing.md, borderWidth: 1, borderColor: colors.gray200, borderRadius: radius.md, backgroundColor: colors.gray50, color: colors.gray900, fontFamily: font.regular, fontSize: 14 },
+  cancelReasonCount: { color: colors.gray400, fontFamily: font.medium, fontSize: 10, textAlign: 'right', marginTop: 4 },
+  cancelDialogActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
+  cancelKeepButton: { flex: 1, minHeight: 46, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.gray100 },
+  cancelKeepText: { color: colors.gray800, fontFamily: font.bold, fontSize: 13 },
+  cancelConfirmButton: { flex: 1, minHeight: 46, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.red },
+  cancelConfirmDisabled: { opacity: 0.5 },
+  cancelConfirmText: { color: colors.white, fontFamily: font.bold, fontSize: 13 },
+  cancelNoticeCard: { width: '100%', maxWidth: 360, padding: spacing.xl, alignItems: 'center', borderRadius: radius.lg, backgroundColor: colors.white, ...shadow.lg },
+  cancelNoticeIcon: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 23, backgroundColor: colors.green, marginBottom: spacing.md },
+  cancelNoticeText: { color: colors.gray700, fontFamily: font.medium, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: spacing.sm },
+  cancelNoticeHint: { color: colors.gray400, fontFamily: font.medium, fontSize: 11, textAlign: 'center', marginTop: spacing.md },
 
   activeMapContainer: {
-    height: Math.min(SCREEN_HEIGHT * 0.3, 250), borderRadius: radius.lg, overflow: 'hidden',
+    height: 200, borderRadius: radius.lg, overflow: 'hidden',
     backgroundColor: colors.gray100, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.gray200,
   },
   activeMapStatus: {
@@ -3617,11 +3856,15 @@ const styles = StyleSheet.create({
     width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center',
     marginRight: spacing.md, backgroundColor: colors.blue, ...shadow.sm,
   },
+  referenceDriverAvatarImage: { width: '100%', height: '100%', borderRadius: 28 },
   referenceDriverIdentity: { flex: 1, minWidth: 0 },
   referenceDriverVehicle: { marginTop: 2, fontFamily: font.regular, fontSize: 12, color: colors.gray500 },
   referenceDriverRating: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
   referenceDriverRatingText: { fontFamily: font.medium, fontSize: 11, color: colors.orange },
-  referencePlateBadge: { maxWidth: 106, paddingHorizontal: 10, paddingVertical: 7, borderRadius: radius.sm, backgroundColor: colors.gray900 },
+  referenceVehicleBlock: { width: 100, alignItems: 'center', gap: 5, marginLeft: spacing.sm },
+  referenceVehiclePhoto: { width: 96, height: 58, borderRadius: radius.sm, backgroundColor: colors.gray100 },
+  referenceVehiclePlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  referencePlateBadge: { maxWidth: 100, paddingHorizontal: 10, paddingVertical: 7, borderRadius: radius.sm, backgroundColor: colors.gray900 },
   referencePlateText: { fontFamily: font.bold, fontSize: 11, color: colors.white, letterSpacing: 0.4 },
 
   referenceTripCard: { backgroundColor: colors.gray50, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.gray100 },
@@ -3657,7 +3900,7 @@ const styles = StyleSheet.create({
   completeActionText: { fontFamily: font.bold, fontSize: 14, color: colors.white },
 
   // ===== SOS styles =====
-  sosLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 300, justifyContent: 'flex-end', paddingHorizontal: 22 },
+  sosLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 400, justifyContent: 'flex-end', paddingHorizontal: 22 },
   sosActivatedLayer: { paddingHorizontal: 0, justifyContent: 'flex-start' },
   sosBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.46)' },
   sosCard: { width: '100%', padding: spacing.xl, paddingBottom: spacing.lg, borderRadius: 24, backgroundColor: colors.white, alignItems: 'center', shadowColor: colors.black, shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.2, shadowRadius: 18, elevation: 24 },
@@ -3696,7 +3939,7 @@ const styles = StyleSheet.create({
   sosBottomNotice: { position: 'absolute', bottom: 18, left: 18, right: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#ef4444', paddingVertical: 10, paddingHorizontal: 12, borderRadius: radius.md },
   sosBottomNoticeText: { color: colors.white, fontFamily: font.medium, fontSize: 12 },
 
-  // ===== Rating full-screen (matches screenshots 5 & 6) =====
+  // ===== Rating full-screen =====
   ratingFullBackdrop: { flex: 1, backgroundColor: colors.white },
   ratingFullHeader: {
     flexDirection: 'row',

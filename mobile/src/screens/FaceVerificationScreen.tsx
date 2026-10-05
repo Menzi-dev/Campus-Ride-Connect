@@ -1,12 +1,14 @@
+import { useToast } from '../components/Toast';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
+  ScrollView,
+  useWindowDimensions,
   Text,
   StyleSheet,
   TouchableOpacity,
   Animated,
   StatusBar,
-  Alert,
   Linking,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -35,6 +37,9 @@ type Status = 'permission' | 'ready' | 'capturing' | 'verifying' | 'result';
 const RING_SIZE = 240;
 
 export default function FaceVerificationScreen() {
+  const { showToast } = useToast();
+  const { width } = useWindowDimensions();
+  const ringSize = Math.min(RING_SIZE, Math.max(120, width - spacing.xxl * 2));
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'FaceVerification'>>();
   const nextScreen = route.params?.nextScreen ?? 'Home';
@@ -87,7 +92,7 @@ export default function FaceVerificationScreen() {
       await verifyFace(photo.uri);
     } catch (err) {
       setStatus('ready');
-      Alert.alert('Camera error', 'Could not capture a photo. Please try again.');
+      showToast('Could not capture a photo. Please try again.', 'red');
     }
   };
 
@@ -181,6 +186,7 @@ export default function FaceVerificationScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
+      <ScrollView style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ paddingBottom: spacing.xl }}>
       <View style={styles.header}>
         <Text style={styles.title}>Face Verification</Text>
         <Text style={styles.subtitle}>
@@ -195,19 +201,19 @@ export default function FaceVerificationScreen() {
       </View>
 
       <View style={styles.scanArea}>
-        <View style={styles.ringWrap}>
+        <View style={[styles.ringWrap, { width: ringSize, height: ringSize }]}>
           {(status === 'capturing' || status === 'verifying') && (
             <>
               <Animated.View
-                style={[styles.ring, styles.ring1, { transform: [{ rotate: rotate1 }] }]}
+                style={[styles.ring, styles.ring1, { width: ringSize, height: ringSize, transform: [{ rotate: rotate1 }] }]}
               />
               <Animated.View
-                style={[styles.ring, styles.ring2, { transform: [{ rotate: rotate2 }] }]}
+                style={[styles.ring, styles.ring2, { width: ringSize - 20, height: ringSize - 20, transform: [{ rotate: rotate2 }] }]}
               />
             </>
           )}
 
-          <View style={styles.cameraCircle}>
+          <View style={[styles.cameraCircle, { width: ringSize - 60, height: ringSize - 60, borderRadius: (ringSize - 60) / 2 }]}>
             <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="front" />
             {status === 'verifying' && (
               <View style={styles.verifyingOverlay}>
@@ -238,6 +244,8 @@ export default function FaceVerificationScreen() {
           icon={<CameraIcon size={18} color={colors.white} strokeWidth={2} />}
         />
       </View>
+
+      </ScrollView>
 
       {/* RESULT MODAL */}
       <BottomSheetModal
@@ -276,13 +284,13 @@ export default function FaceVerificationScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.white },
+  container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.white },
   centered: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xxl },
   header: { paddingHorizontal: spacing.xxl, paddingTop: spacing.xxxl, paddingBottom: spacing.lg },
   title: { fontFamily: font.extrabold, fontSize: 24, fontWeight: '800', color: colors.gray900 },
   subtitle: { fontFamily: font.regular, fontSize: 14, color: colors.gray500, marginTop: 2 },
 
-  scanArea: { flex: 1, alignItems: 'center', paddingHorizontal: spacing.xxl, paddingTop: spacing.lg },
+  scanArea: { width: '100%', maxWidth: 640, alignSelf: 'center', alignItems: 'center', paddingHorizontal: spacing.xxl, paddingTop: spacing.lg },
   ringWrap: {
     width: RING_SIZE,
     height: RING_SIZE,

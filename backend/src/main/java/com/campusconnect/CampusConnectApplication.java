@@ -62,21 +62,18 @@ public class CampusConnectApplication {
     }
 
     @Bean
-    public CommandLineRunner completeExistingRides(JdbcTemplate jdbcTemplate) {
-        return args -> {
-            jdbcTemplate.update(
-                "UPDATE rides SET status = 'COMPLETED', completed_at = COALESCE(completed_at, NOW()) " +
-                "WHERE status IN ('PENDING', 'ACCEPTED', 'ENROUTE', 'ARRIVED', 'STARTED')"
-            );
-        };
-    }
-
-    @Bean
     public CommandLineRunner repairRideSchema(JdbcTemplate jdbcTemplate) {
         return args -> {
+            ensureUserColumn(jdbcTemplate, "profile_photo", "LONGTEXT NULL");
+            ensureUserColumn(jdbcTemplate, "default_payment_method", "VARCHAR(20) NOT NULL DEFAULT 'CASH'");
             ensureRideColumn(jdbcTemplate, "rider_rating", "INT NULL");
             ensureRideColumn(jdbcTemplate, "rider_rating_comment", "VARCHAR(500) NULL");
+            ensureRideColumn(jdbcTemplate, "driver_rating", "INT NULL");
+            ensureRideColumn(jdbcTemplate, "driver_rating_comment", "VARCHAR(500) NULL");
+            ensureRideColumn(jdbcTemplate, "cancellation_reason", "VARCHAR(500) NULL");
+            ensureRideColumn(jdbcTemplate, "cancelled_by", "BIGINT NULL");
             ensureCashPaymentMethod(jdbcTemplate);
+            ensureUserPaymentMethodsTable(jdbcTemplate);
             ensureUniversitySettingsTable(jdbcTemplate);
         };
     }
@@ -93,6 +90,22 @@ public class CampusConnectApplication {
                 + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     }
 
+    private void ensureUserPaymentMethodsTable(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS user_payment_methods ("
+                + "id BIGINT AUTO_INCREMENT PRIMARY KEY,"
+                + "user_id BIGINT NOT NULL,"
+                + "label VARCHAR(80) NOT NULL,"
+                + "last_four CHAR(4) NOT NULL,"
+                + "brand VARCHAR(32) NOT NULL,"
+                + "expiry CHAR(5) NOT NULL,"
+                + "cardholder VARCHAR(120) NOT NULL,"
+                + "is_default BOOLEAN NOT NULL DEFAULT FALSE,"
+                + "created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+                + "INDEX user_payment_methods_user_id (user_id),"
+                + "CONSTRAINT user_payment_methods_user_fk FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE"
+                + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+
     private void ensureCashPaymentMethod(JdbcTemplate jdbcTemplate) {
         try {
             jdbcTemplate.execute("ALTER TABLE payments MODIFY COLUMN method "
@@ -103,14 +116,23 @@ public class CampusConnectApplication {
     }
 
     private void ensureRideColumn(JdbcTemplate jdbcTemplate, String columnName, String definition) {
+        ensureColumn(jdbcTemplate, "rides", columnName, definition);
+    }
+
+    private void ensureUserColumn(JdbcTemplate jdbcTemplate, String columnName, String definition) {
+        ensureColumn(jdbcTemplate, "users", columnName, definition);
+    }
+
+    private void ensureColumn(JdbcTemplate jdbcTemplate, String tableName, String columnName, String definition) {
         Integer count = jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = DATABASE() AND table_name = 'rides' AND column_name = ?",
+                + "WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?",
             Integer.class,
+            tableName,
             columnName
         );
         if (count != null && count == 0) {
-            jdbcTemplate.execute("ALTER TABLE rides ADD COLUMN " + columnName + " " + definition);
+            jdbcTemplate.execute("ALTER TABLE " + tableName + " ADD COLUMN " + columnName + " " + definition);
         }
     }
 }

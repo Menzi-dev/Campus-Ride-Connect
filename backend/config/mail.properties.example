@@ -1,0 +1,11 @@
+# Copy to backend/config/mail.properties OR run backend/configure-email.ps1.
+# Real mail.properties is private and ignored by Git. Never put credentials in mobile/.
+GMAIL_USERNAME=saneledlomo08@gmail.com
+GMAIL_APP_PASSWORD=YOUR_EXISTING_GOOGLE_APP_PASSWORD_WITHOUT_SPACES
+# Must be the frontend URL reachable from the recipient's device.
+APP_PUBLIC_URL=https://YOUR_CURRENT_HTTPS_APP_URL
+APP_MAIL_REQUIRED=true
+EMAIL_VERIFICATION_EXPIRY_MINUTES=60
+EMAIL_VERIFICATION_COOLDOWN_SECONDS=60
+# code: no outbound URL in email (use Verify email in the app); link: email button instead.
+EMAIL_VERIFICATION_DELIVERY_MODE=code

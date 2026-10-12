@@ -42,6 +42,7 @@ const LOGO = require('../assets/icon.png');
 type RootStackParamList = {
   Landing: undefined;
   Login: undefined;
+  EmailVerification: { email?: string; token?: string } | undefined;
   CreateAccount: undefined;
   Home: { skipActiveRideRestore?: boolean } | undefined;
   AdminDashboard: undefined;
@@ -216,14 +217,20 @@ export default function LoginScreen() {
     }
 
     setLoading(true);
+    let loginStage: 'request' | 'storage' = 'request';
     try {
       const response = await apiClient.post('/auth/login', {
         email: normalizedEmail,
         password,
-      });
+      }, { timeout: 30000 });
 
       const { token, user } = response.data;
+      if (typeof token !== 'string' || !token || !user || typeof user.role !== 'string') {
+        showToast('The server returned an incomplete sign-in response. Refresh this HTTPS page and try again.', 'red');
+        return;
+      }
 
+      loginStage = 'storage';
       await AsyncStorage.multiRemove(['saved_cards', 'default_payment_method']);
       await AsyncStorage.setItem('authToken', token);
       await AsyncStorage.setItem('user', JSON.stringify(user));
@@ -246,13 +253,25 @@ export default function LoginScreen() {
         }
       }, 500);
     } catch (error: any) {
+      if (error?.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
+        navigation.navigate('EmailVerification', { email: normalizedEmail });
+        return;
+      }
       const message =
-        error?.response?.status === 401 || error?.response?.status === 404
+        loginStage === 'storage'
+          ? 'Your browser could not save your sign-in. Allow website storage, or open this link in Safari or Chrome instead of an in-app browser.'
+          : error?.code === 'ECONNABORTED' || error?.code === 'ETIMEDOUT'
+          ? 'Sign-in took too long. Check your internet connection and try again.'
+          : error?.response?.status === 401
           ? 'No account found with those credentials'
-          : error?.response?.data?.error ||
+          : error?.response?.status === 404
+          ? 'The sign-in service was not found. Open the latest HTTPS link and refresh.'
+          : error?.response?.status >= 500
+          ? 'The sign-in server is temporarily unavailable. Please try again shortly.'
+          : (typeof error?.response?.data?.error === 'string' ? error.response.data.error : null) ||
             (error?.message === 'Network Error'
               ? 'Cannot reach the server. Check your connection.'
-              : 'Something went wrong. Please try again.');
+              : 'Could not complete sign-in. Refresh the page and try again in Safari or Chrome.');
       showToast(message, 'red');
     } finally {
       setLoading(false);

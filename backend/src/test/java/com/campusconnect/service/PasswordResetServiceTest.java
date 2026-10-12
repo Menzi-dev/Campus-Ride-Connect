@@ -42,7 +42,7 @@ class PasswordResetServiceTest {
     private PasswordEncoder passwordEncoder;
 
     @Mock
-    private JavaMailSender mailSender;
+    private EmailService emailService;
 
     @InjectMocks
     private PasswordResetService passwordResetService;
@@ -53,7 +53,7 @@ class PasswordResetServiceTest {
 
         passwordResetService.requestCode(EMAIL);
 
-        verifyNoInteractions(resetCodeRepository, passwordEncoder, mailSender);
+        verifyNoInteractions(resetCodeRepository, passwordEncoder, emailService);
     }
 
     @Test
@@ -61,19 +61,19 @@ class PasswordResetServiceTest {
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(new User()));
         when(resetCodeRepository.findByEmail(EMAIL)).thenReturn(Optional.empty(), Optional.empty());
         when(passwordEncoder.encode(anyString())).thenReturn("bcrypt-hash");
-        ReflectionTestUtils.setField(passwordResetService, "fromAddress", "saneledlomo08@gmail.com");
-        ArgumentCaptor<SimpleMailMessage> messageCaptor = ArgumentCaptor.forClass(SimpleMailMessage.class);
+        when(emailService.send(anyString(), anyString(), anyString(), anyString())).thenReturn(true);
+        ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<PasswordResetCode> codeCaptor = ArgumentCaptor.forClass(PasswordResetCode.class);
 
         passwordResetService.requestCode(EMAIL);
 
-        verify(mailSender).send(messageCaptor.capture());
+        verify(emailService).send(org.mockito.ArgumentMatchers.eq(EMAIL), anyString(), messageCaptor.capture(), anyString());
         verify(resetCodeRepository).save(codeCaptor.capture());
-        assertEquals(EMAIL, messageCaptor.getValue().getTo()[0]);
-        assertTrue(messageCaptor.getValue().getText().contains("CampusConnect"));
-        assertTrue(messageCaptor.getValue().getText().matches("(?s).*\\b\\d{6}\\b.*"));
-        assertTrue(messageCaptor.getValue().getText().contains("10 minutes"));
-        assertTrue(messageCaptor.getValue().getText().toLowerCase().contains("share"));
+
+        assertTrue(messageCaptor.getValue().contains("CampusConnect"));
+        assertTrue(messageCaptor.getValue().matches("(?s).*\\b\\d{6}\\b.*"));
+        assertTrue(messageCaptor.getValue().contains("10 minutes"));
+        assertTrue(messageCaptor.getValue().toLowerCase().contains("share"));
         assertEquals("bcrypt-hash", codeCaptor.getValue().getCodeHash());
         assertTrue(codeCaptor.getValue().getExpiresAt().isAfter(LocalDateTime.now().plusMinutes(9)));
     }
@@ -86,14 +86,14 @@ class PasswordResetServiceTest {
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(new User()));
         when(resetCodeRepository.findByEmail(EMAIL)).thenReturn(Optional.of(oldCode), Optional.of(oldCode));
         when(passwordEncoder.encode(anyString())).thenReturn("new-hash");
-        ReflectionTestUtils.setField(passwordResetService, "fromAddress", "saneledlomo08@gmail.com");
+        when(emailService.send(anyString(), anyString(), anyString(), anyString())).thenReturn(true);
 
         passwordResetService.requestCode(EMAIL);
 
         assertEquals("new-hash", oldCode.getCodeHash());
         assertEquals(0, oldCode.getAttempts());
         verify(resetCodeRepository).save(oldCode);
-        verify(mailSender).send(any(SimpleMailMessage.class));
+        verify(emailService).send(org.mockito.ArgumentMatchers.eq(EMAIL), anyString(), anyString(), anyString());
     }
 
     @Test
@@ -148,10 +148,30 @@ class PasswordResetServiceTest {
         passwordResetService.resetPassword(EMAIL, "123456", "NewPassword123!");
 
         assertEquals("new-hash", user.getPasswordHash());
+        // A reset changes only the password, never email verification.
+        assertTrue(user.isEmailVerified());
         verify(userRepository).save(user);
         verify(resetCodeRepository).delete(resetCode);
         assertThrows(IllegalArgumentException.class,
             () -> passwordResetService.resetPassword(EMAIL, "123456", "NewPassword123!"));
+    }
+
+    @Test void resetDoesNotVerifyAnUnverifiedAccount() {
+        PasswordResetCode code = createResetCode(); User user = new User(); user.setEmailVerified(false);
+        when(resetCodeRepository.findByEmail(EMAIL)).thenReturn(Optional.of(code));
+        when(passwordEncoder.matches("123456", "stored-hash")).thenReturn(true);
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+        when(passwordEncoder.encode("NewPassword123!")).thenReturn("new-hash");
+        passwordResetService.resetPassword(EMAIL, "123456", "NewPassword123!");
+        org.junit.jupiter.api.Assertions.assertFalse(user.isEmailVerified());
+    }
+
+    @Test void failedDeliveryRemovesUndeliveredResetCode() {
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(new User()));
+        when(resetCodeRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
+        when(passwordEncoder.encode(anyString())).thenReturn("hash");
+        passwordResetService.requestCode(EMAIL);
+        verify(resetCodeRepository).delete(any(PasswordResetCode.class));
     }
 
     private PasswordResetCode createResetCode() {

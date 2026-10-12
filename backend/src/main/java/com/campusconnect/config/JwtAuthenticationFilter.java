@@ -26,6 +26,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Autowired
     private JwtTokenProvider jwtTokenProvider;
 
+    @Autowired
+    private com.campusconnect.repository.UserRepository userRepository;
+
     @Override
     protected void doFilterInternal(
             @NonNull HttpServletRequest request,
@@ -42,6 +45,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (jwtTokenProvider.validateToken(token)) {
                 String userId = jwtTokenProvider.getUserIdFromToken(token);
                 String role = jwtTokenProvider.getRoleFromToken(token);
+                var account = userRepository.findById(Long.valueOf(userId));
+                if (account.isEmpty() || account.get().requiresEmailVerification()) {
+                    SecurityContextHolder.clearContext();
+                    response.setStatus(403);
+                    response.setContentType("application/json");
+                    response.getWriter().write("{\"code\":\"EMAIL_NOT_VERIFIED\",\"error\":\"Verify your email before accessing the application\"}");
+                    return;
+                }
                 LOGGER.info(() -> "JWT validated for userId=" + userId + ", role=" + role);
 
                 List<GrantedAuthority> authorities = role != null

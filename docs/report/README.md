@@ -1,5 +1,16 @@
 # NPRT630 report package
 
+Latest revised Phase 4 report (13 October 2026):
+
+- **CampusConnect_Phase4_Updated_20_Pages.pdf** — verified 20-page PDF for submission.
+- **CampusConnect_Phase4_Updated_Editable.docx** — editable Word companion; pagination may vary by viewer.
+
+This revision preserves Group 68 / Code Nomads details and includes the supplied
+participant feedback: Zinhle's approximately five-minute session and 3/5 ease
+rating, Zwelibanzi's approximately seven-minute combined role session, the
+automatic approval change, password recovery and observed request delivery delay.
+The older report package below remains available as supporting design material.
+
 Start with **CampusConnect-Final-Report.docx** or **CampusConnect-Final-Report.pdf**.
 The PDF is verified as 20 pages. Word is editable with explicit page breaks;
 pagination can vary by Word version/fonts. The Markdown and report-data.json

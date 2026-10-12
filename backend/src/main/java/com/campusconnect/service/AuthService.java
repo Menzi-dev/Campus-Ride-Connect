@@ -15,6 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.logging.Logger;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import java.util.Map;
 
 @Service
 public class AuthService {
@@ -33,6 +36,16 @@ public class AuthService {
     @Autowired
     private JwtTokenProvider jwtTokenProvider;
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Autowired
+    private EmailVerificationService emailVerificationService;
+
+    public static class EmailNotVerifiedException extends RuntimeException {
+        public EmailNotVerifiedException() { super("Verify your email before signing in. You can request a new verification email."); }
+    }
+
     @Transactional
     public User register(RegisterRequest request) {
         try {
@@ -48,7 +61,9 @@ public class AuthService {
                 throw new RuntimeException("Full name is required");
             }
             
-            if (userRepository.existsByEmail(request.getEmail())) {
+            String normalizedEmail = request.getEmail().trim().toLowerCase(java.util.Locale.ROOT);
+            if (!normalizedEmail.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) throw new RuntimeException("A valid email is required");
+            if (userRepository.existsByEmail(normalizedEmail)) {
                 throw new RuntimeException("Email already registered");
             }
 
@@ -76,14 +91,34 @@ public class AuthService {
 
             User user = new User();
             user.setFullName(request.getFullName());
-            user.setEmail(request.getEmail().toLowerCase());
+            user.setEmail(normalizedEmail);
+            user.setEmailVerified(false);
             user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
             user.setRole(role);
             user.setYearOfStudy(request.getYearOfStudy());
             user.setEmergencyContact(request.getEmergencyContact());
             user.setStudentNumber(request.getStudentNumber());
             user.setPhone(request.getPhone());
-            user.setFaceVerified(request.getFaceVerified() != null && request.getFaceVerified());
+            // Client-side movement checks are enrollment, not server-verified identity.
+            user.setFaceVerified(false);
+            user.setFaceEnrollmentPhoto(request.getFaceEnrollmentPhoto());
+            user.setApplicationDocuments(request.getApplicationDocuments());
+            if (request.getFaceScanMetadata() != null) {
+                JsonNode scan = objectMapper.readTree(request.getFaceScanMetadata());
+                if (!"mediapipe-guided-movement-v1".equals(scan.path("method").asText())
+                        || !scan.path("challenges").isArray()
+                        || scan.path("challenges").size() != 5
+                        || request.getFaceEnrollmentPhoto() == null) {
+                    throw new RuntimeException("Invalid guided scan details");
+                }
+                user.setFaceScanMetadata(objectMapper.writeValueAsString(Map.of(
+                    "method", "mediapipe-guided-movement-v1",
+                    "source", "client-reported",
+                    "identityVerified", false,
+                    "receivedAt", LocalDateTime.now().toString(),
+                    "challenges", scan.path("challenges")
+                )));
+            }
             if (request.getFaceEmbedding() != null && !request.getFaceEmbedding().isBlank()) {
                 logger.info("Face embedding size: " + request.getFaceEmbedding().length());
                 user.setFaceEmbedding(request.getFaceEmbedding());
@@ -111,6 +146,7 @@ public class AuthService {
                 logger.info("Driver approval record created with PENDING status");
             }
 
+            if (savedUser.requiresEmailVerification()) emailVerificationService.issue(savedUser);
             return savedUser;
         } catch (Exception e) {
             logger.severe("Registration failed: " + e.getMessage());
@@ -120,12 +156,14 @@ public class AuthService {
     }
 
     public AuthResponse login(AuthRequest request) {
-        User user = userRepository.findByEmail(request.getEmail())
+        User user = userRepository.findByEmail(request.getEmail().trim().toLowerCase(java.util.Locale.ROOT))
                 .orElseThrow(() -> new RuntimeException("Invalid email or password"));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             throw new RuntimeException("Invalid email or password");
         }
+
+        if (user.requiresEmailVerification()) throw new EmailNotVerifiedException();
 
         String token = jwtTokenProvider.generateToken(user);
 

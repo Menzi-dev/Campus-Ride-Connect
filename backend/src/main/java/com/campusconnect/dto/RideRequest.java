@@ -17,6 +17,18 @@ public class RideRequest {
     private BigDecimal fare;
     private String status;
     private LocalDateTime scheduledAt;
+    private String faceVerificationToken;
+    private String clientRequestId;
+    public String getClientRequestId() { return clientRequestId; }
+    public void setClientRequestId(String value) { clientRequestId = value; }
+    private String paymentMethod;
+    private String cardLastFour;
+    public String getPaymentMethod() { return paymentMethod; }
+    public void setPaymentMethod(String value) { paymentMethod = value; }
+    public String getCardLastFour() { return cardLastFour; }
+    public void setCardLastFour(String value) { cardLastFour = value; }
+    public String getFaceVerificationToken() { return faceVerificationToken; }
+    public void setFaceVerificationToken(String value) { faceVerificationToken = value; }
 
     // Getters and Setters
     public String getPickupLocation() { return pickupLocation; }

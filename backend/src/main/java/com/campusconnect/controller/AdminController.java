@@ -35,64 +35,44 @@ public class AdminController {
     private final RideRepository rideRepository;
     private final DriverRepository driverRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final com.campusconnect.service.DriverDecisionEmailService decisionEmails;
 
     public AdminController(
             UserRepository userRepository,
             RideRepository rideRepository,
             DriverRepository driverRepository,
-            JdbcTemplate jdbcTemplate) {
+            JdbcTemplate jdbcTemplate,
+            com.campusconnect.service.DriverDecisionEmailService decisionEmails) {
         this.userRepository = userRepository;
         this.rideRepository = rideRepository;
         this.driverRepository = driverRepository;
         this.jdbcTemplate = jdbcTemplate;
+        this.decisionEmails = decisionEmails;
     }
 
     @GetMapping("/stats")
+    @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public ResponseEntity<Map<String, Object>> getStats() {
-        try {
-            return ResponseEntity.ok(buildStats());
-        } catch (Exception e) {
-            LOGGER.error("Error building stats", e);
-            Map<String, Object> fallback = new LinkedHashMap<>();
-            fallback.put("totalUsers", 0);
-            fallback.put("totalDrivers", 0);
-            fallback.put("ridesToday", 0);
-            fallback.put("pendingApprovals", 0);
-            fallback.put("activeSOS", 0);
-            fallback.put("safetyScorePercent", 0);
-            fallback.put("universityName", "SPU Campus Connect");
-            return ResponseEntity.ok(fallback);
+        try { return ResponseEntity.ok(buildStats()); }
+        catch (Exception error) {
+            LOGGER.error("Dashboard statistics unavailable", error);
+            return ResponseEntity.status(503).body(Map.of("error", "Dashboard data is unavailable. Please retry."));
         }
     }
 
     @GetMapping("/dashboard")
+    @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public ResponseEntity<Map<String, Object>> getDashboard() {
-        Map<String, Object> body = new LinkedHashMap<>();
         try {
-            body.put("stats", buildStats());
-        } catch (Exception e) {
-            LOGGER.warn("Failed to build stats for dashboard, returning safe defaults", e);
-            Map<String, Object> fallback = new LinkedHashMap<>();
-            fallback.put("totalUsers", 0);
-            fallback.put("totalDrivers", 0);
-            fallback.put("ridesToday", 0);
-            fallback.put("pendingApprovals", 0);
-            fallback.put("activeSOS", 0);
-            fallback.put("safetyScorePercent", 0);
-            fallback.put("universityName", "SPU Campus Connect");
-            body.put("stats", fallback);
+            var approvals = buildPendingApprovals(Driver.ApprovalStatus.PENDING);
+            var stats = buildStats();
+            stats.put("pendingApprovals", approvals.size());
+            return ResponseEntity.ok(Map.of("stats", stats, "approvals", approvals));
+        } catch (Exception error) {
+            LOGGER.error("Dashboard snapshot unavailable", error);
+            return ResponseEntity.status(503).body(Map.of("error", "Dashboard data is unavailable. Please retry."));
         }
-
-        try {
-            body.put("approvals", buildPendingApprovals(Driver.ApprovalStatus.PENDING));
-        } catch (Exception e) {
-            LOGGER.warn("Failed to load pending approvals, returning empty list", e);
-            body.put("approvals", new ArrayList<>());
-        }
-
-        return ResponseEntity.ok(body);
     }
-
     @GetMapping("/dashboard/stats")
     public ResponseEntity<Map<String, Object>> getDashboardStatsLegacy() {
         return getStats();
@@ -354,45 +334,41 @@ public class AdminController {
     }
 
     private Map<String, Object> buildStats() {
-        try {
-            long totalUsers = userRepository.count();
-            long totalDrivers = userRepository.countByRole(User.Role.DRIVER);
-                // Use a plain SQL count to avoid JPA-generated queries that assume a specific
-                // primary-key column name (some deployments have schema drift where `id` is
-                // missing). This is resilient and efficient for the admin stats query.
-                Object ridesCountObj = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(*) FROM rides WHERE created_at > ?",
-                    new Object[]{java.sql.Timestamp.valueOf(LocalDateTime.now().minusDays(1))},
-                    Integer.class
-                );
-                int ridesToday = ridesCountObj != null ? (Integer) ridesCountObj : 0;
-            long pendingApprovals = driverRepository.countByApprovalStatus(Driver.ApprovalStatus.PENDING);
-
-            Map<String, Object> stats = new LinkedHashMap<>();
-            stats.put("totalUsers", totalUsers);
-            stats.put("totalDrivers", totalDrivers);
-            stats.put("ridesToday", ridesToday);
-            stats.put("pendingApprovals", pendingApprovals);
-            stats.put("activeSOS", 0);
-            stats.put("safetyScorePercent", 100);
-            stats.put("universityName", "SPU Campus Connect");
-            return stats;
-        } catch (Exception e) {
-            LOGGER.error("Exception while building stats", e);
-            Map<String, Object> stats = new LinkedHashMap<>();
-            stats.put("totalUsers", 0);
-            stats.put("totalDrivers", 0);
-            stats.put("ridesToday", 0);
-            stats.put("pendingApprovals", 0);
-            stats.put("activeSOS", 0);
-            stats.put("safetyScorePercent", 0);
-            stats.put("universityName", "SPU Campus Connect");
-            return stats;
-        }
+        var zone = java.time.ZoneId.of("Africa/Johannesburg");
+        var today = java.time.LocalDate.now(zone);
+        LocalDateTime start = today.atStartOfDay();
+        LocalDateTime end = today.plusDays(1).atStartOfDay();
+        Integer ridesToday = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM rides WHERE created_at >= ? AND created_at < ?",
+            new Object[]{java.sql.Timestamp.valueOf(start), java.sql.Timestamp.valueOf(end)}, Integer.class);
+        long activeSos = count("SELECT COUNT(*) FROM sos_alerts WHERE UPPER(COALESCE(status, 'DISPATCHED')) NOT IN ('RESOLVED', 'CLOSED', 'CANCELLED')");
+        long completed = count("SELECT COUNT(*) FROM rides WHERE status = 'COMPLETED'");
+        long sosFree = count("SELECT COUNT(*) FROM rides r WHERE r.status = 'COMPLETED' AND NOT EXISTS (SELECT 1 FROM sos_alerts s WHERE s.ride_id = r.ride_id)");
+        var names = jdbcTemplate.queryForList("SELECT university_name FROM admin_platform_settings ORDER BY id LIMIT 1");
+        String name = names.isEmpty() ? "SPU Campus Connect" : String.valueOf(names.get(0).get("university_name"));
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("totalUsers", userRepository.count());
+        stats.put("totalDrivers", userRepository.countByRole(User.Role.DRIVER));
+        stats.put("ridesToday", ridesToday);
+        stats.put("pendingApprovals", driverRepository.countByApprovalStatus(Driver.ApprovalStatus.PENDING));
+        stats.put("activeSOS", activeSos);
+        stats.put("safetyScorePercent", completed == 0 ? null : Math.round(1000.0 * sosFree / completed) / 10.0);
+        stats.put("completedRides", completed);
+        stats.put("sosFreeCompletedRides", sosFree);
+        stats.put("universityName", name);
+        stats.put("updatedAt", java.time.Instant.now().toString());
+        stats.put("timezone", "Africa/Johannesburg");
+        stats.put("reportDate", today.toString());
+        return stats;
     }
 
+    private long count(String sql) {
+        Long value = jdbcTemplate.queryForObject(sql, Long.class);
+        if (value == null) throw new IllegalStateException("Count unavailable");
+        return value;
+    }
     private List<Map<String, Object>> buildPendingApprovals(Driver.ApprovalStatus approvalStatus) {
-        String sql = "SELECT d.driver_id AS driver_id, d.user_id AS user_id, u.full_name, u.email, u.student_number, u.phone, u.year_of_study, " +
+        String sql = "SELECT d.driver_id AS driver_id, d.user_id AS user_id, u.full_name, u.email, u.student_number, u.phone, u.year_of_study, u.application_documents, " +
                 "d.licence_plate, d.vehicle_make, d.vehicle_year, u.created_at " +
                 "FROM drivers d " +
                 "LEFT JOIN users u ON u.user_id = d.user_id " +
@@ -416,9 +392,13 @@ public class AdminController {
                 approval.put("vehicleMake", row.get("vehicle_make"));
                 approval.put("vehicleYear", row.get("vehicle_year"));
                 approval.put("selfieUrl", null);
-                approval.put("licenceDocUrl", null);
-                approval.put("proofDocUrl", null);
-                approval.put("vehicleDocUrl", null);
+                var documentData = row.get("application_documents") == null
+                    ? new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode()
+                    : new com.fasterxml.jackson.databind.ObjectMapper().readTree(row.get("application_documents").toString());
+                String documentBase = "/admin/driver-approvals/" + row.get("driver_id") + "/documents/";
+                approval.put("licenceDocUrl", documentData.has("licence") ? documentBase + "licence" : null);
+                approval.put("proofDocUrl", documentData.has("proof") ? documentBase + "proof" : null);
+                approval.put("vehicleDocUrl", documentData.has("vehicle") ? documentBase + "vehicle" : null);
                 approval.put("submittedAt", row.get("created_at") != null ? row.get("created_at").toString() : LocalDateTime.now().toString());
                 approval.put("status", approvalStatus.name());
                 approval.put("role", "DRIVER");
@@ -427,8 +407,7 @@ public class AdminController {
 
             return approvals;
         } catch (Exception e) {
-            LOGGER.warn("Failed to query pending approvals", e);
-            return new ArrayList<>();
+            throw new IllegalStateException("Pending approvals unavailable", e);
         }
     }
 
@@ -444,6 +423,21 @@ public class AdminController {
         }
 
         return ResponseEntity.ok(buildPendingApprovals(approvalStatus));
+    }
+
+    @GetMapping("/driver-approvals/{id}/documents/{kind}")
+    public ResponseEntity<?> getApplicationDocument(@PathVariable Long id, @PathVariable String kind) throws Exception {
+        if (!List.of("proof", "licence", "vehicle").contains(kind)) return ResponseEntity.notFound().build();
+        var driver = driverRepository.findById(id).orElse(null);
+        var account = driver == null ? null : userRepository.findById(driver.getUserId()).orElse(null);
+        if (account == null || account.getApplicationDocuments() == null) return ResponseEntity.notFound().build();
+        var data = new com.fasterxml.jackson.databind.ObjectMapper().readTree(account.getApplicationDocuments()).path(kind);
+        if (!data.has("data")) return ResponseEntity.notFound().build();
+        String type = data.path("contentType").asText();
+        if (!List.of("application/pdf", "image/jpeg", "image/png").contains(type)) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType(type))
+            .header("Cache-Control", "no-store").header("X-Content-Type-Options", "nosniff")
+            .body(java.util.Base64.getDecoder().decode(data.path("data").asText()));
     }
 
     @GetMapping("/driver-approvals/pending")
@@ -464,8 +458,10 @@ public class AdminController {
     }
 
     private ResponseEntity<?> updateDriverApproval(Long id, Driver.ApprovalStatus status) {
-        return driverRepository.findById(id)
+        return driverRepository.findByIdForUpdate(id)
                 .map(driver -> {
+                    if (driver.getApprovalStatus() == status)
+                        return ResponseEntity.ok(Map.of("status", status.name()));
                     driver.setApprovalStatus(status);
                     driverRepository.save(driver);
 
@@ -475,6 +471,7 @@ public class AdminController {
                                 ? User.UserStatus.ACTIVE
                                 : User.UserStatus.SUSPENDED);
                         userRepository.save(user);
+                        decisionEmails.enqueue(user, status);
                     }
 
                     Map<String, String> response = Map.of("status", status.name());

@@ -16,11 +16,43 @@ public class RideService {
     @Autowired
     private RideRepository rideRepository;
 
+    @Autowired
+    private RideFaceVerificationService faceVerification;
+
+    @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
     /**
      * Create a new ride request from the rider
      */
+    @org.springframework.transaction.annotation.Transactional
     public Ride requestRide(Long riderId, RideRequest request) {
+        String requestKey = request.getClientRequestId() == null ? request.getFaceVerificationToken() : request.getClientRequestId();
+        if (requestKey != null) {
+            if (requestKey.length() > 100) throw new IllegalArgumentException("Invalid request identifier");
+            var existing = rideRepository.findByFaceVerificationKey(requestKey);
+            if (existing.isPresent()) {
+                Ride previous = existing.get();
+                if (!riderId.equals(previous.getRiderId()) || !faceVerification.fingerprint(request).equals(previous.getFaceRequestFingerprint()))
+                    throw new IllegalArgumentException("Face confirmation does not belong to these ride details.");
+                return previous; // Retrying after a lost response never creates another ride/payment.
+            }
+        }
+        String payment = request.getPaymentMethod() == null ? "" : request.getPaymentMethod().trim().toUpperCase();
+        if (!payment.equals("CASH") && !payment.equals("CARD"))
+            throw new IllegalArgumentException("Choose cash or card before face verification.");
+        if (payment.equals("CARD") && (request.getCardLastFour() == null || !request.getCardLastFour().matches("[0-9]{4}")))
+            throw new IllegalArgumentException("Choose a saved card before face verification.");
+        if (request.getPickupLat() == null || request.getPickupLng() == null || request.getDestLat() == null || request.getDestLng() == null)
+            throw new IllegalArgumentException("Pickup and destination coordinates are required.");
+        if (request.getScheduledAt() != null && !request.getScheduledAt().isAfter(LocalDateTime.now()))
+            throw new IllegalArgumentException("Choose a future time for your scheduled ride.");
+        var receipt = faceVerification.consume(riderId, request);
         Ride ride = new Ride();
+        ride.setFaceMatchedAt(LocalDateTime.ofInstant(receipt.matchedAt(), java.time.ZoneOffset.UTC));
+        ride.setFaceMatchMethod("opencv-sface-v1");
+        ride.setFaceVerificationKey(requestKey);
+        ride.setFaceRequestFingerprint(faceVerification.fingerprint(request));
         ride.setRiderId(riderId);
         ride.setPickupLocation(request.getPickupLocation() != null ? request.getPickupLocation() : request.getPickupAddress());
         ride.setDestination(request.getDestination() != null ? request.getDestination() : request.getDestinationAddress());
@@ -39,7 +71,10 @@ public class RideService {
         ride.setStatus(isScheduled ? Ride.RideStatus.SCHEDULED : Ride.RideStatus.PENDING);
         ride.setCreatedAt(LocalDateTime.now());
 
-        return rideRepository.save(ride);
+        Ride saved = rideRepository.saveAndFlush(ride);
+        jdbcTemplate.update("INSERT INTO payments (ride_id, payer_id, amount, method, status, transaction_ref) VALUES (?, ?, ?, ?, 'PENDING', ?)",
+            saved.getId(), riderId, saved.getFare(), payment, payment.equals("CARD") ? "CARD-" + request.getCardLastFour() : null);
+        return saved;
     }
 
     /**

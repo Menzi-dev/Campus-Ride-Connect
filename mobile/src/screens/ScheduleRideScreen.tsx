@@ -27,6 +27,9 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import { requestCurrentLocation } from '../services/CurrentLocation';
+import LocationPermissionDialog from '../components/LocationPermissionDialog';
+import RideFaceVerification from '../components/RideFaceVerification';
 import { Audio } from 'expo-av';
 import {
   MapPin,
@@ -689,6 +692,7 @@ export default function ScheduleScreen() {
   const [pickupLabel, setPickupLabel] = useState('Current Location');
   const [pickupCoords, setPickupCoords] = useState<Coords>(FALLBACK_REGION);
   const [locating, setLocating] = useState(true);
+  const [locationHelp, setLocationHelp] = useState<string | null>(null);
 
   const [pickupSheetVisible, setPickupSheetVisible] = useState(false);
   const [pickupSearch, setPickupSearch] = useState('');
@@ -717,6 +721,8 @@ export default function ScheduleScreen() {
   const [saving, setSaving] = useState(false);
 
   const [paymentVisible, setPaymentVisible] = useState(false);
+  const [pendingRideDraft, setPendingRideDraft] = useState<Record<string, unknown> | null>(null);
+  const [faceVerificationVisible, setFaceVerificationVisible] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD'>('CASH');
   const [savedPaymentCards, setSavedPaymentCards] = useState<SavedPaymentCard[]>([]);
   const [selectedCard, setSelectedCard] = useState('');
@@ -989,23 +995,18 @@ export default function ScheduleScreen() {
   };
 
   const detectLocation = async () => {
+    setLocationHelp(null);
     setLocating(true);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setPickupLabel('SPU Kimberley Campus');
-        setLocating(false);
-        return;
-      }
-      const position = await Location.getCurrentPositionAsync({});
-      const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+      const coords = await requestCurrentLocation();
       setUserLocation(coords);
       setPickupCoords(coords);
       setPickupLabel('Current Location');
       loadNearbyPlaces(coords);
       if (destination) updateRoute(coords, destination);
-    } catch {
+    } catch (error) {
       setPickupLabel('SPU Kimberley Campus');
+      setLocationHelp(error instanceof Error ? error.message : 'Could not detect your location');
     } finally {
       setLocating(false);
     }
@@ -1226,6 +1227,7 @@ export default function ScheduleScreen() {
         )}`;
 
       const payload = {
+        clientRequestId: `${userId}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         riderId: userId,
         pickupLocation: pickupLabel,
         pickupLat: pickupCoords.latitude,
@@ -1247,9 +1249,8 @@ export default function ScheduleScreen() {
         autoDispatch: false,
       };
 
-      const response = await apiClient.post('/rides/request', payload);
-      const newRide: ScheduledRide = response.data;
-      setPaymentRide(newRide);
+      // Scheduled requests also stay local until the face match passes.
+      setPendingRideDraft(payload);
       const [remoteCards, account] = await Promise.all([
         apiClient.get('/users/me/payment-methods').then((result) => result.data as SavedPaymentCard[]).catch(() => []),
         apiClient.get('/users/me').then((result) => result.data).catch(() => null),
@@ -1279,35 +1280,33 @@ export default function ScheduleScreen() {
   };
 
   const confirmPayment = async () => {
-    if (!paymentRide?.id) return;
+    if (!pendingRideDraft) return;
     const chosenCard = savedPaymentCards.find((card) => card.id === selectedCard);
     if (paymentMethod === 'CARD' && !chosenCard) {
       showToast('Add a saved card in Profile before choosing card payment', 'red');
       return;
     }
-    try {
-      await apiClient.post(`/rides/${paymentRide.id}/payment`, {
-        method: paymentMethod,
-        ...(paymentMethod === 'CARD' && chosenCard ? { cardLastFour: chosenCard.lastFour } : {}),
-      });
-      setPaymentVisible(false);
+    setPendingRideDraft({ ...pendingRideDraft, paymentMethod,
+      cardLastFour: paymentMethod === 'CARD' && chosenCard ? chosenCard.lastFour : null });
+    setPaymentVisible(false);
+    setFaceVerificationVisible(true);
+  };
 
-      const when = formatScheduleDateTime(paymentRide.scheduledAt);
-      showToast(`Ride scheduled for ${when}`, 'green');
-
-      await saveHeldPayload(paymentRide);
-
-      setRoutePoints([]);
-      setRouteDistance(null);
-      setRouteDuration(null);
-      setTimeString(formatTimeHHMM(new Date()));
-      setDate(new Date());
-
-      await loadScheduledRides();
-      scheduleNextScheduledDispatch();
-    } catch (error: any) {
-      showToast(error?.response?.data?.error || 'Could not save payment method', 'red');
-    }
+  const submitFaceVerifiedRide = async (verificationToken: string) => {
+    if (!pendingRideDraft) throw new Error('Ride details are missing. Choose your route again.');
+    const response = await apiClient.post('/rides/request', {
+      ...pendingRideDraft, faceVerificationToken: verificationToken,
+    }, { timeout: 30000 });
+    const newRide: ScheduledRide = response.data;
+    setPaymentRide(newRide);
+    setFaceVerificationVisible(false);
+    setPendingRideDraft(null);
+    showToast(`Ride scheduled for ${formatScheduleDateTime(newRide.scheduledAt)}`, 'green');
+    await saveHeldPayload(newRide).catch(() => undefined);
+    setRoutePoints([]); setRouteDistance(null); setRouteDuration(null);
+    setTimeString(formatTimeHHMM(new Date())); setDate(new Date());
+    await loadScheduledRides();
+    scheduleNextScheduledDispatch();
   };
 
   const loadScheduledRides = async () => {
@@ -1376,15 +1375,13 @@ export default function ScheduleScreen() {
 
     if (!due.length) return;
 
+    const dispatched: ScheduledRide[] = [];
     for (const ride of due) {
       const rideIdStr = String(ride.id);
       dispatchedRideIdsRef.current.add(rideIdStr);
       try {
-        try {
-          await apiClient.post(`/rides/${ride.id}/dispatch`);
-        } catch {
-          await apiClient.post(`/rides/${ride.id}/start-search`);
-        }
+        await apiClient.post(`/rides/${ride.id}/dispatch`);
+        dispatched.push(ride);
         await removeHeldPayload(rideIdStr);
       } catch (e) {
         dispatchedRideIdsRef.current.delete(rideIdStr);
@@ -1392,7 +1389,7 @@ export default function ScheduleScreen() {
     }
     void persistDispatched();
 
-    const primary = due[0];
+    const primary = dispatched[0];
     if (primary) {
       openFindingDriversFlow(String(primary.id));
     }
@@ -2640,6 +2637,10 @@ export default function ScheduleScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+      {faceVerificationVisible && pendingRideDraft && <RideFaceVerification
+        draft={pendingRideDraft} scheduled onVerified={submitFaceVerifiedRide}
+        onClose={() => { setFaceVerificationVisible(false); setPendingRideDraft(null); }} />}
+      <LocationPermissionDialog message={locationHelp} onClose={() => setLocationHelp(null)} onRetry={detectLocation} />
 
       <ScrollView style={styles.formScroll} contentContainerStyle={styles.formContent} showsVerticalScrollIndicator={false}>
         <View style={[styles.header, { paddingTop: 14 }]}>

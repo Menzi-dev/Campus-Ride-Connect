@@ -56,10 +56,12 @@ import { useToast } from '../components/Toast';
 import { colors, radius, spacing, font } from '../theme/theme';
 import apiClient from '../services/ApiClient';
 import { LinearGradient } from 'expo-linear-gradient';
+import GuidedFaceScan, { FaceScanResult } from '../components/GuidedFaceScan';
 
 type RootStackParamList = {
   Landing: undefined;
   Login: undefined;
+  EmailVerification: { email?: string; token?: string } | undefined;
   CreateAccount: undefined;
   AdminDashboard: undefined;
   DriverDashboard: undefined;
@@ -140,31 +142,10 @@ export default function CreateAccountScreen() {
   const [cameraReady, setCameraReady] = useState(false);
   const [hasRequestedCameraPermission, setHasRequestedCameraPermission] = useState(false);
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
+  const [faceScanResult, setFaceScanResult] = useState<FaceScanResult | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Live session state
-  const [scanActive, setScanActive] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-  const [stepError, setStepError] = useState<string | null>(null);
-  const [attempts, setAttempts] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
-
-  const [currentDirection, setCurrentDirection] = useState<Direction>('center');
-  const [verificationProgress, setVerificationProgress] = useState(0);
-  const [verificationSteps, setVerificationSteps] = useState<FaceVerificationStep[]>([
-    { direction: 'center', label: 'Center', icon: <Circle size={20} color={colors.white} />, completed: false },
-    { direction: 'left', label: 'Left', icon: <MoveLeft size={20} color={colors.white} />, completed: false },
-    { direction: 'right', label: 'Right', icon: <MoveRight size={20} color={colors.white} />, completed: false },
-    { direction: 'up', label: 'Up', icon: <MoveUp size={20} color={colors.white} />, completed: false },
-    { direction: 'down', label: 'Down', icon: <MoveDown size={20} color={colors.white} />, completed: false },
-  ]);
-  const [directionIndex, setDirectionIndex] = useState(0);
-
-  // Animation values
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const progressAnim = useRef(new Animated.Value(0)).current;
-  const flashAnim = useRef(new Animated.Value(0)).current;
-  const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
   const pickDocument = async (setter: (a: DocumentPicker.DocumentPickerAsset) => void) => {
     try {
@@ -199,175 +180,6 @@ export default function CreateAccountScreen() {
       showToast('Could not open the photo picker', 'red');
     }
   };
-
-  const startFaceVerification = () => {
-    setVerificationProgress(0);
-    setDirectionIndex(0);
-    setSelfieUri(null);
-    setIsComplete(false);
-    setStepError(null);
-    setAttempts(0);
-    setVerificationSteps((steps) => steps.map((s) => ({ ...s, completed: false })));
-    setCurrentDirection(verificationSteps[0].direction);
-    setScanActive(true);
-    progressAnim.setValue(0);
-
-    pulseLoopRef.current?.stop();
-    pulseLoopRef.current = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.05,
-          duration: 1000,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1000,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    pulseLoopRef.current.start();
-  };
-
-  const handleCameraReady = () => {
-    setCameraReady(true);
-  };
-
-  const triggerFlash = () => {
-    flashAnim.setValue(1);
-    Animated.timing(flashAnim, { toValue: 0, duration: 250, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
-  };
-
-  const markStepComplete = (direction: Direction) => {
-    setVerificationSteps((steps) => steps.map((s) => (s.direction === direction ? { ...s, completed: true } : s)));
-
-    const completedCount = verificationSteps.filter((s) => s.completed).length + 1;
-    const progress = (completedCount / verificationSteps.length) * 100;
-    setVerificationProgress(progress);
-
-    Animated.timing(progressAnim, {
-      toValue: progress / 100,
-      duration: 450,
-      easing: Easing.bezier(0.4, 0, 0.2, 1),
-      useNativeDriver: false,
-    }).start();
-
-    const nextIndex = directionIndex + 1;
-    if (nextIndex < verificationSteps.length) {
-      setDirectionIndex(nextIndex);
-      setCurrentDirection(verificationSteps[nextIndex].direction);
-      setAttempts(0);
-      setStepError(null);
-    } else {
-      setScanActive(false);
-      pulseLoopRef.current?.stop();
-      captureFinalSelfie();
-    }
-  };
-
-  const captureAndVerifyDirection = async () => {
-    if (!cameraRef.current || !cameraReady || verifying) {
-      if (!cameraReady) {
-        setStepError('Camera is still warming up. Please wait a moment then try again.');
-      }
-      return;
-    }
-    setStepError(null);
-    setVerifying(true);
-
-    const direction = verificationSteps[directionIndex].direction;
-
-    try {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.6, skipProcessing: true });
-      triggerFlash();
-
-      const response = await fetch(photo.uri);
-      const blob = await response.blob();
-
-      const formData = new FormData();
-      formData.append('direction', direction);
-      formData.append('image', blob, `face-${direction}-${Date.now()}.jpg`);
-
-      const apiResponse = await apiClient.post('/auth/face/verify-direction', formData);
-
-      const passed = apiResponse.data?.success === true;
-
-      if (!passed) {
-        const nextAttempts = attempts + 1;
-        setAttempts(nextAttempts);
-        if (nextAttempts >= MAX_ATTEMPTS_PER_STEP) {
-          showToast("Too many failed attempts — let's start over", 'red');
-          resetVerification();
-        } else {
-          setStepError(
-            apiResponse.data?.message ||
-              `We couldn't confirm you looking ${verificationSteps[directionIndex].label.toLowerCase()}. Try again.`
-          );
-        }
-        return;
-      }
-
-      setAttempts(0);
-      if (direction === 'center' && directionIndex === 0) {
-        setSelfieUri(photo.uri);
-      }
-      markStepComplete(direction);
-    } catch (err: any) {
-      console.error('Face verification error:', err);
-      const message =
-        err?.message === 'Network Error'
-          ? 'Cannot reach the server. Check your connection.'
-          : err?.response?.data?.error ||
-            err?.response?.data?.message ||
-            'Could not verify that photo. Please try again.';
-      setStepError(message);
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  const captureFinalSelfie = async () => {
-    if (!cameraRef.current) return;
-    setVerifying(true);
-    setStepError(null);
-    try {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.85 });
-      triggerFlash();
-      setSelfieUri(photo.uri);
-      setIsComplete(true);
-      showToast('Face verification complete!', 'green');
-    } catch (err) {
-      setStepError('Could not capture the final photo. Please try again.');
-      setScanActive(true);
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  const resetVerification = () => {
-    setVerificationProgress(0);
-    setDirectionIndex(0);
-    setCurrentDirection('center');
-    setSelfieUri(null);
-    setIsComplete(false);
-    setStepError(null);
-    setAttempts(0);
-    setScanActive(false);
-    setVerifying(false);
-    setVerificationSteps((steps) => steps.map((s) => ({ ...s, completed: false })));
-    progressAnim.setValue(0);
-    pulseAnim.setValue(1);
-    pulseLoopRef.current?.stop();
-  };
-
-  useEffect(() => {
-    return () => {
-      pulseLoopRef.current?.stop();
-    };
-  }, []);
 
   const getPasswordStrength = (val: string) => {
     let score = 0;
@@ -463,7 +275,7 @@ export default function CreateAccountScreen() {
 
   useEffect(() => {
     if (step === 4 && !hasRequestedCameraPermission) {
-      handleRequestPermission();
+      if (Platform.OS !== 'web') handleRequestPermission();
     }
   }, [step, hasRequestedCameraPermission]);
 
@@ -485,6 +297,12 @@ export default function CreateAccountScreen() {
       formData.append('email', email.trim().toLowerCase());
       formData.append('password', password);
       formData.append('role', role);
+      if (faceScanResult) {
+        formData.append('faceScanMetadata', JSON.stringify({
+          method: faceScanResult.method, completedAt: faceScanResult.completedAt,
+          challenges: faceScanResult.challenges, identityVerified: false,
+        }));
+      }
 
       if (yearOfStudy) {
         formData.append('yearOfStudy', String(yearOfStudy.value));
@@ -571,7 +389,7 @@ export default function CreateAccountScreen() {
       console.log('Submitting registration with form data keys:', Array.from(formData.keys()));
       const response = await apiClient.post('/auth/register', formData);
 
-      console.log('Registration response:', response.data);
+      console.log('Registration completed:', { success: response.data?.success, role: response.data?.user?.role });
 
       if (response.data?.success === false) {
         showToast(response.data?.message || 'Registration failed', 'red');
@@ -579,49 +397,23 @@ export default function CreateAccountScreen() {
       }
 
       await AsyncStorage.multiRemove(['authToken', 'user', 'saved_cards', 'default_payment_method']);
-      if (response.data?.token) {
-        await AsyncStorage.setItem('authToken', response.data.token);
-      }
-      if (response.data?.user) {
-        await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
-        
-        // Check if driver needs approval - navigate to DriverDashboard which handles pending state
-        if (role === 'DRIVER') {
-          const isApproved = response.data.user.approved === true;
-          if (!isApproved) {
-            showToast('Registration submitted! Waiting for admin approval.', 'blue');
-            setTimeout(() => {
-              navigation.replace('DriverDashboard');
-            }, 600);
-            return;
-          }
+      if (response.data?.user?.role === 'DRIVER' && response.data?.emailVerificationRequired === false) {
+        if (typeof response.data.token === 'string' && response.data.token) {
+          await AsyncStorage.setItem('authToken', response.data.token);
+          await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
+          showToast('Driver application submitted. Waiting for admin approval.', 'blue');
+          navigation.replace('DriverDashboard');
+        } else {
+          showToast('Driver application submitted. Sign in to view your approval status.', 'blue');
+          navigation.replace('Login');
         }
+        return;
       }
-
-      showToast('Account created and verified!', 'green');
-      setTimeout(() => {
-        const role = response.data?.user?.role;
-        switch (role) {
-          case 'ADMIN':
-            navigation.replace('AdminDashboard');
-            break;
-          case 'DRIVER':
-            navigation.replace('DriverDashboard');
-            break;
-          case 'SECURITY':
-            navigation.replace('SecurityDashboard');
-            break;
-          default:
-            navigation.replace(response.data?.token ? 'Home' : 'Login');
-        }
-      }, 600);
+      showToast('Account created. Please verify your email.', 'green');
+      navigation.replace('EmailVerification', { email: email.trim().toLowerCase() });
     } catch (error: any) {
-      console.error('Registration error details:', {
-        message: error?.message,
-        response: error?.response?.data,
-        status: error?.response?.status,
-        fullError: error
-      });
+      // Axios errors include submitted passwords/documents in their request configuration.
+      console.error('Registration failed:', { status: error?.response?.status, code: error?.code });
       const message =
         error?.response?.data?.error ||
         error?.response?.data?.message ||
@@ -636,205 +428,19 @@ export default function CreateAccountScreen() {
   };
 
   const renderFaceVerification = () => {
-    if (!permission) {
-      return <View style={styles.cameraPlaceholder} />;
+    if (Platform.OS === 'web') {
+      if (isComplete && selfieUri) return <View style={styles.completeContainer}>
+        <CheckCircle2 size={56} color={colors.green} />
+        <Text style={styles.completeTitle}>Guided scan complete</Text>
+        <Text style={styles.completeSubtitle}>Your face and requested movements were detected.</Text>
+        <Image source={{ uri: selfieUri }} style={{ width: 140, height: 140, borderRadius: 20, marginVertical: 16 }} />
+        <TouchableOpacity onPress={() => { setFaceScanResult(null); setSelfieUri(null); setIsComplete(false); }}><Text>Scan again</Text></TouchableOpacity>
+      </View>;
+      return <GuidedFaceScan onComplete={result => {
+        setFaceScanResult(result); setSelfieUri(result.image); setIsComplete(true);
+      }} />;
     }
-
-    if (!permission.granted) {
-      return (
-        <View style={styles.permissionBox}>
-          <View style={styles.permissionIcon}>
-            <CameraIcon size={32} color={colors.green} strokeWidth={1.5} />
-          </View>
-          <Text style={styles.permissionTitle}>Camera Access Needed</Text>
-          <Text style={styles.permissionSubtitle}>
-            We need camera access to verify your identity securely
-          </Text>
-          {permission.canAskAgain ? (
-            <TouchableOpacity style={styles.permissionButton} onPress={handleRequestPermission}>
-              <Text style={styles.permissionButtonText}>Grant Access</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={styles.permissionButton} onPress={() => Linking.openSettings()}>
-              <Text style={styles.permissionButtonText}>Open Settings</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      );
-    }
-
-    if (isComplete && selfieUri) {
-      return (
-        <View style={styles.completeContainer}>
-          <View style={styles.completeIconRing}>
-            <CheckCircle2 size={56} color={colors.green} strokeWidth={1.5} />
-          </View>
-          <Text style={styles.completeTitle}>Verification Complete!</Text>
-          <Text style={styles.completeSubtitle}>All face checks passed successfully</Text>
-          <View style={styles.completePreview}>
-            <Image source={{ uri: selfieUri }} style={styles.completeImage} />
-          </View>
-        </View>
-      );
-    }
-
-    const activeStep = verificationSteps[directionIndex];
-
-    return (
-      <View style={styles.verificationContainer}>
-        <View style={styles.cameraWrapper}>
-          <View style={styles.cameraFrame}>
-            <CameraView ref={cameraRef} style={styles.cameraView} facing="front" onCameraReady={handleCameraReady} />
-
-            <LinearGradient colors={['rgba(0,0,0,0.55)', 'transparent']} style={styles.overlayTop} />
-            <LinearGradient colors={['transparent', 'rgba(0,0,0,0.65)']} style={styles.overlayBottom} />
-
-            <Animated.View
-              style={[
-                styles.faceGuide,
-                { transform: [{ scale: pulseAnim }] },
-              ]}
-            >
-              <View
-                style={[
-                  styles.faceGuideInner,
-                  activeStep?.completed && styles.faceGuideInnerComplete,
-                ]}
-              >
-                <View style={styles.guideCircle} />
-              </View>
-            </Animated.View>
-
-            {scanActive && !isComplete && (
-              <View style={styles.directionOverlay}>
-                <View style={styles.directionBadge}>
-                  <View style={styles.directionIcon}>{activeStep?.icon}</View>
-                  <Text style={styles.directionLabel}>Look {activeStep?.label}</Text>
-                </View>
-              </View>
-            )}
-
-            <View style={styles.statusIndicator}>
-              <View style={styles.statusDot}>
-                <Animated.View style={[styles.statusPulse, { opacity: scanActive ? 1 : 0 }]} />
-              </View>
-              <Text style={styles.statusText}>
-                {verifying ? 'Checking…' : scanActive ? 'Ready' : 'Idle'}
-              </Text>
-            </View>
-
-            {verifying && (
-              <View style={styles.verifyingOverlay}>
-                <ActivityIndicator color={colors.white} size="small" />
-                <Text style={styles.verifyingText}>Verifying photo…</Text>
-              </View>
-            )}
-
-            <Animated.View pointerEvents="none" style={[styles.flashOverlay, { opacity: flashAnim }]} />
-          </View>
-        </View>
-
-        {stepError && (
-          <View style={styles.errorBanner}>
-            <AlertCircle size={15} color={colors.red} strokeWidth={2} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.errorText}>{stepError}</Text>
-              {attempts > 0 && (
-                <Text style={styles.attemptsText}>
-                  Attempt {attempts} of {MAX_ATTEMPTS_PER_STEP}
-                </Text>
-              )}
-            </View>
-          </View>
-        )}
-
-        {/* Progress */}
-        <View style={styles.progressContainer}>
-          <View style={styles.progressHeader}>
-            <Text style={styles.progressTitle}>Verification Progress</Text>
-            <Text style={styles.progressPercent}>{Math.round(verificationProgress)}%</Text>
-          </View>
-          <View style={styles.progressTrack}>
-            <Animated.View
-              style={[
-                styles.progressFill,
-                {
-                  width: progressAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ['0%', '100%'],
-                  }),
-                },
-              ]}
-            />
-          </View>
-        </View>
-
-        {/* Steps */}
-        <View style={styles.stepsContainer}>
-          {verificationSteps.map((s, index) => (
-            <View key={index} style={styles.stepItem}>
-              <View
-                style={[
-                  styles.stepCircle,
-                  s.completed && styles.stepCircleComplete,
-                  index === directionIndex && !s.completed && scanActive && styles.stepCircleActive,
-                ]}
-              >
-                {s.completed ? (
-                  <Check size={14} color={colors.white} strokeWidth={3} />
-                ) : (
-                  <View style={styles.stepNumber}>
-                    <Text style={styles.stepNumberText}>{index + 1}</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={[styles.stepLabel, s.completed && styles.stepLabelComplete]}>{s.label}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Controls */}
-        <View style={styles.controlsContainer}>
-          {!scanActive && !isComplete && (
-            <TouchableOpacity style={styles.startButton} onPress={startFaceVerification} activeOpacity={0.85}>
-              <LinearGradient
-                colors={['#4CAF50', '#2E7D32']}
-                style={styles.startButtonGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                <CameraIcon size={20} color={colors.white} strokeWidth={2} />
-                <Text style={styles.startButtonText}>Start Verification</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          )}
-
-          {scanActive && !isComplete && (
-            <View style={styles.captureRow}>
-              <TouchableOpacity
-                style={[styles.captureButton, verifying && styles.captureButtonDisabled]}
-                onPress={captureAndVerifyDirection}
-                disabled={verifying}
-                activeOpacity={0.8}
-              >
-                {verifying ? (
-                  <ActivityIndicator color={colors.white} />
-                ) : (
-                  <CameraIcon size={24} color={colors.white} strokeWidth={2} />
-                )}
-              </TouchableOpacity>
-              <Text style={styles.captureHint}>
-                {verifying ? 'Hold still…' : `Tap to capture — Look ${activeStep?.label}`}
-              </Text>
-              <TouchableOpacity style={styles.resetButton} onPress={resetVerification} disabled={verifying}>
-                <RotateCcw size={16} color={colors.gray600} strokeWidth={2} />
-                <Text style={styles.resetButtonText}>Start over</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      </View>
-    );
+    return <GuidedFaceScan onComplete={() => undefined} />;
   };
 
   return (
@@ -1160,8 +766,8 @@ export default function CreateAccountScreen() {
 
           {step === 4 && (
             <View style={styles.faceStepContainer}>
-              <Text style={styles.faceIntro}>Let&apos;s verify your identity</Text>
-              <Text style={styles.faceSubIntro}>We&apos;ll take a few photos to confirm it&apos;s really you</Text>
+              <Text style={styles.faceIntro}>Let&apos;s scan your face</Text>
+              <Text style={styles.faceSubIntro}>Follow the live instructions. Your enrollment image is saved only after the guided scan.</Text>
               {renderFaceVerification()}
 
               {isComplete && (

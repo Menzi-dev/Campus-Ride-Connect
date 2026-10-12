@@ -171,6 +171,13 @@ public class RideController {
             Ride ride = rideService.getRideById(id)
                     .orElseThrow(() -> new IllegalArgumentException("Ride not found"));
 
+            if (!currentUserId().equals(ride.getRiderId()))
+                return ResponseEntity.status(403).body(Map.of("error", "Only the rider can dispatch this ride"));
+            if (ride.getFaceMatchedAt() == null)
+                return ResponseEntity.badRequest().body(Map.of("error", "This ride has no completed account face match. Please make a new verified booking."));
+            if (ride.getScheduledAt() != null && ride.getScheduledAt().isAfter(java.time.LocalDateTime.now()))
+                return ResponseEntity.badRequest().body(Map.of("error", "This scheduled ride is not due yet"));
+
             if (ride.getStatus() == Ride.RideStatus.ACCEPTED || ride.getStatus() == Ride.RideStatus.ENROUTE
                     || ride.getStatus() == Ride.RideStatus.ARRIVED || ride.getStatus() == Ride.RideStatus.STARTED
                     || ride.getStatus() == Ride.RideStatus.COMPLETED || ride.getStatus() == Ride.RideStatus.CANCELLED) {

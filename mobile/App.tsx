@@ -1,7 +1,7 @@
 import 'react-native-gesture-handler';
 import React from 'react';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, TouchableOpacity, View, Platform } from 'react-native';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -14,6 +14,7 @@ import { usesNativeHeader } from './src/navigation/screenChrome';
 // Import Screens
 import LandingScreen from './src/screens/LandingScreen';
 import LoginScreen from './src/screens/LoginScreen';
+import EmailVerificationScreen from './src/screens/EmailVerificationScreen';
 import CreateAccountScreen from './src/screens/CreateAccountScreen';
 import LegalDocumentScreen from './src/screens/LegalDocumentScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -46,6 +47,7 @@ import { ArrowLeft } from 'lucide-react-native';
 type RootStackParamList = {
   Landing: undefined;
   Login: undefined;
+  EmailVerification: { email?: string; token?: string } | undefined;
   CreateAccount: undefined;
   Legal: { document: 'terms' | 'privacy' };
   FaceVerification: { fullName?: string; email?: string } | undefined;
@@ -84,6 +86,7 @@ const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 export default function App() {
   const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
+  const [verificationToken, setVerificationToken] = useState<string | undefined>();
   const [routeName, setRouteName] = useState('Landing');
   const updateRoute = () => setRouteName(navigationRef.getCurrentRoute()?.name || 'Landing');
   const selectTab = (tab: RiderTab) => {
@@ -92,6 +95,13 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (Platform.OS === 'web' && window.location.hash.startsWith('#verify-email=')) {
+      const token = window.location.hash.slice('#verify-email='.length);
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      setVerificationToken(token);
+      setInitialRoute('EmailVerification');
+      return;
+    }
     setInitialRoute('Landing');
   }, []);
 
@@ -134,6 +144,7 @@ export default function App() {
             >
               <Stack.Screen name="Landing" component={LandingScreen} />
               <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} initialParams={{ token: verificationToken }} />
               <Stack.Screen name="CreateAccount" component={CreateAccountScreen} />
               <Stack.Screen name="Legal" component={LegalDocumentScreen} />
               <Stack.Screen name="FaceVerification" component={FaceVerificationScreen} />

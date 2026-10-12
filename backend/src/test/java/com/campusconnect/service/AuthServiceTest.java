@@ -14,6 +14,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -32,6 +34,8 @@ class AuthServiceTest {
 
     @Mock
     private JwtTokenProvider jwtTokenProvider;
+
+    @Mock private EmailVerificationService emailVerificationService;
 
     @InjectMocks
     private AuthService authService;
@@ -55,6 +59,8 @@ class AuthServiceTest {
         User savedUser = authService.register(request);
 
         assertEquals(User.Role.RIDER, savedUser.getRole());
+        assertFalse(savedUser.isEmailVerified());
+        verify(emailVerificationService).issue(savedUser);
     }
 
     @Test
@@ -85,6 +91,27 @@ class AuthServiceTest {
 
         assertEquals(User.Role.DRIVER, savedUser.getRole());
         assertEquals(User.UserStatus.PENDING, savedUser.getStatus());
+        assertFalse(savedUser.requiresEmailVerification());
+        assertFalse(savedUser.isEmailVerified());
+        verifyNoInteractions(emailVerificationService);
         verify(driverRepository).save(any(Driver.class));
+    }
+
+    @Test void loginRejectsUnverifiedEmailBeforeIssuingJwt() {
+        User user = new User(); user.setEmailVerified(false); user.setPasswordHash("hash");
+        when(userRepository.findByEmail("test@example.com")).thenReturn(java.util.Optional.of(user));
+        when(passwordEncoder.matches("Password123!", "hash")).thenReturn(true);
+        var request = new com.campusconnect.dto.AuthRequest(); request.setEmail("TEST@example.com"); request.setPassword("Password123!");
+        assertThrows(AuthService.EmailNotVerifiedException.class, () -> authService.login(request));
+        verifyNoInteractions(jwtTokenProvider);
+    }
+
+    @Test void legacyAccountsRetainLoginAccess() {
+        User user = new User(); user.setPasswordHash("hash");
+        when(userRepository.findByEmail("test@example.com")).thenReturn(java.util.Optional.of(user));
+        when(passwordEncoder.matches("Password123!", "hash")).thenReturn(true);
+        when(jwtTokenProvider.generateToken(user)).thenReturn("test-jwt");
+        var request = new com.campusconnect.dto.AuthRequest(); request.setEmail("test@example.com"); request.setPassword("Password123!");
+        assertEquals("test-jwt", authService.login(request).getToken());
     }
 }

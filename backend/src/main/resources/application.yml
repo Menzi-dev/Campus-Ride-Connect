@@ -1,8 +1,10 @@
 spring:
+  config:
+    import: "optional:file:${user.home}/.campusconnect/mail.properties,optional:file:./config/mail.properties,optional:file:./backend/config/mail.properties,optional:file:./config/database.properties,optional:file:./backend/config/database.properties"
   datasource:
     url: "jdbc:mysql://localhost:3306/campus_connect?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
-    username: root
-    password: s1gwebela
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   mail:
@@ -16,6 +18,9 @@ spring:
           auth: true
           starttls:
             enable: true
+            required: true
+          ssl:
+            checkserveridentity: true
           connectiontimeout: 5000
           timeout: 5000
           writetimeout: 5000
@@ -39,6 +44,13 @@ server:
   address: 0.0.0.0
 
 app:
+  mail:
+    required: ${APP_MAIL_REQUIRED:false}
+  public-url: ${APP_PUBLIC_URL:http://localhost:8085}
+  email-verification:
+    delivery-mode: ${EMAIL_VERIFICATION_DELIVERY_MODE:code}
+    expiry-minutes: ${EMAIL_VERIFICATION_EXPIRY_MINUTES:60}
+    cooldown-seconds: ${EMAIL_VERIFICATION_COOLDOWN_SECONDS:60}
   password-reset:
     from: ${GMAIL_USERNAME:saneledlomo08@gmail.com}
   jwt:
@@ -52,5 +64,6 @@ jwt:
 logging:
   level:
     com.campusconnect: DEBUG
-    org.springframework.security: DEBUG
-    org.hibernate.SQL: DEBUG
+    org.springframework.security: INFO
+    org.springframework.web: INFO
+    org.hibernate.SQL: WARN

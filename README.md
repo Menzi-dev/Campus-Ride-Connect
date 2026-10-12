@@ -172,16 +172,17 @@ API host selection lives in [`mobile/src/services/ApiClient.ts`](mobile/src/serv
 
 For a phone, put both devices on a reachable network and allow backend port `8080` through your local firewall. LAN-hosted web previews may also need an explicit development CORS origin in the backend configuration.
 
-### Optional: password reset email
+### Email verification and password reset
 
-The local launcher prompts for a Gmail sender address and a hidden App Password, then starts the backend with SMTP settings:
+Configure Gmail once with hidden password entry. The backend then loads the private configuration automatically on every start:
 
 ```powershell
 # From the repository root; stop the existing backend first.
+.\backend\configure-email.ps1  # One time only, using your existing App Password
 .\backend\run-with-gmail.ps1
 ```
 
-Set the database and JWT environment variables in that terminal too. See [password reset email setup](docs/password-reset-email.md) for sender requirements and environment details. Reset email delivery requires working SMTP configuration.
+New registrations require email verification; existing accounts retain access. Driver approvals/rejections also generate queued email notifications. See [email configuration and verification](docs/email-account-verification.md) for private settings, HTTPS links, startup commands and delivery tests.
 
 ### Common setup issues
 

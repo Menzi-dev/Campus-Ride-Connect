@@ -15,6 +15,7 @@ import {
   Linking,
   FlatList,
   AppState,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -65,7 +66,10 @@ type Stats = {
   ridesToday: number;
   pendingApprovals: number;
   activeSOS: number;
-  safetyScorePercent: number;
+  safetyScorePercent: number | null;
+  completedRides: number;
+  sosFreeCompletedRides: number;
+  updatedAt: string;
   universityName?: string;
 };
 
@@ -105,6 +109,10 @@ export default function AdminDashboardScreen() {
   const [actioningId, setActioningId] = useState<string | null>(null);
   const [selectedApproval, setSelectedApproval] = useState<PendingApproval | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [documentPreview, setDocumentPreview] = useState<{ uri: string; title: string; type: string } | null>(null);
+  useEffect(() => () => {
+    if (Platform.OS === 'web' && documentPreview) URL.revokeObjectURL(documentPreview.uri);
+  }, [documentPreview]);
   const [showAllApprovals, setShowAllApprovals] = useState(false);
   const loadingRef = useRef(false);
   const decisionRef = useRef<string | null>(null);
@@ -122,16 +130,13 @@ export default function AdminDashboardScreen() {
     setUnauthorized(false);
 
     try {
-      const [statsResponse, approvalsResponse] = await Promise.all([
-        apiClient.get('/admin/dashboard/stats'),
-        apiClient.get('/admin/driver-approvals/pending'),
-      ]);
+      const response = await apiClient.get('/admin/dashboard');
       if (version !== loadVersion.current) return;
-      const applications = approvalsResponse.data ?? [];
-      setStats(statsResponse.data ? { ...statsResponse.data, pendingApprovals: applications.length } : null);
+      const applications = response.data.approvals;
+      if (!response.data.stats || !Array.isArray(applications)) throw new Error('Incomplete dashboard response');
+      setStats(response.data.stats);
       setApprovals(applications);
-      
-      console.log('Pending approvals loaded:', approvalsResponse.data?.length || 0);
+
     } catch (err: any) {
       if (version !== loadVersion.current) return;
       console.error('Load data error:', err);
@@ -176,7 +181,7 @@ export default function AdminDashboardScreen() {
     setActioningId(id);
     try {
       const response = await apiClient.post(`/admin/driver-approvals/${id}/${decision}`);
-      
+
       if (response.data?.success !== false) {
         // Remove the approval from the list
         setApprovals((prev) => prev.filter((a) => a.id !== id));
@@ -194,7 +199,7 @@ export default function AdminDashboardScreen() {
       }
     } catch (err: any) {
       console.error('Decision error:', err);
-      const message = err?.response?.data?.error || 
+      const message = err?.response?.data?.error ||
                      err?.response?.data?.message ||
                      `Could not ${decision} this application. Please try again.`;
       showToast(message, 'red');
@@ -207,13 +212,10 @@ export default function AdminDashboardScreen() {
 
   const viewDocument = async (url: string, title: string) => {
     try {
-      const fullUrl = url.startsWith('http') ? url : `${apiClient.defaults.baseURL}${url}`;
-      const canOpen = await Linking.canOpenURL(fullUrl);
-      if (canOpen) {
-        await Linking.openURL(fullUrl);
-      } else {
-        showToast('Cannot open document', 'red');
-      }
+      if (Platform.OS !== 'web') return showToast('Open the dashboard in your browser to preview documents', 'red');
+      const response = await apiClient.get(url, { responseType: 'blob' });
+      const blob = response.data as Blob;
+      setDocumentPreview({ uri: URL.createObjectURL(blob), title, type: blob.type });
     } catch (err) {
       showToast('Could not open document', 'red');
     }
@@ -276,20 +278,13 @@ export default function AdminDashboardScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => loadData(true)} tintColor={colors.green} />
-        }
-      >
-        <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
-          <View>
+        <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+          <View style={{ flex: 1, paddingRight: spacing.md }}>
             <Text style={styles.headerSmall}>Admin Dashboard</Text>
-            <Text style={styles.headerTitle}>{stats?.universityName || 'CampusConnect'}</Text>
+            <Text style={styles.headerTitle} numberOfLines={2}>{stats?.universityName || 'CampusConnect'}</Text>
           </View>
-          <TouchableOpacity 
-            style={styles.refreshButton} 
+          <TouchableOpacity
+            style={styles.refreshButton}
             onPress={() => loadData(true)}
             disabled={refreshing}
           >
@@ -297,39 +292,47 @@ export default function AdminDashboardScreen() {
           </TouchableOpacity>
         </View>
 
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => loadData(true)} tintColor={colors.green} />
+        }
+      >
         {/* STATS GRID */}
         <View style={styles.statsGrid}>
-          <StatCard 
-            icon={<Users size={16} color={colors.blue} strokeWidth={1.8} />} 
-            value={stats?.totalUsers ?? 0} 
-            label="Total Users" 
+          <StatCard
+            icon={<Users size={16} color={colors.blue} strokeWidth={1.8} />}
+            value={stats?.totalUsers ?? 0}
+            label="Total Users"
           />
-          <StatCard 
-            icon={<Car size={16} color={colors.green} strokeWidth={1.8} />} 
-            value={stats?.totalDrivers ?? 0} 
-            label="Drivers" 
+          <StatCard
+            icon={<Car size={16} color={colors.green} strokeWidth={1.8} />}
+            value={stats?.totalDrivers ?? 0}
+            label="Driver Accounts"
           />
-          <StatCard 
-            icon={<CalendarCheck size={16} color={colors.blue} strokeWidth={1.8} />} 
-            value={stats?.ridesToday ?? 0} 
-            label="Rides Today" 
+          <StatCard
+            icon={<CalendarCheck size={16} color={colors.blue} strokeWidth={1.8} />}
+            value={stats?.ridesToday ?? 0}
+            label="Requests Today"
           />
           <StatCard
             icon={<Hourglass size={16} color={colors.orange} strokeWidth={1.8} />}
             value={stats?.pendingApprovals ?? 0}
-            label="Pending"
+            label="Pending Approvals"
             valueColor={colors.orange}
           />
           <StatCard
             icon={<Siren size={16} color={colors.red} strokeWidth={1.8} />}
             value={stats?.activeSOS ?? 0}
-            label="Active SOS"
+            label="Open SOS Alerts"
             valueColor={colors.red}
           />
           <StatCard
             icon={<ShieldCheck size={16} color={colors.green} strokeWidth={1.8} />}
-            value={`${stats?.safetyScorePercent ?? 0}%`}
-            label="Safety Score"
+            value={stats?.safetyScorePercent == null ? 'N/A' : `${stats.safetyScorePercent}%`}
+            label="SOS-Free Trips"
             valueColor={colors.green}
           />
         </View>
@@ -345,7 +348,7 @@ export default function AdminDashboardScreen() {
             )}
           </View>
           {approvals.length > PREVIEW_LIMIT && (
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setShowAllApprovals(!showAllApprovals)}
               style={styles.viewToggle}
             >
@@ -370,7 +373,6 @@ export default function AdminDashboardScreen() {
                 approval={approval}
                 busy={actioningId === approval.id}
                 isNew={isNew(approval.submittedAt)}
-                onApprove={() => handleDecision(approval.id, 'approve')}
                 onReject={() => handleDecision(approval.id, 'reject')}
                 onViewDetails={() => {
                   setSelectedApproval(approval);
@@ -452,7 +454,7 @@ export default function AdminDashboardScreen() {
                 {/* Personal Info */}
                 <View style={styles.detailSection}>
                   <Text style={styles.detailSectionTitle}>Personal Information</Text>
-                  
+
                   <View style={styles.detailRow}>
                     <View style={styles.detailIcon}>
                       <Mail size={16} color={colors.gray500} strokeWidth={1.8} />
@@ -460,7 +462,7 @@ export default function AdminDashboardScreen() {
                     <Text style={styles.detailLabel}>Email</Text>
                     <Text style={styles.detailValue}>{selectedApproval.email}</Text>
                   </View>
-                  
+
                   {selectedApproval.phone && (
                     <View style={styles.detailRow}>
                       <View style={styles.detailIcon}>
@@ -470,7 +472,7 @@ export default function AdminDashboardScreen() {
                       <Text style={styles.detailValue}>{selectedApproval.phone}</Text>
                     </View>
                   )}
-                  
+
                   {selectedApproval.studentNumber && (
                     <View style={styles.detailRow}>
                       <View style={styles.detailIcon}>
@@ -480,7 +482,7 @@ export default function AdminDashboardScreen() {
                       <Text style={styles.detailValue}>{selectedApproval.studentNumber}</Text>
                     </View>
                   )}
-                  
+
                   {selectedApproval.yearOfStudy && (
                     <View style={styles.detailRow}>
                       <View style={styles.detailIcon}>
@@ -496,7 +498,7 @@ export default function AdminDashboardScreen() {
                 {selectedApproval.licencePlate && (
                   <View style={styles.detailSection}>
                     <Text style={styles.detailSectionTitle}>Vehicle Information</Text>
-                    
+
                     <View style={styles.detailRow}>
                       <View style={styles.detailIcon}>
                         <Car size={16} color={colors.gray500} strokeWidth={1.8} />
@@ -504,7 +506,7 @@ export default function AdminDashboardScreen() {
                       <Text style={styles.detailLabel}>Licence Plate</Text>
                       <Text style={styles.detailValue}>{selectedApproval.licencePlate}</Text>
                     </View>
-                    
+
                     {selectedApproval.vehicleMake && (
                       <View style={styles.detailRow}>
                         <View style={styles.detailIcon}>
@@ -522,9 +524,11 @@ export default function AdminDashboardScreen() {
                 {/* Documents */}
                 <View style={styles.detailSection}>
                   <Text style={styles.detailSectionTitle}>Documents</Text>
-                  
+                  {!selectedApproval.proofDocUrl && !selectedApproval.licenceDocUrl && !selectedApproval.vehicleDocUrl &&
+                    <Text style={{ color: colors.gray500, fontSize: 13 }}>No application documents are available for this registration.</Text>}
+
                   {selectedApproval.proofDocUrl && (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.documentRow}
                       onPress={() => viewDocument(selectedApproval.proofDocUrl!, 'Proof of Registration')}
                     >
@@ -538,9 +542,9 @@ export default function AdminDashboardScreen() {
                       <Eye size={16} color={colors.gray400} strokeWidth={1.8} />
                     </TouchableOpacity>
                   )}
-                  
+
                   {selectedApproval.licenceDocUrl && (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.documentRow}
                       onPress={() => viewDocument(selectedApproval.licenceDocUrl!, "Driver's Licence")}
                     >
@@ -554,9 +558,9 @@ export default function AdminDashboardScreen() {
                       <Eye size={16} color={colors.gray400} strokeWidth={1.8} />
                     </TouchableOpacity>
                   )}
-                  
+
                   {selectedApproval.vehicleDocUrl && (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.documentRow}
                       onPress={() => viewDocument(selectedApproval.vehicleDocUrl!, 'Vehicle Registration')}
                     >
@@ -607,6 +611,20 @@ export default function AdminDashboardScreen() {
           </View>
         </View>
       </Modal>
+      {/* Render last so the document stays above the application review sheet. */}
+      <Modal visible={documentPreview !== null} transparent animationType="slide" onRequestClose={() => setDocumentPreview(null)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,.5)', justifyContent: 'center', padding: 16 }}>
+          <View style={{ height: '90%', backgroundColor: 'white', borderRadius: 16, padding: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <Text style={{ fontWeight: '700', flex: 1 }}>{documentPreview?.title}</Text>
+              <TouchableOpacity accessibilityLabel="Close document" onPress={() => setDocumentPreview(null)}><X size={24} color={colors.black} /></TouchableOpacity>
+            </View>
+            {documentPreview && (documentPreview.type.startsWith('image/')
+              ? <Image source={{ uri: documentPreview.uri }} style={{ flex: 1 }} resizeMode="contain" />
+              : Platform.OS === 'web' ? <iframe title={documentPreview.title} src={documentPreview.uri} style={{ width: '100%', flex: 1, border: 0 }} /> : null)}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -635,14 +653,12 @@ function ApprovalCard({
   approval,
   busy,
   isNew,
-  onApprove,
   onReject,
   onViewDetails,
 }: {
   approval: PendingApproval;
   busy: boolean;
   isNew: boolean;
-  onApprove: () => void;
   onReject: () => void;
   onViewDetails: () => void;
 }) {
@@ -698,11 +714,11 @@ function ApprovalCard({
           style={styles.rejectButton}
         />
         <Button
-          label="Approve"
-          onPress={onApprove}
+          label="View"
+          onPress={onViewDetails}
           loading={busy}
           disabled={busy}
-          icon={<Check size={15} color={colors.white} strokeWidth={2.2} />}
+          icon={<Eye size={15} color={colors.white} strokeWidth={2.2} />}
           style={styles.approveButton}
         />
       </View>
@@ -734,26 +750,26 @@ const styles = StyleSheet.create({
 
   header: {
     paddingHorizontal: spacing.xxl,
-    paddingBottom: spacing.lg,
+    paddingBottom: spacing.md,
     backgroundColor: colors.white,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  headerSmall: { 
-    fontFamily: font.medium, 
-    fontSize: 12, 
-    color: colors.gray400, 
-    fontWeight: '500', 
+  headerSmall: {
+    fontFamily: font.medium,
+    fontSize: 12,
+    color: colors.gray400,
+    fontWeight: '500',
     marginBottom: 2,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  headerTitle: { 
-    fontFamily: font.extrabold, 
-    fontSize: 22, 
-    color: colors.gray900, 
-    fontWeight: '800' 
+  headerTitle: {
+    fontFamily: font.extrabold,
+    fontSize: 20,
+    color: colors.gray900,
+    fontWeight: '800'
   },
   refreshButton: {
     padding: 8,
@@ -764,7 +780,7 @@ const styles = StyleSheet.create({
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
     paddingHorizontal: spacing.xl,
     marginTop: spacing.lg,
   },
@@ -774,18 +790,18 @@ const styles = StyleSheet.create({
     minWidth: 0,
     backgroundColor: colors.white,
     borderRadius: radius.lg,
-    padding: spacing.md,
+    padding: 10,
     ...shadow.sm,
     alignItems: 'center',
   },
   statIcon: {
     marginBottom: 4,
   },
-  statValue: { 
-    fontFamily: font.extrabold, 
-    fontSize: 20, 
-    fontWeight: '800', 
-    color: colors.gray900, 
+  statValue: {
+    fontFamily: font.extrabold,
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.gray900,
     marginTop: 2,
   },
   statLabel: {
@@ -804,7 +820,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.xxl,
-    marginTop: spacing.xxl,
+    marginTop: spacing.lg,
     marginBottom: spacing.md,
   },
   sectionLeft: {
@@ -812,11 +828,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  sectionTitle: { 
-    fontFamily: font.extrabold, 
-    fontSize: 16, 
-    fontWeight: '800', 
-    color: colors.gray900 
+  sectionTitle: {
+    fontFamily: font.extrabold,
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.gray900
   },
   viewToggle: {
     paddingVertical: 4,
@@ -837,11 +853,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 6,
   },
-  countBadgeText: { 
-    fontFamily: font.bold, 
-    fontSize: 10, 
-    fontWeight: '700', 
-    color: colors.white 
+  countBadgeText: {
+    fontFamily: font.bold,
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.white
   },
 
   emptyState: {
@@ -853,10 +869,10 @@ const styles = StyleSheet.create({
     gap: 4,
     ...shadow.sm,
   },
-  emptyStateText: { 
-    fontFamily: font.bold, 
-    fontSize: 16, 
-    fontWeight: '700', 
+  emptyStateText: {
+    fontFamily: font.bold,
+    fontSize: 16,
+    fontWeight: '700',
     color: colors.gray700,
     marginTop: 4,
   },
@@ -871,28 +887,28 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     marginHorizontal: spacing.xxl,
     marginBottom: spacing.md,
-    padding: spacing.md,
+    padding: 12,
     ...shadow.sm,
   },
-  approvalTopRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 12, 
-    marginBottom: spacing.md 
+  approvalTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: spacing.md
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: colors.blue,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { 
-    fontFamily: font.bold, 
-    fontSize: 16, 
-    fontWeight: '700', 
-    color: colors.white 
+  avatarText: {
+    fontFamily: font.bold,
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.white
   },
   approvalInfo: {
     flex: 1,
@@ -902,11 +918,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  approvalName: { 
-    fontFamily: font.bold, 
-    fontSize: 15, 
-    fontWeight: '700', 
-    color: colors.gray900 
+  approvalName: {
+    fontFamily: font.bold,
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.gray900
   },
   newBadgeSmall: {
     backgroundColor: '#FDE68A',
@@ -920,9 +936,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.gray900,
   },
-  approvalMeta: { 
-    fontFamily: font.regular, 
-    fontSize: 12, 
+  approvalMeta: {
+    fontFamily: font.regular,
+    fontSize: 12,
     color: colors.gray500,
     marginTop: 1,
   },
@@ -938,22 +954,26 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
   },
 
-  approvalButtonRow: { 
-    flexDirection: 'row', 
-    gap: 10 
+  approvalButtonRow: {
+    flexDirection: 'row',
+    gap: 10
   },
   rejectButton: {
     flex: 1,
+    minHeight: 44,
+    paddingVertical: 10,
     borderWidth: 1.5,
     borderColor: colors.red,
   },
   approveButton: {
     flex: 1,
+    minHeight: 44,
+    paddingVertical: 10,
   },
 
   navSectionTitle: {
     fontFamily: font.extrabold,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
     color: colors.gray900,
     paddingHorizontal: spacing.xxl,
@@ -972,23 +992,23 @@ const styles = StyleSheet.create({
     minWidth: 0,
     backgroundColor: colors.white,
     borderRadius: radius.lg,
-    padding: spacing.lg,
+    padding: 12,
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     ...shadow.sm,
   },
   navIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: colors.gray50,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  navCardLabel: { 
-    fontFamily: font.semibold, 
-    fontSize: 13, 
-    fontWeight: '600', 
+  navCardLabel: {
+    fontFamily: font.semibold,
+    fontSize: 12,
+    fontWeight: '600',
     color: colors.gray700,
     textAlign: 'center',
   },

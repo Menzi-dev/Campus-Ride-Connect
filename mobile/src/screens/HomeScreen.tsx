@@ -27,6 +27,9 @@ import type { RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import { requestCurrentLocation } from '../services/CurrentLocation';
+import LocationPermissionDialog from '../components/LocationPermissionDialog';
+import RideFaceVerification from '../components/RideFaceVerification';
 import { Audio } from 'expo-av';
 import {
   MapPin,
@@ -683,6 +686,7 @@ export default function HomeScreen() {
   const [userLocation, setUserLocation] = useState<Coords>(FALLBACK_REGION);
   const [pickupLabel, setPickupLabel] = useState('Detecting location...');
   const [locating, setLocating] = useState(true);
+  const [locationHelp, setLocationHelp] = useState<string | null>(null);
   const [pickupSheetVisible, setPickupSheetVisible] = useState(false);
   const [pickupSearch, setPickupSearch] = useState('');
   const [pickupSearchResults, setPickupSearchResults] = useState<CampusLocation[]>([]);
@@ -754,6 +758,8 @@ export default function HomeScreen() {
   const [shareRideVisible, setShareRideVisible] = useState(false);
   const shareSheetAnim = useRef(new Animated.Value(0)).current;
   const [paymentVisible, setPaymentVisible] = useState(false);
+  const [pendingRideDraft, setPendingRideDraft] = useState<Record<string, unknown> | null>(null);
+  const [faceVerificationVisible, setFaceVerificationVisible] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD'>('CASH');
   const [savedPaymentCards, setSavedPaymentCards] = useState<SavedPaymentCard[]>([]);
   const [selectedCard, setSelectedCard] = useState('');
@@ -1207,19 +1213,10 @@ export default function HomeScreen() {
   };
 
   const detectLocation = async () => {
+    setLocationHelp(null);
     setLocating(true);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setPickupLabel('SPU Kimberley Campus');
-        showToast('Location permission denied', 'red');
-        loadNearbyPlaces(userLocation);
-        setLocating(false);
-        return;
-      }
-
-      const position = await Location.getCurrentPositionAsync({});
-      const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+      const coords = await requestCurrentLocation();
       setUserLocation(coords);
       loadNearbyPlaces(coords);
       if (destination) {
@@ -1229,7 +1226,7 @@ export default function HomeScreen() {
       setPickupLabel('Current Location');
     } catch (err) {
       setPickupLabel('SPU Kimberley Campus');
-      showToast('Could not detect your location', 'red');
+      setLocationHelp(err instanceof Error ? err.message : 'Could not detect your location');
       loadNearbyPlaces(userLocation);
     } finally {
       setLocating(false);
@@ -1375,6 +1372,7 @@ export default function HomeScreen() {
       }
 
       const rideData = {
+        clientRequestId: `${userId}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         riderId: userId,
         pickupLocation: pickupLabel,
         pickupLat: userLocation.latitude,
@@ -1392,11 +1390,8 @@ export default function HomeScreen() {
         duration: etaMinutes,
       };
 
-      const response = await apiClient.post('/rides/request', rideData);
-      const newRide = response.data;
-      setCurrentRideId(newRide.id);
-      setCurrentRide(newRide);
-      setPaymentRide(newRide);
+      // Keep the request local until payment selection and face matching pass.
+      setPendingRideDraft(rideData);
       const [remoteCards, account] = await Promise.all([
         apiClient.get('/users/me/payment-methods').then((result) => result.data as SavedPaymentCard[]).catch(() => []),
         apiClient.get('/users/me').then((result) => result.data).catch(() => null),
@@ -1436,23 +1431,30 @@ export default function HomeScreen() {
   };
 
   const confirmPayment = async () => {
-    if (!paymentRide?.id) return;
+    if (!pendingRideDraft) return;
     const chosenCard = savedPaymentCards.find((card) => card.id === selectedCard);
     if (paymentMethod === 'CARD' && !chosenCard) {
       showToast('Add a saved card in Profile before choosing card payment', 'red');
       return;
     }
-    try {
-      await apiClient.post(`/rides/${paymentRide.id}/payment`, {
-        method: paymentMethod,
-        ...(paymentMethod === 'CARD' && chosenCard ? { cardLastFour: chosenCard.lastFour } : {}),
-      });
-      setPaymentVisible(false);
-      showToast('Payment method saved', 'green');
-      startFindingDriversFlow(String(paymentRide.id));
-    } catch (error: any) {
-      showToast(error?.response?.data?.error || 'Could not save payment method', 'red');
-    }
+    setPendingRideDraft({ ...pendingRideDraft, paymentMethod,
+      cardLastFour: paymentMethod === 'CARD' && chosenCard ? chosenCard.lastFour : null });
+    setPaymentVisible(false);
+    setFaceVerificationVisible(true);
+  };
+
+  const submitFaceVerifiedRide = async (verificationToken: string) => {
+    if (!pendingRideDraft) throw new Error('Ride details are missing. Choose your route again.');
+    const response = await apiClient.post('/rides/request', {
+      ...pendingRideDraft, faceVerificationToken: verificationToken,
+    }, { timeout: 30000 });
+    const newRide = response.data;
+    setCurrentRideId(newRide.id);
+    setCurrentRide(newRide);
+    setPaymentRide(newRide);
+    setFaceVerificationVisible(false);
+    setPendingRideDraft(null);
+    startFindingDriversFlow(String(newRide.id));
   };
 
   const startFindingDriversFlow = (rideId: string) => {
@@ -2532,6 +2534,10 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+      {faceVerificationVisible && pendingRideDraft && <RideFaceVerification
+        draft={pendingRideDraft} onVerified={submitFaceVerifiedRide}
+        onClose={() => { setFaceVerificationVisible(false); setPendingRideDraft(null); }} />}
+      <LocationPermissionDialog message={locationHelp} onClose={() => setLocationHelp(null)} onRetry={detectLocation} />
 
       <ScrollView
         style={{ flex: 1, minHeight: 0 }}

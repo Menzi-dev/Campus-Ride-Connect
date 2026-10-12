@@ -1,0 +1,3 @@
+# Copy to database.properties (ignored), or set these environment variables.
+DB_USERNAME=root
+DB_PASSWORD=YOUR_LOCAL_DATABASE_PASSWORD

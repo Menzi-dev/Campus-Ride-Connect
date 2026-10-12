@@ -1,6 +1,6 @@
 // These screens already render their own header, or are primary navigation tabs.
 const CUSTOM_HEADERS = new Set([
-  'Landing', 'Login', 'CreateAccount', 'Legal', 'AdminDashboard', 'DriverDashboard',
+  'Landing', 'Login', 'EmailVerification', 'CreateAccount', 'Legal', 'AdminDashboard', 'DriverDashboard',
   'SecurityDashboard', 'Home', 'RiderHistory', 'RiderSchedule', 'RiderProfile',
   'RiderPaymentMethods', 'DriverEarnings', 'DriverHistory', 'DriverProfile',
   'DriverActiveRide', 'ViewRideDetails', 'RatingDriver', 'Chat', 'UserManagement',

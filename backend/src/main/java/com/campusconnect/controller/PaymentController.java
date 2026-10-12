@@ -31,6 +31,8 @@ public class PaymentController {
             if (!userId.equals(ride.getRiderId())) {
                 return ResponseEntity.status(403).body(Map.of("error", "Only the rider can pay for this ride"));
             }
+            if (ride.getFaceMatchedAt() == null)
+                return ResponseEntity.badRequest().body(Map.of("error", "A completed face match is required before confirming this ride's payment method."));
 
             String method = request.getOrDefault("method", "").trim().toUpperCase();
             if (!method.equals("CASH") && !method.equals("CARD")) {

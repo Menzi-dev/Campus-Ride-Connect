@@ -24,6 +24,8 @@ import java.util.*;
 @RequestMapping("/api/driver")
 @CrossOrigin(origins = "*")
 public class DriverController {
+    @Autowired
+    private com.campusconnect.service.DriverRideAcceptanceService verifiedAcceptance;
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DriverController.class);
 
@@ -229,7 +231,7 @@ public class DriverController {
                     "(SELECT AVG(rr.driver_rating) FROM rides rr WHERE rr.rider_id = r.rider_id AND rr.status = 'COMPLETED') AS rider_rating " +
                     "FROM rides r " +
                     "LEFT JOIN users u ON u.user_id = r.rider_id " +
-                    "WHERE r.status = 'PENDING' AND r.driver_id IS NULL " +
+                    "WHERE r.status = 'PENDING' AND r.driver_id IS NULL AND r.face_matched_at IS NOT NULL " +
                     "AND EXISTS (SELECT 1 FROM payments p WHERE p.ride_id = r.ride_id AND p.status IN ('PENDING', 'COMPLETED')) " +
                     "ORDER BY r.created_at DESC";
 
@@ -387,6 +389,8 @@ public class DriverController {
             Ride ride = rideOpt.get();
 
             Ride.RideStatus currentStatus = ride.getStatus();
+            if (nextStatus == Ride.RideStatus.STARTED && ride.getDriverFaceMatchedAt() == null)
+                return ResponseEntity.badRequest().body(Map.of("error", "Driver face verification is required before starting this trip"));
             boolean validTransition = (currentStatus == Ride.RideStatus.ACCEPTED || currentStatus == Ride.RideStatus.ENROUTE)
                     && nextStatus == Ride.RideStatus.ARRIVED
                 || currentStatus == Ride.RideStatus.ARRIVED && nextStatus == Ride.RideStatus.STARTED
@@ -514,30 +518,11 @@ public class DriverController {
      * Driver accepts a ride request
      */
     @PostMapping("/requests/{id}/accept")
-    public ResponseEntity<?> acceptRequest(@PathVariable("id") Long rideId) {
+    public ResponseEntity<?> acceptRequest(@PathVariable("id") Long rideId, @RequestBody(required = false) Map<String, String> request) {
         try {
             Long driverId = currentUserId();
 
-            Optional<Ride> rideOpt = rideRepository.findById(rideId);
-            if (rideOpt.isEmpty()) {
-                Map<String, String> error = new LinkedHashMap<>();
-                error.put("error", "Ride request not found");
-                return ResponseEntity.status(404).body(error);
-            }
-
-            Ride ride = rideOpt.get();
-            
-            // Check if ride is still available (PENDING and no driver assigned)
-            if (!ride.getStatus().equals(Ride.RideStatus.PENDING) || ride.getDriverId() != null) {
-                Map<String, String> error = new LinkedHashMap<>();
-                error.put("error", "Ride request is no longer available");
-                return ResponseEntity.status(400).body(error);
-            }
-
-            // Assign driver and set ride as ACCEPTED
-            ride.setDriverId(driverId);
-            ride.setStatus(Ride.RideStatus.ACCEPTED);
-            rideRepository.save(ride);
+            Ride ride = verifiedAcceptance.accept(driverId, rideId, request == null ? null : request.get("faceVerificationToken"));
 
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("success", true);

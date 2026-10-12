@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CampusConnect · Phone presentation</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;color:#172b24;background:radial-gradient(ellipse at 50% 45%,#edf9f2,#dbe6e0);min-height:100vh;overflow:hidden}
+.toolbar{position:fixed;top:20px;left:24px;right:24px;display:flex;justify-content:space-between;align-items:center;gap:12px;z-index:2}.brand{font-weight:750;font-size:20px}.brand span{color:#00a651}.actions{display:flex;gap:8px}button{border:1px solid #c7d7cd;background:#ffffffd9;color:#244638;border-radius:10px;padding:10px 15px;font:inherit;cursor:pointer}button:hover{background:#fff}button:focus-visible{outline:3px solid #00a651}
+.stage{position:absolute;inset:72px 0 28px;display:flex;align-items:center;justify-content:center}.space{position:relative}.phone{position:absolute;top:0;left:0;width:410px;height:848px;padding:10px;background:linear-gradient(120deg,#424242,#101010 30%,#242424 75%,#555);border-radius:58px;border:2px solid #565656;box-shadow:0 35px 65px #152b2430,inset 0 0 0 2px #070707;transform-origin:top left}.phone:before,.phone:after{content:'';position:absolute;background:#252525;width:4px;border-radius:3px;left:-5px;top:150px;height:60px}.phone:after{top:222px;height:60px}.power{position:absolute;right:-5px;top:200px;width:4px;height:86px;background:#252525;border-radius:3px}.screen{height:100%;background:white;border-radius:46px;overflow:hidden;display:flex;flex-direction:column}.status{height:47px;flex-shrink:0;position:relative;display:flex;align-items:center;justify-content:space-between;padding:0 25px;color:#151a18;font-size:14px;font-weight:650}.island{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:112px;height:29px;border-radius:22px;background:#080808}.icons{display:flex;align-items:center;gap:6px;font-size:12px}.battery{border:1.5px solid currentColor;border-radius:4px;padding:0 3px;font-size:10px;line-height:14px}.signal{letter-spacing:-2px}iframe{border:0;width:100%;flex:1;min-height:0;background:#fff}.bottom{height:22px;display:grid;place-items:center;flex-shrink:0}.home{width:130px;height:5px;background:#151515;border-radius:5px}.caption{position:fixed;bottom:8px;width:100%;text-align:center;font-size:12px;color:#52695d}body:fullscreen .toolbar{opacity:0;transition:opacity .2s}body:fullscreen .toolbar:hover{opacity:1}@media(max-width:540px){.brand{font-size:15px}.toolbar{left:12px;right:12px;top:12px}button{padding:8px;font-size:12px}}
+</style>
+</head>
+<body>
+<main class="stage"><div class="space"><div class="phone"><div class="power"></div><div class="screen"><div class="status" aria-hidden="true"><span id="clock">18:10</span><div class="island"></div><div class="icons"><span class="signal">▂▄▆█</span><span>◔</span><span class="battery">100</span></div></div><iframe title="CampusConnect mobile app" src="/" allow="geolocation; camera; microphone; clipboard-write"></iframe><div class="bottom" aria-hidden="true"><div class="home"></div></div></div></div></div></main>
+<div class="caption">Live app · Phone presentation</div>
+<script>
+const frame=document.querySelector('iframe'),phone=document.querySelector('.phone'),space=document.querySelector('.space'),stage=document.querySelector('.stage');
+function fit(){const scale=Math.min((stage.clientHeight-12)/848,(stage.clientWidth-40)/410,1);phone.style.transform=`scale(${scale})`;space.style.width=`${410*scale}px`;space.style.height=`${848*scale}px`}
+window.addEventListener('resize',fit);fit();
+function clock(){document.getElementById('clock').textContent=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',hour12:false})}clock();setInterval(clock,30000);
+</script>
+</body>
+</html>

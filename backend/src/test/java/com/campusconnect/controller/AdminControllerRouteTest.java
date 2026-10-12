@@ -28,13 +28,14 @@ class AdminControllerRouteTest {
         when(userRepository.count()).thenReturn(12L);
         when(userRepository.countByRole(com.campusconnect.entity.User.Role.DRIVER)).thenReturn(5L);
         when(driverRepository.countByApprovalStatus(Driver.ApprovalStatus.PENDING)).thenReturn(2L);
+        when(jdbcTemplate.queryForObject(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(Long.class))).thenReturn(0L);
         when(jdbcTemplate.queryForObject(
                 org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.any(Object[].class),
                 org.mockito.ArgumentMatchers.eq(Integer.class)))
                 .thenReturn(9);
 
-        AdminController controller = new AdminController(userRepository, rideRepository, driverRepository, jdbcTemplate);
+        AdminController controller = new AdminController(userRepository, rideRepository, driverRepository, jdbcTemplate, mock(com.campusconnect.service.DriverDecisionEmailService.class));
 
         ResponseEntity<Map<String, Object>> response = controller.getDashboardStatsLegacy();
 
@@ -68,7 +69,7 @@ class AdminControllerRouteTest {
                     put("created_at", "2026-08-12T21:00:00");
                 }}));
 
-        AdminController controller = new AdminController(userRepository, rideRepository, driverRepository, jdbcTemplate);
+        AdminController controller = new AdminController(userRepository, rideRepository, driverRepository, jdbcTemplate, mock(com.campusconnect.service.DriverDecisionEmailService.class));
 
         ResponseEntity<List<Map<String, Object>>> response = controller.getPendingDriverApprovalsLegacy();
 

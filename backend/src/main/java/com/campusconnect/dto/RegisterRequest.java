@@ -15,6 +15,16 @@ public class RegisterRequest {
 	private String vehiclePhoto;
 	private Boolean faceVerified;
 	private String faceEmbedding;
+	private String faceEnrollmentPhoto;
+	private String faceScanMetadata;
+	private String applicationDocuments;
+	@com.fasterxml.jackson.annotation.JsonIgnore
+	public String getApplicationDocuments() { return applicationDocuments; }
+	public void setApplicationDocuments(String value) { applicationDocuments = value; }
+	public String getFaceEnrollmentPhoto() { return faceEnrollmentPhoto; }
+	public void setFaceEnrollmentPhoto(String value) { faceEnrollmentPhoto = value; }
+	public String getFaceScanMetadata() { return faceScanMetadata; }
+	public void setFaceScanMetadata(String value) { faceScanMetadata = value; }
 
 	public String getFullName() {
 		return fullName;

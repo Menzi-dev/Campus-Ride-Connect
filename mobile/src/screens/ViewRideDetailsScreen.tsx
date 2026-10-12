@@ -27,6 +27,7 @@ import { colors, radius, spacing, font, shadow } from '../theme/theme';
 import Button from '../components/Button';
 import { useToast } from '../components/Toast';
 import apiClient from '../services/ApiClient';
+import RideFaceVerification from '../components/RideFaceVerification';
 
 type RootStackParamList = {
   DriverDashboard: undefined;
@@ -62,6 +63,7 @@ export default function ViewRideDetailsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [details, setDetails] = useState<RideRequestDetails | null>(null);
   const [accepting, setAccepting] = useState(false);
+  const [faceVerificationVisible, setFaceVerificationVisible] = useState(false);
   const [declining, setDeclining] = useState(false);
 
   // Load ride details
@@ -97,10 +99,16 @@ export default function ViewRideDetailsScreen() {
 
   const handleAccept = async () => {
     if (accepting || declining) return;
+    setFaceVerificationVisible(true);
+  };
 
+  const acceptVerifiedRide = async (verificationToken: string) => {
     setAccepting(true);
     try {
-      await apiClient.post(`/driver/requests/${route.params.requestId}/accept`);
+      await apiClient.post(`/driver/requests/${route.params.requestId}/accept`, {
+        faceVerificationToken: verificationToken,
+      });
+      setFaceVerificationVisible(false);
       showToast('Ride accepted! Starting navigation...', 'green');
       
       // Navigate to active ride with a small delay to show toast
@@ -115,6 +123,7 @@ export default function ViewRideDetailsScreen() {
         'red'
       );
       setAccepting(false);
+      throw error;
     }
   };
 
@@ -166,6 +175,9 @@ export default function ViewRideDetailsScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+      {faceVerificationVisible && <RideFaceVerification mode="driver"
+        draft={{ rideId: Number(route.params.requestId) }} onVerified={acceptVerifiedRide}
+        onClose={() => { setFaceVerificationVisible(false); setAccepting(false); }} />}
 
       <ScrollView
         refreshControl={

@@ -1,4 +1,4 @@
-﻿// mobile/src/screens/DriverDashboardScreen.tsx
+// mobile/src/screens/DriverDashboardScreen.tsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
@@ -28,7 +28,6 @@ import {
   AlertCircle,
   ShieldCheck,
   Hourglass,
-  RefreshCw,
 } from 'lucide-react-native';
 import { colors, radius, spacing, font, shadow } from '../theme/theme';
 import Button from '../components/Button';
@@ -94,7 +93,8 @@ export default function DriverDashboardScreen() {
   const [driverName, setDriverName] = useState('Driver');
   const [online, setOnline] = useState(false);
   const [isApproved, setIsApproved] = useState<boolean | null>(null);
-  const [lastChecked, setLastChecked] = useState<Date>(new Date());
+  const waitingForApproval = useRef(false);
+  const [approvalReady, setApprovalReady] = useState(false);
   const [showApprovalMessage, setShowApprovalMessage] = useState(true);
   const [userEmail, setUserEmail] = useState('');
   const [togglingOnline, setTogglingOnline] = useState(false);
@@ -172,11 +172,15 @@ export default function DriverDashboardScreen() {
         
         const approved = response.data?.approved === true;
         setIsApproved(approved);
-        setLastChecked(new Date());
+        if (!approved) waitingForApproval.current = true;
 
         if (approved) {
           stopPulseAnimation();
-          await loadDashboardData();
+          if (waitingForApproval.current) {
+            setApprovalReady(true);
+          } else {
+            await loadDashboardData();
+          }
           if (showApprovalMessage) {
             showToast('Your account has been approved', 'green');
             setShowApprovalMessage(false);
@@ -301,6 +305,7 @@ export default function DriverDashboardScreen() {
   // Poll for approval when pending
   useEffect(() => {
     if (isApproved === false && hasLoaded) {
+      waitingForApproval.current = true;
       const interval = setInterval(() => {
         console.log('Polling approval status...');
         checkApprovalStatus(true);
@@ -312,7 +317,7 @@ export default function DriverDashboardScreen() {
 
   // Poll for requests when approved
   useEffect(() => {
-    if (isApproved === true && hasLoaded) {
+    if (isApproved === true && hasLoaded && !approvalReady) {
       const interval = setInterval(() => {
         if (!refreshing) {
           loadDashboardData(true);
@@ -321,7 +326,7 @@ export default function DriverDashboardScreen() {
 
       return () => clearInterval(interval);
     }
-  }, [isApproved, hasLoaded]);
+  }, [isApproved, hasLoaded, approvalReady]);
 
   // Toggle online status
   const toggleOnline = async () => {
@@ -406,7 +411,7 @@ export default function DriverDashboardScreen() {
   }
 
   // Show pending approval if not approved
-  if (isApproved === false) {
+  if (isApproved === false || approvalReady) {
     return (
       <View style={styles.pendingContainer}>
         <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
@@ -430,16 +435,16 @@ export default function DriverDashboardScreen() {
 
           <View style={styles.pendingCard}>
             <Animated.View style={[styles.pendingIconContainer, { transform: [{ scale: pulseAnim }] }]}>
-              <Hourglass size={48} color={colors.orange} strokeWidth={1.5} />
+              {approvalReady ? <ShieldCheck size={48} color={colors.green} strokeWidth={1.5} /> : <Hourglass size={48} color={colors.orange} strokeWidth={1.5} />}
             </Animated.View>
             
-            <Text style={styles.pendingTitle}>Waiting for Approval</Text>
+            <Text style={styles.pendingTitle}>{approvalReady ? 'Account Approved' : 'Waiting for Approval'}</Text>
             <Text style={styles.pendingSubtitle}>
-              Your driver account is pending review by an administrator.
+              {approvalReady ? 'Your driver account has been approved. Please log in to continue.' : 'Your driver account is pending review by an administrator.'}
             </Text>
             {userEmail && <Text style={styles.pendingEmail}>{userEmail}</Text>}
 
-            <View style={styles.pendingInfoContainer}>
+            {!approvalReady && <View style={styles.pendingInfoContainer}>
               <View style={styles.pendingInfoRow}>
                 <ShieldCheck size={16} color={colors.green} strokeWidth={2} />
                 <Text style={styles.pendingInfoText}>
@@ -452,20 +457,18 @@ export default function DriverDashboardScreen() {
                   You'll be notified once approved
                 </Text>
               </View>
-            </View>
+            </View>}
 
             <View style={styles.pendingActions}>
-              <Button
-                label="Check Status"
-                onPress={() => checkApprovalStatus(true)}
-                loading={checkingApproval}
-                disabled={checkingApproval}
-                icon={<RefreshCw size={16} color={colors.white} strokeWidth={2} />}
-                style={styles.pendingButton}
-              />
-              <Text style={styles.pendingLastChecked}>
-                Last checked: {lastChecked.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
-              </Text>
+              {approvalReady ? (
+                <Button
+                  label="Go to Login"
+                  onPress={handleLogout}
+                  style={styles.pendingButton}
+                />
+              ) : (
+                <Text style={styles.pendingLastChecked}>Your approval status updates automatically.</Text>
+              )}
             </View>
           </View>
         </ScrollView>

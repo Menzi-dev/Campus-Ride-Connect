@@ -38,7 +38,10 @@ const getHostChoices = () => {
 };
 
 const hostChoices = getHostChoices();
-const baseURL = `http://${hostChoices[0]}:${PORT}/api`;
+// HTTPS previews proxy the API on the same origin to avoid mixed-content blocks.
+const secureWeb = Platform.OS === 'web' && typeof window !== 'undefined'
+  && window.location.protocol === 'https:';
+const baseURL = secureWeb ? `${window.location.origin}/api` : `http://${hostChoices[0]}:${PORT}/api`;
 console.log('[ApiClient] primary baseURL =', baseURL);
 console.log('[ApiClient] host choices =', hostChoices.join(', '));
 
@@ -55,7 +58,7 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const config = error.config;
-    if (config && isNetworkError(error)) {
+    if (config && !secureWeb && isNetworkError(error)) {
       config.__retryCount = config.__retryCount || 0;
 
       if (config.__retryCount < hostChoices.length - 1) {
@@ -78,7 +81,7 @@ apiClient.interceptors.response.use(
 apiClient.interceptors.request.use(async (config) => {
   const isLoginRequest = config.url === '/auth/login' || config.url?.endsWith('/auth/login');
   const isPasswordResetRequest = config.url?.startsWith('/auth/password-reset/');
-  const isUnauthenticatedAuthRequest = isLoginRequest || isPasswordResetRequest;
+  const isUnauthenticatedAuthRequest = isLoginRequest || isPasswordResetRequest || config.url?.startsWith('/auth/email-verification/') || config.url === '/auth/register';
   const token = isUnauthenticatedAuthRequest ? null : await AsyncStorage.getItem('authToken');
   
   // Debug logging

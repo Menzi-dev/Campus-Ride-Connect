@@ -4,9 +4,6 @@ import com.campusconnect.entity.PasswordResetCode;
 import com.campusconnect.entity.User;
 import com.campusconnect.repository.PasswordResetCodeRepository;
 import com.campusconnect.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,33 +11,27 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Locale;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 @Service
 public class PasswordResetService {
 
-    private static final Logger logger = Logger.getLogger(PasswordResetService.class.getName());
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final int MAX_ATTEMPTS = 5;
 
     private final PasswordResetCodeRepository resetCodeRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JavaMailSender mailSender;
-
-    @Value("${app.password-reset.from}")
-    private String fromAddress;
+    private final EmailService emailService;
 
     public PasswordResetService(
             PasswordResetCodeRepository resetCodeRepository,
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
-            JavaMailSender mailSender) {
+            EmailService emailService) {
         this.resetCodeRepository = resetCodeRepository;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
-        this.mailSender = mailSender;
+        this.emailService = emailService;
     }
 
     public void requestCode(String rawEmail) {
@@ -65,19 +56,15 @@ public class PasswordResetService {
         resetCode.setAttempts(0);
         resetCodeRepository.save(resetCode);
 
-        try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(fromAddress);
-            message.setTo(email);
-            message.setSubject("CampusConnect password reset code");
-            message.setText("Your CampusConnect password reset code is " + code
+        String text = "Your CampusConnect password reset code is " + code
                     + ". It expires in 10 minutes and can only be used once."
                     + " Never share this code with anyone."
-                    + " If you did not request this, you can ignore this email.");
-            mailSender.send(message);
-        } catch (Exception e) {
+                    + " If you did not request this, you can ignore this email.";
+        if (!emailService.send(email, "CampusConnect password reset code", text,
+            EmailService.page("Reset your password", "<p>Your reset code:</p><p style=\"font-size:28px;font-weight:bold;letter-spacing:6px\">"
+                + code + "</p><p>Expires in 10 minutes and can be used once. Never share this code.</p>"
+                + "<p>If you did not request a reset, ignore this email.</p>"))) {
             resetCodeRepository.delete(resetCode);
-            logger.log(Level.WARNING, "Could not send a password reset email", e);
         }
     }
 

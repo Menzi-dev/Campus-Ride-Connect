@@ -76,6 +76,8 @@ public class AdminControllerWithAuthenticationTest {
         adminRequest.setEmergencyContact("0700000000");
         
         User adminUser = authService.register(adminRequest);
+        // This authorization fixture represents an email-verified administrator.
+        adminUser.setEmailVerified(true); userRepository.save(adminUser);
         System.out.println("Admin user created: ID=" + adminUser.getId() + ", Email=" + adminEmail + ", Role=" + adminUser.getRole());
         
         // Login as admin to get token
@@ -161,6 +163,7 @@ public class AdminControllerWithAuthenticationTest {
         driverRequest.setVehicleYear(2022);
         
         User driver = authService.register(driverRequest);
+        driver.setEmailVerified(true); userRepository.save(driver);
         
         // Get token for driver
         AuthRequest loginRequest = new AuthRequest();

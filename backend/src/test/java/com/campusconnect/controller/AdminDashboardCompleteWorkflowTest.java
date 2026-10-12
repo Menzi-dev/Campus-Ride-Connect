@@ -122,6 +122,8 @@ public class AdminDashboardCompleteWorkflowTest {
         loginRequest.setEmail(adminEmail);
         loginRequest.setPassword(adminPassword);
         
+        User verifiedAdmin = userRepository.findByEmail(adminEmail).orElseThrow();
+        verifiedAdmin.setEmailVerified(true); userRepository.save(verifiedAdmin);
         AuthResponse loginResponse = authService.login(loginRequest);
         String adminToken = loginResponse.getToken();
         User adminUser = loginResponse.getUser();

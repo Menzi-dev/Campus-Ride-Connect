@@ -18,7 +18,18 @@ public class User {
 	@Column(unique = true, nullable = false)
 	private String email;
 
+	// NULL means a pre-verification legacy account; new registration explicitly sets false.
+	@Column(name = "email_verified")
+	@com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.READ_ONLY)
+	private Boolean emailVerified;
+
+	public boolean isEmailVerified() { return !Boolean.FALSE.equals(emailVerified); }
+	@com.fasterxml.jackson.annotation.JsonIgnore
+	public boolean requiresEmailVerification() { return role != Role.DRIVER && !isEmailVerified(); }
+	public void setEmailVerified(Boolean value) { emailVerified = value; }
+
 	@Column(name = "password_hash", nullable = false)
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	private String passwordHash;
 
 	@Enumerated(EnumType.STRING)
@@ -53,7 +64,26 @@ public class User {
 	private Boolean faceVerified = false;
 
 	@Column(name = "face_embedding", columnDefinition = "TEXT")
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	private String faceEmbedding;
+
+	@com.fasterxml.jackson.annotation.JsonIgnore
+	@Column(name = "face_enrollment_photo", columnDefinition = "LONGTEXT")
+	private String faceEnrollmentPhoto;
+
+	@com.fasterxml.jackson.annotation.JsonIgnore
+	@Column(name = "face_scan_metadata", columnDefinition = "TEXT")
+	private String faceScanMetadata;
+	@com.fasterxml.jackson.annotation.JsonIgnore
+	@Column(name = "application_documents", columnDefinition = "LONGTEXT")
+	private String applicationDocuments;
+	public String getApplicationDocuments() { return applicationDocuments; }
+	public void setApplicationDocuments(String value) { applicationDocuments = value; }
+
+	public String getFaceEnrollmentPhoto() { return faceEnrollmentPhoto; }
+	public void setFaceEnrollmentPhoto(String value) { faceEnrollmentPhoto = value; }
+	public String getFaceScanMetadata() { return faceScanMetadata; }
+	public void setFaceScanMetadata(String value) { faceScanMetadata = value; }
 
 	@Enumerated(EnumType.STRING)
 	@Column(name = "status")

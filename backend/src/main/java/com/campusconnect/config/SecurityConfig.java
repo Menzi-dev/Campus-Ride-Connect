@@ -48,13 +48,14 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // Allow requests from localhost, 127.0.0.1, and emulator hosts on any dev port.
+        // Allow local previews and the current LAN web preview on its Expo port.
         // This is important for Expo web / VS Code mobile preview, where the host may be
         // localhost:19002, 127.0.0.1:19002, or a similar local development address.
         configuration.setAllowedOriginPatterns(List.of(
             "http://localhost:*",
             "http://127.0.0.1:*",
             "http://10.0.2.2:*",
+            "http://10.3.15.95:8081",
             "http://[::1]:*"
         ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));

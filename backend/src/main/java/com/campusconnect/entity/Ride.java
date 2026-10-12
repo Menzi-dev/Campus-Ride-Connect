@@ -86,6 +86,29 @@ public class Ride {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    @Column(name = "face_matched_at")
+    private LocalDateTime faceMatchedAt;
+    @Column(name = "driver_face_matched_at")
+    private LocalDateTime driverFaceMatchedAt;
+    public LocalDateTime getDriverFaceMatchedAt() { return driverFaceMatchedAt; }
+    public void setDriverFaceMatchedAt(LocalDateTime value) { driverFaceMatchedAt = value; }
+    @Column(name = "face_match_method")
+    private String faceMatchMethod;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @Column(name = "face_verification_key", unique = true)
+    private String faceVerificationKey;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @Column(name = "face_request_fingerprint", columnDefinition = "TEXT")
+    private String faceRequestFingerprint;
+    public String getFaceVerificationKey() { return faceVerificationKey; }
+    public void setFaceVerificationKey(String value) { faceVerificationKey = value; }
+    public String getFaceRequestFingerprint() { return faceRequestFingerprint; }
+    public void setFaceRequestFingerprint(String value) { faceRequestFingerprint = value; }
+    public LocalDateTime getFaceMatchedAt() { return faceMatchedAt; }
+    public void setFaceMatchedAt(LocalDateTime value) { faceMatchedAt = value; }
+    public String getFaceMatchMethod() { return faceMatchMethod; }
+    public void setFaceMatchMethod(String value) { faceMatchMethod = value; }
+
     public enum RideStatus {
         SCHEDULED, PENDING, ACCEPTED, ENROUTE, ARRIVED, STARTED, COMPLETED, CANCELLED
     }

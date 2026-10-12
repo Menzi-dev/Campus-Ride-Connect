@@ -1,5 +1,21 @@
 # Testing evidence and commands
 
+Pre-push checks on 13 October 2026:
+
+- `npm.cmd run typecheck` passed.
+- The 14 database-independent backend test classes passed: 63 checks, zero
+  failures, errors or skipped checks.
+- The complete backend run attempted 79 checks and reported 16 context errors
+  because local `MYSQL80` was stopped. Starting that Windows service was not
+  permitted by the session's service access. This is not a complete-suite pass;
+  rerun `mvn.cmd test` with MySQL available and the dedicated test database.
+- Database credentials were moved from tracked YAML files into ignored
+  `backend/config/database.properties`; environment references and a safe
+  example file are committed. Email credentials retain their separate config.
+
+Historical evidence below records prior checks and should not be interpreted
+as a fresh result for every current feature.
+
 Fresh checks on 5 October 2026:
 
 ```powershell

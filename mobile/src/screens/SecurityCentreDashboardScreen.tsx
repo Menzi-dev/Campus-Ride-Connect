@@ -1,9 +1,25 @@
+// Campus security dashboard: load safety totals and recent alerts, and provide links to ride
+// monitoring and SOS screens.
+// Where: mobile/src/screens/SecurityCentreDashboardScreen.tsx; start at
+// SecurityCentreDashboardScreen(), then follow the named actions below.
+// How: SecurityCentreDashboardScreen() renders the screen and keeps its form/list/progress values
+// in React state. loadData() contain the API calls; ApiClient.ts adds the /api base path and saved
+// login token.
+/** Provides campus security with active-ride monitoring and the SOS review queue. */
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 ﻿import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, Text, StyleSheet, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
-import { AlertTriangle, Car, Crosshair, Shield, Siren } from 'lucide-react-native';
+import { Car, Crosshair, Shield, Siren } from 'lucide-react-native';
 import apiClient from '../services/ApiClient';
 import { useToast } from '../components/Toast';
 import { colors, font, radius, spacing, shadow } from '../theme/theme';
@@ -20,6 +36,12 @@ export default function SecurityCentreDashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  // Feature: Retrieve dashboard totals and driver applications, keeping refresh and retry feedback
+  // in sync.
+  // Where: SecurityCentreDashboardScreen.loadData() below.
+  // How: loadData() uses apiClient.get('/security/dashboard') through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend. setRefreshing() and
+  // setLoading() update React state, which redraws the related screen content.
   const loadData = useCallback(async (refresh = false) => {
     refresh ? setRefreshing(true) : setLoading(true);
     try { const response = await apiClient.get('/security/dashboard'); setRides(response.data?.activeRides || []); setAlerts(response.data?.activeSos || []); setError(''); }
@@ -47,6 +69,7 @@ function Stat({ icon, value, label }: { icon: React.ReactNode; value: number; la
 export function SecurityNav({ active, onDashboard, onRides, onAlerts }: { active: string; onDashboard: () => void; onRides: () => void; onAlerts: () => void }) { const insets = useSafeAreaInsets(); return <View testID="security-bottom-nav" style={[styles.nav, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}><NavItem icon={<Shield size={19} />} label="Dashboard" active={active === 'dashboard'} onPress={onDashboard} /><NavItem icon={<Car size={19} />} label="Active Rides" active={active === 'rides'} onPress={onRides} /><NavItem icon={<Siren size={19} />} label="SOS Alerts" active={active === 'alerts'} onPress={onAlerts} /></View>; }
 function NavItem({ icon, label, active, onPress }: { icon: React.ReactElement<any>; label: string; active: boolean; onPress: () => void }) { return <TouchableOpacity style={styles.navItem} onPress={onPress}>{React.cloneElement(icon, { color: active ? colors.green : colors.gray400 })}<Text style={[styles.navText, active && styles.navActive]}>{label}</Text></TouchableOpacity>; }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: {
     flex: 1, minWidth: 0, minHeight: 0,
@@ -63,12 +86,7 @@ const styles = StyleSheet.create({
     color: colors.gray900,
     marginTop: 2,
   },
-  subtitle: {
-    fontFamily: font.regular,
-    fontSize: 14,
-    color: colors.gray500,
-    textAlign: 'center',
-  },
+
   error: { color: colors.red, fontFamily: font.medium, marginBottom: spacing.md },
   stats: { flexDirection: 'row', gap: spacing.md },
   stat: { flex: 1, backgroundColor: colors.white, borderRadius: radius.lg, padding: spacing.lg, ...shadow.sm },

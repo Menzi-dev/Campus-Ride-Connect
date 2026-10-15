@@ -1,3 +1,9 @@
+// Test feature: check driver ride acceptance service behaviour using the cases below. Use the
+// fixtures and any mocked dependencies defined here to exercise success and failure cases.
+// Where: DriverRideAcceptanceServiceTest in this file, including prepare() and
+// failureDoesNotAssignRide().
+// How: JUnit executes the test methods. Fixtures and any Mockito mocks in this class provide
+// controlled inputs; assertions check the returned values, errors or saved interactions.
 package com.campusconnect.service;
 
 import com.campusconnect.entity.*;

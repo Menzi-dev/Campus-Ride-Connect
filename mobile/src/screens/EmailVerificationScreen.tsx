@@ -1,5 +1,20 @@
+// Email confirmation: send an emailed link token or six-digit code to the backend. Show success or
+// a helpful error and allow a new email after the resend waiting period.
+// Where: mobile/src/screens/EmailVerificationScreen.tsx; start at EmailVerificationScreen(), then
+// follow the named actions below.
+// How: EmailVerificationScreen() renders the screen and keeps its form/list/progress values in
+// React state. resend() and verifyCode() contain the API calls; ApiClient.ts adds the /api base
+// path and saved login token.
+/** Verifies an account with an emailed code or link token and supports resending confirmation. */
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { Mail, ShieldCheck, AlertCircle } from 'lucide-react-native';
@@ -41,6 +56,11 @@ export default function EmailVerificationScreen() {
     return () => clearTimeout(timer);
   }, [cooldown]);
 
+  // Feature: Request a new verification email and start the resend waiting period.
+  // Where: EmailVerificationScreen.resend() below.
+  // How: resend() uses apiClient.post('/auth/email-verification/resend') through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend. setMessage() and
+  // setSending() update React state, which redraws the related screen content.
   const resend = async () => {
     const address = email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
@@ -59,6 +79,11 @@ export default function EmailVerificationScreen() {
     } finally { setSending(false); }
   };
 
+  // Feature: Validate the email/code format and ask the backend to confirm the account email.
+  // Where: EmailVerificationScreen.verifyCode() below.
+  // How: verifyCode() uses apiClient.post('/auth/email-verification/confirm-code') through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend. setMessage() and setState()
+  // update React state, which redraws the related screen content.
   const verifyCode = async () => {
     if (sending || state === 'checking') return;
     const address = email.trim().toLowerCase();
@@ -109,6 +134,7 @@ export default function EmailVerificationScreen() {
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flexGrow: 1, backgroundColor: colors.white, padding: spacing.xl, justifyContent: 'center' },
   brand: { fontFamily: font.extrabold, fontSize: 24, color: colors.green, textAlign: 'center', marginBottom: 24 },

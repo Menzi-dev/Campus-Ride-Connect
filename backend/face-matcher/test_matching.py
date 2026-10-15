@@ -1,3 +1,9 @@
+# Face matcher tests: use public sample images to check same-face matching, different-face
+# rejection, missing/multiple faces and invalid image data. These fixtures are not student
+# enrollments.
+# Where: MatchingTest test methods and jpeg() in backend/face-matcher/test_matching.py.
+# How: unittest calls feature()/OpenCV comparison with public sample fixtures and asserts accepted
+# matches or expected rejection errors.
 import base64
 import importlib.util
 import unittest

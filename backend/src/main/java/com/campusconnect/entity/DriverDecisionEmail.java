@@ -1,6 +1,12 @@
+// Database record: store queued driver decision email and delivery/retry information. The
+// annotations map these fields to table columns; the methods below read and update the record.
+// Where: DriverDecisionEmail in this file maps to the driver_decision_emails table.
+// How: @Id identifies its record and @Column/@Enumerated define field storage. Repository/service
+// code reads and updates these fields through the methods below.
 package com.campusconnect.entity;
 import jakarta.persistence.*;
 import java.time.Instant;
+/** Stores a queued driver decision email and its retry or delivery state. */
 @Entity
 @Table(name = "driver_decision_emails", indexes = @Index(name = "pending_delivery", columnList = "sent_at,next_attempt_at"))
 public class DriverDecisionEmail {

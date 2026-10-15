@@ -1,3 +1,8 @@
+// Database record: store password recovery code hash, expiry and validation state. The annotations
+// map these fields to table columns; the methods below read and update the record.
+// Where: PasswordResetCode in this file maps to the password_reset_codes table.
+// How: @Id identifies its record and @Column/@Enumerated define field storage. Repository/service
+// code reads and updates these fields through the methods below.
 package com.campusconnect.entity;
 
 import jakarta.persistence.Column;
@@ -9,6 +14,7 @@ import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
 
+/** Stores a hashed reset code, expiry and failed-attempt count for an account email. */
 @Entity
 @Table(name = "password_reset_codes")
 public class PasswordResetCode {

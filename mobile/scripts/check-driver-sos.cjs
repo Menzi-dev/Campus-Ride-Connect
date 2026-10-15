@@ -1,3 +1,8 @@
+// Browser SOS checks: use synthetic audio and mocked API calls to check sending, permission
+// failures, retry and recording cleanup without creating a real alert.
+// Where: mobile/scripts/check-driver-sos.cjs; follow check().
+// How: Playwright controls Chromium while mocked API routes supply synthetic records. Node
+// assertions check the resulting page/actions; this does not prove real backend integration.
 /* Synthetic alerts and microphone bytes only; all API requests are intercepted. */
 const assert = require('node:assert/strict');
 const path = require('node:path');

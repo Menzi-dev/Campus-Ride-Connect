@@ -1,3 +1,9 @@
+// Rider API: handle booking, trip retrieval, dispatch, cancellation, feedback and SOS evidence. Use
+// the signed-in account when checking access to ride data.
+// Where: RideController handles /api/rides; @GetMapping/@PostMapping/@PutMapping identify the
+// actions below.
+// How: Spring reads request fields/path IDs, invokes these controller methods and returns their
+// ResponseEntity. Service/repository/JDBC calls inside the methods perform the actual work.
 package com.campusconnect.controller;
 
 import com.campusconnect.dto.RideRequest;
@@ -23,8 +29,8 @@ import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.UUID;
 
+/** Provides rider booking, trip lookup, ratings and SOS evidence endpoints with account ownership checks. */
 @RestController
 @RequestMapping("/api/rides")
 @CrossOrigin(origins = "*")
@@ -46,6 +52,11 @@ public class RideController {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    // Feature: Create a ride only after checking its face confirmation. Save its pending payment in
+    // the same transaction so a failed insert does not leave half a booking.
+    // Where: RideController.requestRide() below.
+    // How: requestRide() takes riderId from currentUserId() and calls rideService.requestRide(). It
+    // returns the saved Ride or an HTTP 400 error message.
     /**
      * POST /api/rides/request
      * Request a new ride
@@ -72,6 +83,12 @@ public class RideController {
         return requestRide(request);
     }
 
+    // Feature: Retrieve the signed-in rider active trip, or return an empty result when there is
+    // none.
+    // Where: RideController.getActiveRide() below.
+    // How: getActiveRide() uses rideService.getActiveRideForRider() to read, validate or save the
+    // data for this operation. The return/exception handling below supplies its result to the
+    // caller.
     /**
      * GET /api/rides/active
      * Get the currently active ride for the rider
@@ -93,6 +110,11 @@ public class RideController {
         }
     }
 
+    // Feature: Look up one ride by its identifier and handle the result in the surrounding service
+    // or API.
+    // Where: RideController.getRideById() below.
+    // How: getRideById() uses rideService.getRideById() to read, validate or save the data for this
+    // operation. The return/exception handling below supplies its result to the caller.
     /**
      * GET /api/rides/{id}
      * Get a specific ride by ID
@@ -113,6 +135,10 @@ public class RideController {
         }
     }
 
+    // Feature: Return the selected ride progress information after checking access.
+    // Where: RideController.getRideStatus() below.
+    // How: getRideStatus() uses rideService.getRideById() to read, validate or save the data for
+    // this operation. The return/exception handling below supplies its result to the caller.
     /**
      * GET /api/rides/{id}/status
      * Get the current status of a ride
@@ -142,6 +168,10 @@ public class RideController {
         }
     }
 
+    // Feature: Retrieve the signed-in rider saved trips in newest-first order.
+    // Where: RideController.getHistory() below.
+    // How: getHistory() uses rideService.getHistory() to read, validate or save the data for this
+    // operation. The return/exception handling below supplies its result to the caller.
     /**
      * GET /api/rides/history
      * Get ride history for the rider
@@ -153,6 +183,11 @@ public class RideController {
         return ResponseEntity.ok(rides);
     }
 
+    // Feature: Retrieve the rider bookings handled by the scheduled ride flow.
+    // Where: RideController.getScheduledRides() below.
+    // How: getScheduledRides() uses rideService.getScheduledRidesForRider() to read, validate or
+    // save the data for this operation. The return/exception handling below supplies its result to
+    // the caller.
     @GetMapping("/scheduled")
     public ResponseEntity<?> getScheduledRides() {
         try {
@@ -165,6 +200,12 @@ public class RideController {
         }
     }
 
+    // Feature: Check ownership, face verification and timing before releasing a booking to the
+    // driver queue.
+    // Where: RideController.dispatchRide() below.
+    // How: dispatchRide() uses rideService.getRideById() and rideService.saveRide() to read,
+    // validate or save the data for this operation. The return/exception handling below supplies
+    // its result to the caller.
     @PostMapping("/{id}/dispatch")
     public ResponseEntity<?> dispatchRide(@PathVariable Long id) {
         try {
@@ -194,6 +235,12 @@ public class RideController {
         }
     }
 
+    // Feature: Find the selected ride and record cancellation using the checks and fields in this
+    // block.
+    // Where: RideController.cancelRide() below.
+    // How: cancelRide() uses rideService.getRideById() and rideService.saveRide() to read, validate
+    // or save the data for this operation. The return/exception handling below supplies its result
+    // to the caller.
     /**
      * POST /api/rides/{id}/cancel
      * Cancel a ride
@@ -239,6 +286,10 @@ public class RideController {
         }
     }
 
+    // Feature: Handle the completion request for the selected ride and return the updated result.
+    // Where: RideController.completeRide() below.
+    // How: completeRide() uses rideService.updateRideStatus() to read, validate or save the data
+    // for this operation. The return/exception handling below supplies its result to the caller.
     /**
      * POST /api/rides/{id}/complete
      * Mark a ride as completed
@@ -255,6 +306,11 @@ public class RideController {
         }
     }
 
+    // Feature: Check the rider feedback request and store the driver rating and optional comment.
+    // Where: RideController.rateDriver() below.
+    // How: rateDriver() uses rideService.getRideById(), rideService.saveRide() and
+    // driverRepository.findByUserId() to read, validate or save the data for this operation. The
+    // return/exception handling below supplies its result to the caller.
     @PostMapping("/{id}/rating")
     public ResponseEntity<?> rateDriver(
             @PathVariable Long id,
@@ -312,6 +368,11 @@ public class RideController {
         }
     }
 
+    // Feature: Check the driver feedback request and store the rider rating and optional comment.
+    // Where: RideController.rateRider() below.
+    // How: rateRider() uses rideService.getRideById(), rideService.saveRide() and
+    // jdbcTemplate.queryForObject() to read, validate or save the data for this operation. The
+    // return/exception handling below supplies its result to the caller.
     @PostMapping("/{id}/rider-rating")
     public ResponseEntity<?> rateRider(
             @PathVariable Long id,
@@ -361,6 +422,11 @@ public class RideController {
         }
     }
 
+    // Feature: Check that the reporter belongs to the ride, then save the SOS alert and available
+    // coordinates.
+    // Where: RideController.sosAlert() below.
+    // How: sosAlert() loads the ride, checks its rider/assigned driver against currentUserId(),
+    // copies available GPS into SosAlert and saves it through sosAlertRepository.
     /**
      * POST /api/rides/{id}/sos
      * Send SOS alert for a ride
@@ -405,6 +471,11 @@ public class RideController {
         try { return Double.valueOf(value.toString()); } catch (NumberFormatException ignored) { return null; }
     }
 
+    // Feature: Check access to the ride alert and save the uploaded audio evidence and duration.
+    // Where: RideController.uploadSosAudio() below.
+    // How: uploadSosAudio() uses rideService.getRideById(), sosAlertRepository.findById() and
+    // sosAlertRepository.save() to read, validate or save the data for this operation. The
+    // return/exception handling below supplies its result to the caller.
     @PutMapping("/{id}/sos/{alertId}/audio")
     public ResponseEntity<?> uploadSosAudio(@PathVariable Long id, @PathVariable Long alertId,
                                             @RequestParam("audio") MultipartFile audio,
@@ -459,11 +530,21 @@ public class RideController {
     }
 
     // Utility method to get the current user ID from security context
+    // Feature: Read the signed-in account identifier from Spring Security instead of trusting a
+    // client-supplied identity.
+    // Where: RideController.currentUserId() below.
+    // How: currentUserId() uses SecurityContextHolder.getContext() and Long.valueOf() to
+    // build/check the result returned by the code below.
     private Long currentUserId() {
         String userId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         return Long.valueOf(userId);
     }
 
+    // Feature: Build the client ride response and include the related driver details when
+    // available.
+    // Where: RideController.rideResponse() below.
+    // How: rideResponse() calls addDriverDetails() in this class to carry out the operation. Any
+    // failed checks stop the operation with the exception shown below.
     private Map<String, Object> rideResponse(Ride ride) {
         Map<String, Object> response = new HashMap<>();
         response.put("id", ride.getId());
@@ -488,6 +569,12 @@ public class RideController {
         return response;
     }
 
+    // Feature: Look up the assigned driver and add the available contact and vehicle details to the
+    // response.
+    // Where: RideController.addDriverDetails() below.
+    // How: addDriverDetails() uses userRepository.findById() and driverRepository.findByUserId() to
+    // read, validate or save the data for this operation. The return/exception handling below
+    // supplies its result to the caller.
     private void addDriverDetails(Map<String, Object> response, Long driverId) {
         if (driverId == null) {
             return;

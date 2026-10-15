@@ -1,6 +1,14 @@
+// Rider booking: choose locations, review the route and payment method, then verify a face before
+// creating a ride. This screen also follows the active trip, messages, cancellation, SOS and driver
+// rating.
+// Where: mobile/src/screens/HomeScreen.tsx; start at HomeScreen(), then follow the named actions
+// below.
+// How: HomeScreen() renders the screen and keeps its form/list/progress values in React state.
+// pollMessages(), checkForActiveRide() and startRidePolling() contain the API calls; ApiClient.ts
+// adds the /api base path and saved login token.
+/** Coordinates immediate ride booking, active-trip polling, messaging and rider SOS evidence. */
 import ScrollableCard from '../components/ScrollableCard';
 import useMapResize from '../hooks/useMapResize';
-// mobile/src/screens/HomeScreen.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -38,13 +46,11 @@ import {
   Search,
   X,
   Car,
-  Clock,
   Clock as ClockIcon,
   CalendarDays,
   Route,
   Check,
   Navigation,
-  AlertCircle,
   Phone,
   MessageCircle,
   Star,
@@ -67,8 +73,6 @@ import { colors, radius, spacing, font, shadow } from '../theme/theme';
 const MAX_SOS_RECORDING_SECONDS = 60;
 const SOS_AUDIO_SEGMENT_SECONDS = 5;
 import apiClient from '../services/ApiClient';
-
-
 
 // Web - Use Leaflet with dynamic import
 let MapContainer: any = null;
@@ -176,6 +180,10 @@ const OSRM_ROUTE_URL = 'https://router.project-osrm.org/route/v1/driving';
 const PHOTON_SEARCH_URL = 'https://photon.komoot.io/api/';
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 
+// Feature: Calculate an approximate straight-line distance between two coordinates.
+// Where: HomeScreen.distanceKm() below.
+// How: distanceKm() converts coordinate differences to radians and uses the formula below to
+// estimate straight-line distance. This is separate from the OSRM driving-route distance.
 function distanceKm(a: Coords, b: Coords): number {
   const R = 6371;
   const dLat = ((b.latitude - a.latitude) * Math.PI) / 180;
@@ -317,10 +325,19 @@ async function getRoute(start: Coords, end: Coords): Promise<{
   }
 }
 
+// Feature: Convert routing service points into the latitude/longitude objects used by the map.
+// Where: HomeScreen.routeToMapCoords() below.
+// How: routeToMapCoords() maps each routing point into the latitude/longitude object shape consumed
+// by the map component.
 function routeToMapCoords(routeCoords: RoutePoint[]): Coords[] {
   return routeCoords.map(([lng, lat]) => ({ latitude: lat, longitude: lng }));
 }
 
+// Feature: Estimate a point along the route for the displayed progress; this calculation is not a
+// fresh GPS reading.
+// Where: HomeScreen.interpolateRoute() below.
+// How: interpolateRoute() uses the progress argument and neighbouring route points to calculate a
+// displayed point. It does not contact device GPS.
 function interpolateRoute(route: Coords[], progress: number): Coords {
   if (!route.length) return FALLBACK_REGION;
   const index = Math.min(route.length - 1, Math.max(0, Math.floor(progress * route.length)));
@@ -331,6 +348,10 @@ const BASE_FARE = 5;
 const RATE_PER_KM = 4;
 const DRIVER_START_POINT: Coords = { latitude: -28.7587766, longitude: 24.759741 };
 
+// Feature: Calculate the displayed fare estimate from the route distance using the formula below.
+// Where: HomeScreen.estimateFare() below.
+// How: estimateFare() uses its distance argument in the exact fare formula returned below; the
+// calling screen displays that estimate and includes it in the booking draft.
 function estimateFare(km: number) {
   const fare = BASE_FARE + km * RATE_PER_KM;
   return Math.round(fare * 2) / 2;
@@ -343,6 +364,10 @@ function getGreeting() {
   return 'Good evening';
 }
 
+// Feature: Estimate the route direction so the displayed car icon points along the route.
+// Where: HomeScreen.getRouteHeading() below.
+// How: getRouteHeading() compares the current position with nearby route points and calculates the
+// angle used by createDriverCarIcon().
 function getRouteHeading(position: Coords, routePoints: Coords[]): number {
   if (routePoints.length < 2) return 0;
   let nearestIndex = 0;
@@ -361,16 +386,7 @@ function getRouteHeading(position: Coords, routePoints: Coords[]): number {
 }
 
 // Web Map Component
-const WebMap = ({
-  userLocation,
-  destination,
-  routePoints,
-  places,
-  onLocationSelect,
-  loading,
-  driverPosition,
-  driverMarker,
-}: {
+const WebMap = ({ userLocation, destination, routePoints, loading, driverPosition, driverMarker }: {
   userLocation: Coords;
   destination: CampusLocation | null;
   routePoints: Coords[];
@@ -381,7 +397,7 @@ const WebMap = ({
   driverDestination?: Coords;
   driverMarker?: boolean;
 }) => {
-  const [mapReady, setMapReady] = useState(false);
+  const [, setMapReady] = useState(false);
   const [mapError, setMapError] = useState(false);
 
   useEffect(() => {
@@ -407,32 +423,10 @@ const WebMap = ({
     }
   }, []);
 
-  const createMarkerIcon = (color: string, size: number = 16, emoji?: string) => {
-    if (typeof window === 'undefined' || !MapContainer) return null;
-    try {
-      const L = require('leaflet');
-      return L.divIcon({
-        className: 'custom-marker',
-        html: `<div style="
-          background-color: ${color}; 
-          width: ${size}px; 
-          height: ${size}px; 
-          border-radius: 50%; 
-          border: 3px solid white; 
-          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: ${emoji ? '16px' : '0'};
-        ">${emoji || ''}</div>`,
-        iconSize: [size, size],
-        iconAnchor: [size/2, size/2],
-      });
-    } catch (e) {
-      return null;
-    }
-  };
-  
+  // Feature: Build a coloured location marker for the browser map.
+  // Where: HomeScreen.createLocationPinIcon() below.
+  // How: createLocationPinIcon() uses require() and L.divIcon() in the block below to carry out
+  // this step.
   const createLocationPinIcon = (color: string, size: number = 28) => {
     if (typeof window === 'undefined' || !MapContainer) return null;
     const pinHeight = Math.round(size * 1.35);
@@ -455,6 +449,10 @@ const WebMap = ({
     }
   };
 
+  // Feature: Build the browser map car marker using its displayed direction.
+  // Where: HomeScreen.createDriverCarIcon() below.
+  // How: createDriverCarIcon() uses require() and L.divIcon() in the block below to carry out this
+  // step.
   const createDriverCarIcon = (heading: number) => {
     if (typeof window === 'undefined' || !MapContainer) return null;
     try {
@@ -718,9 +716,7 @@ export default function HomeScreen() {
   const [cancellationNoticeVisible, setCancellationNoticeVisible] = useState(false);
   const cancellationNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [driverName, setDriverName] = useState('');
-  const [driverRating, setDriverRating] = useState(0);
-  const [driverCar, setDriverCar] = useState('');
-  const [driverPlate, setDriverPlate] = useState('');
+
   const [driverPhone, setDriverPhone] = useState('');
   const [tripStatus, setTripStatus] = useState<'enroute' | 'arrived' | 'started' | 'completed'>('enroute');
   const [timeRemaining, setTimeRemaining] = useState(0);
@@ -763,7 +759,7 @@ export default function HomeScreen() {
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD'>('CASH');
   const [savedPaymentCards, setSavedPaymentCards] = useState<SavedPaymentCard[]>([]);
   const [selectedCard, setSelectedCard] = useState('');
-  const [paymentRide, setPaymentRide] = useState<RideRequest | null>(null);
+
   const [pollingInterval, setPollingInterval] = useState<ReturnType<typeof setInterval> | null>(null);
 
   // Real search + real nearby places state
@@ -788,7 +784,7 @@ export default function HomeScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const driverFadeAnim = useRef(new Animated.Value(0)).current;
-  const progressAnim = useRef(new Animated.Value(0)).current;
+
   const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const rotateLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
@@ -809,6 +805,10 @@ export default function HomeScreen() {
   // ===== CLEAR DRIVER NAVIGATION =====
   // Wipes the route polyline, the car marker and stops the animation loop.
   // Called when the trip is completed so nothing is left on the map.
+  // Feature: Clear stored route/progress state for the displayed driver journey.
+  // Where: HomeScreen.clearDriverNavigation() below.
+  // How: setDriverRoutePoints() and setDriverCarPosition() update React state, which redraws the
+  // related screen content.
   const clearDriverNavigation = () => {
     driverRouteRequestRef.current += 1; // invalidate any in-flight route fetch
     setDriverRoutePoints([]);
@@ -938,6 +938,11 @@ export default function HomeScreen() {
   }, [driverHeadingToPickup, ridePickupLat, ridePickupLng, rideDestLat, rideDestLng]);
 
   // Check if user has an active ride
+  // Feature: Restore a saved active ride from the backend when this screen opens.
+  // Where: HomeScreen.checkForActiveRide() below.
+  // How: checkForActiveRide() uses apiClient.get('/rides/active') through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend. setCurrentRide() and
+  // setCurrentRideId() update React state, which redraws the related screen content.
   const checkForActiveRide = async () => {
     try {
       const response = await apiClient.get('/rides/active');
@@ -963,9 +968,7 @@ export default function HomeScreen() {
 
           if (response.data.driver) {
             setDriverName(response.data.driver.fullName);
-            setDriverRating(response.data.driver.rating || 0);
-            setDriverCar(`${response.data.driver.vehicleMake} ${response.data.driver.vehicleModel}`);
-            setDriverPlate(response.data.driver.licencePlate);
+
             setDriverPhone(response.data.driver.phone || '');
 
             Animated.timing(driverFadeAnim, {
@@ -992,6 +995,12 @@ export default function HomeScreen() {
   };
 
   // Poll for ride updates
+  // Feature: Repeatedly fetch ride progress and update assignment, trip stages and completion
+  // information.
+  // Where: HomeScreen.startRidePolling() below.
+  // How: startRidePolling() repeatedly gets /rides/${rideId}/status. Its timer reads the returned
+  // stage/driver details and updates the waiting, active-trip and completion state; clearInterval()
+  // stops an older polling timer.
   const startRidePolling = (rideId: string) => {
     if (pollingInterval) clearInterval(pollingInterval);
 
@@ -1025,9 +1034,7 @@ export default function HomeScreen() {
 
           if (ride.driver) {
             setDriverName(ride.driver.fullName);
-            setDriverRating(ride.driver.rating || 0);
-            setDriverCar(`${ride.driver.vehicleMake} ${ride.driver.vehicleModel}`);
-            setDriverPlate(ride.driver.licencePlate);
+
             setDriverPhone(ride.driver.phone || '');
 
             Animated.timing(driverFadeAnim, {
@@ -1205,6 +1212,11 @@ export default function HomeScreen() {
     rotateLoopRef.current?.stop();
   };
 
+  // Feature: Retrieve nearby place suggestions for the current pickup coordinates.
+  // Where: HomeScreen.loadNearbyPlaces() below.
+  // How: loadNearbyPlaces() uses fetchNearbyPlaces() in the block below to carry out this step.
+  // setNearbyLoading() and setNearbyPlaces() update React state, which redraws the related screen
+  // content.
   const loadNearbyPlaces = async (coords: Coords) => {
     setNearbyLoading(true);
     const places = await fetchNearbyPlaces(coords);
@@ -1212,6 +1224,12 @@ export default function HomeScreen() {
     setNearbyLoading(false);
   };
 
+  // Feature: Request the current device position and update pickup information or show location
+  // help.
+  // Where: HomeScreen.detectLocation() below.
+  // How: detectLocation() calls requestCurrentLocation(), copies the coordinates into pickup state
+  // and loads nearby suggestions. On failure, location help explains the retry/manual-pickup
+  // options.
   const detectLocation = async () => {
     setLocationHelp(null);
     setLocating(true);
@@ -1233,6 +1251,11 @@ export default function HomeScreen() {
     }
   };
 
+  // Feature: Update destination search and request suggestions after the search delay.
+  // Where: HomeScreen.handleSearch() below.
+  // How: handleSearch() uses clearTimeout(), text.trim() and searchPlacesByText() in the block
+  // below to carry out this step. setSearch() and setShowSearchResults() update React state, which
+  // redraws the related screen content.
   const handleSearch = (text: string) => {
     setSearch(text);
 
@@ -1258,6 +1281,11 @@ export default function HomeScreen() {
     }, 400);
   };
 
+  // Feature: Update pickup search and request suggestions after the search delay.
+  // Where: HomeScreen.handlePickupSearch() below.
+  // How: handlePickupSearch() uses clearTimeout(), text.trim() and searchPlacesByText() in the
+  // block below to carry out this step. setPickupSearch() and setPickupSearchResults() update React
+  // state, which redraws the related screen content.
   const handlePickupSearch = (text: string) => {
     setPickupSearch(text);
 
@@ -1280,6 +1308,10 @@ export default function HomeScreen() {
     }, 400);
   };
 
+  // Feature: Request a driving route and update the map line, distance and duration.
+  // Where: HomeScreen.updateRoute() below.
+  // How: updateRoute() calls the route helper for pickup and dropoff, then sets routePoints,
+  // routeDistance and routeDuration so the map, fare and time display update together.
   const updateRoute = async (pickup: Coords, dropoff: CampusLocation) => {
     setRouting(true);
     try {
@@ -1297,6 +1329,11 @@ export default function HomeScreen() {
     }
   };
 
+  // Feature: Set the chosen pickup and refresh route information when a destination exists.
+  // Where: HomeScreen.selectPickupLocation() below.
+  // How: selectPickupLocation() uses loadNearbyPlaces() and updateRoute() in the block below to
+  // carry out this step. setUserLocation() and setPickupLabel() update React state, which redraws
+  // the related screen content.
   const selectPickupLocation = (location: CampusLocation) => {
     setUserLocation(location.coords);
     setPickupLabel(location.address ? `${location.name}, ${location.address}` : location.name);
@@ -1310,6 +1347,11 @@ export default function HomeScreen() {
     showToast(`Pickup set to ${location.name}`, 'green');
   };
 
+  // Feature: Set the chosen destination and prepare the route and booking details.
+  // Where: HomeScreen.handleLocationSelect() below.
+  // How: handleLocationSelect() uses updateRoute() in the block below to carry out this step.
+  // setDestination() and setDestSheetVisible() update React state, which redraws the related screen
+  // content.
   const handleLocationSelect = async (location: CampusLocation) => {
     setDestination(location);
     setDestSheetVisible(false);
@@ -1349,6 +1391,11 @@ export default function HomeScreen() {
   const fare = tripDistanceKm > 0 ? estimateFare(tripDistanceKm) : 0;
   const etaMinutes = routeDuration || (destination ? (tripDistanceKm / 25) * 60 : 0);
 
+  // Feature: Prepare the immediate ride details and payment selection before face verification.
+  // Where: HomeScreen.handleRequestRide() below.
+  // How: handleRequestRide() builds rideData from userLocation, destination and fare.
+  // setPendingRideDraft() keeps it locally; /users/me/payment-methods and /users/me provide the
+  // saved payment choices before setPaymentVisible(true).
   const handleRequestRide = async () => {
     if (!destination) {
       showToast('Please select a destination first', 'red');
@@ -1430,6 +1477,12 @@ export default function HomeScreen() {
     }
   };
 
+  // Feature: Keep the chosen payment details and open face verification before creating the
+  // booking.
+  // Where: HomeScreen.confirmPayment() below.
+  // How: confirmPayment() adds paymentMethod and the chosen card last four digits to
+  // pendingRideDraft. It hides payment selection and opens RideFaceVerification instead of saving a
+  // ride yet.
   const confirmPayment = async () => {
     if (!pendingRideDraft) return;
     const chosenCard = savedPaymentCards.find((card) => card.id === selectedCard);
@@ -1443,6 +1496,12 @@ export default function HomeScreen() {
     setFaceVerificationVisible(true);
   };
 
+  // Feature: Send the prepared ride with its face confirmation and keep the request identifier
+  // stable for retries.
+  // Where: HomeScreen.submitFaceVerifiedRide() below.
+  // How: submitFaceVerifiedRide() posts pendingRideDraft and faceVerificationToken to
+  // /rides/request. RideController calls RideService.requestRide(), which stores the ride/payment.
+  // The client then uses the returned ride to continue its booking flow.
   const submitFaceVerifiedRide = async (verificationToken: string) => {
     if (!pendingRideDraft) throw new Error('Ride details are missing. Choose your route again.');
     const response = await apiClient.post('/rides/request', {
@@ -1451,12 +1510,16 @@ export default function HomeScreen() {
     const newRide = response.data;
     setCurrentRideId(newRide.id);
     setCurrentRide(newRide);
-    setPaymentRide(newRide);
+
     setFaceVerificationVisible(false);
     setPendingRideDraft(null);
     startFindingDriversFlow(String(newRide.id));
   };
 
+  // Feature: Show the waiting screen for the newly saved ride and follow driver acceptance.
+  // Where: startFindingDriversFlow(), called after submitFaceVerifiedRide() receives a ride ID.
+  // How: reset the waiting state, start its animation/time counter and call startRidePolling().
+  // The polling function reads /rides/${rideId}/status to notice assignment and trip progress.
   const startFindingDriversFlow = (rideId: string) => {
     activeTripShownForRideRef.current = null;
     if (activeTripTransitionRef.current) {
@@ -1518,11 +1581,21 @@ export default function HomeScreen() {
     }).start();
   };
 
+  // Feature: Open a cancellation confirmation while waiting for a driver.
+  // Where: HomeScreen.handleCancelSearch() below.
+  // How: setCancelReason() and setCancelDialogVisible() update React state, which redraws the
+  // related screen content.
   const handleCancelSearch = () => {
     setCancelReason('');
     setCancelDialogVisible(true);
   };
 
+  // Feature: Send the cancellation reason and update the local trip view after the backend
+  // responds.
+  // Where: HomeScreen.handleConfirmRideCancellation() below.
+  // How: handleConfirmRideCancellation() posts the cancellation reason to the selected
+  // /rides/.../cancel endpoint. The response updates the trip view and closes the waiting/active
+  // flow as appropriate.
   const handleConfirmRideCancellation = async () => {
     if (cancelling) return;
     const reason = cancelReason.trim();
@@ -1574,6 +1647,10 @@ export default function HomeScreen() {
     }
   };
 
+  // Feature: Open the phone app using the available driver contact number.
+  // Where: HomeScreen.handleCallDriver() below.
+  // How: handleCallDriver() uses driverPhone.replace() and Linking.openURL() in the block below to
+  // carry out this step.
   const handleCallDriver = () => {
     if (driverPhone) {
       const phoneUrl = `tel:${driverPhone.replace(/[^\d+]/g, '')}`;
@@ -1585,6 +1662,10 @@ export default function HomeScreen() {
     }
   };
 
+  // Feature: Open the conversation linked to this ride.
+  // Where: HomeScreen.handleMessageDriver() below.
+  // How: setUnreadMessageCount() and setChatVisible() update React state, which redraws the related
+  // screen content.
   const handleMessageDriver = () => {
     const rideId = currentRideId || (currentRide?.id ? String(currentRide.id) : null);
     if (rideId) {
@@ -1595,6 +1676,11 @@ export default function HomeScreen() {
     }
   };
 
+  // Feature: Show the available ride sharing actions.
+  // Where: HomeScreen.openShareRideSheet() below.
+  // How: openShareRideSheet() uses shareSheetAnim.setValue(), Animated.timing() and Easing.out() in
+  // the block below to carry out this step. setShareRideVisible() update React state, which redraws
+  // the related screen content.
   const openShareRideSheet = () => {
     setShareRideVisible(true);
     shareSheetAnim.setValue(0);
@@ -1606,6 +1692,11 @@ export default function HomeScreen() {
     }).start();
   };
 
+  // Feature: Close the ride sharing panel.
+  // Where: HomeScreen.closeShareRideSheet() below.
+  // How: closeShareRideSheet() uses Animated.timing() and Easing.in() in the block below to carry
+  // out this step. setShareRideVisible() update React state, which redraws the related screen
+  // content.
   const closeShareRideSheet = () => {
     Animated.timing(shareSheetAnim, {
       toValue: 0,
@@ -1619,6 +1710,10 @@ export default function HomeScreen() {
 
   const shareLink = currentRideId ? `campusconnect.app/t/${currentRideId}` : '';
 
+  // Feature: Copy the prepared ride information/link through the available clipboard API.
+  // Where: HomeScreen.handleCopyRideLink() below.
+  // How: handleCopyRideLink() uses navigator.clipboard.writeText() and Share.share() in the block
+  // below to carry out this step.
   const handleCopyRideLink = async () => {
     try {
       if (Platform.OS === 'web' && navigator.clipboard) {
@@ -1632,6 +1727,10 @@ export default function HomeScreen() {
     }
   };
 
+  // Feature: Open WhatsApp or SMS with the prepared ride text for the user to share.
+  // Where: HomeScreen.handleShareRide() below.
+  // How: handleShareRide() uses encodeURIComponent() and Linking.openURL() in the block below to
+  // carry out this step.
   const handleShareRide = async (channel: 'whatsapp' | 'sms') => {
     const text = `Track my CampusConnect ride: ${shareLink}`;
     const url =
@@ -1645,11 +1744,19 @@ export default function HomeScreen() {
     }
   };
 
+  // Feature: Open the SOS confirmation for the current trip.
+  // Where: HomeScreen.handleSOS() below.
+  // How: setSosVisible() and setSosDispatched() update React state, which redraws the related
+  // screen content.
   const handleSOS = async () => {
     setSosVisible(true);
     setSosDispatched(false);
   };
 
+  // Feature: Request microphone access and start the browser or native audio recording.
+  // Where: HomeScreen.startSosRecording() below.
+  // How: startSosRecording() uses MediaRecorder for browser audio or Audio.Recording for native
+  // audio. Recorder refs keep the active recording, and timers update the shown recording duration.
   const startSosRecording = async () => {
     if (Platform.OS === 'web') {
       if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
@@ -1682,6 +1789,12 @@ export default function HomeScreen() {
     sosRecordingRef.current = recording;
   };
 
+  // Feature: Create the trip alert with available location and start collecting permitted audio
+  // evidence.
+  // Where: HomeScreen.confirmSOS() below.
+  // How: confirmSOS() gets the current ride ID and available position, then posts
+  // /rides/${rideId}/sos. RideController.sosAlert() saves the alert; the returned alert ID links
+  // later audio uploads to that record.
   const confirmSOS = async () => {
     if (sosSending) return;
     setSosSending(true);
@@ -1723,6 +1836,10 @@ export default function HomeScreen() {
     }
   };
 
+  // Feature: Stop or rotate the recording and attach the collected evidence to the saved alert.
+  // Where: HomeScreen.finishSosRecording() below.
+  // How: finishSosRecording() stops/rotates the current recorder, builds an audio FormData payload
+  // and sends it to the saved ride alert. Recorder and stream refs allow microphone cleanup.
   const finishSosRecording = async (continueRecording = false) => {
     if (sosUploadingRef.current) return;
     sosUploadingRef.current = true;
@@ -1780,6 +1897,10 @@ export default function HomeScreen() {
     }
   };
 
+  // Feature: Upload the collected browser audio segment for the current alert.
+  // Where: HomeScreen.uploadWebSosSegment() below.
+  // How: uploadWebSosSegment() builds audio from the buffered browser chunks and sends it to
+  // /rides/.../sos/.../audio with the saved session token.
   const uploadWebSosSegment = async () => {
     const alertId = sosAlertIdRef.current;
     const rideId = currentRideId || (currentRide?.id ? String(currentRide.id) : null);
@@ -1860,6 +1981,10 @@ export default function HomeScreen() {
   }, []);
 
   // ===== COMPLETE TRIP: clear nav then go to rating =====
+  // Feature: Send the trip completion action and prepare the feedback flow.
+  // Where: HomeScreen.handleCompleteTrip() below.
+  // How: handleCompleteTrip() uses clearDriverNavigation(), closeFindingDrivers() and
+  // navigation.navigate() in the block below to carry out this step.
   const handleCompleteTrip = async () => {
     try {
       const completedRideId = currentRideId || (currentRide?.id ? String(currentRide.id) : null);
@@ -1888,6 +2013,11 @@ export default function HomeScreen() {
     }
   };
 
+  // Feature: Submit the selected driver rating and optional comment for the completed trip.
+  // Where: HomeScreen.handleRateDriver() below.
+  // How: handleRateDriver() submits the selected rating/comment to the ride rating endpoint.
+  // RideController.rateDriver() checks and stores feedback; the client clears or closes its
+  // completed-trip view after success.
   const handleRateDriver = async () => {
     if (!currentRideId) {
       showToast('The completed ride could not be found. Please refresh your dashboard.', 'red');
@@ -1942,29 +2072,6 @@ export default function HomeScreen() {
     }
   };
 
-  const getStatusColor = () => {
-    switch (tripStatus) {
-      case 'enroute':
-        return colors.blue;
-      case 'arrived':
-        return colors.green;
-      case 'started':
-        return colors.orange;
-      case 'completed':
-        return colors.green;
-      default:
-        return colors.blue;
-    }
-  };
-
-  // Compute ETA display from driver progress + trip duration
-  const driverEtaDisplay = useMemo(() => {
-    if (driverIsArrivalPhase) return 'Arrived';
-    if (tripCompleted) return 'Completed';
-    const baseDuration = currentRide?.duration || routeDuration || 5;
-    const remaining = Math.max(1, Math.round(baseDuration * (1 - driverProgress)));
-    return `~${remaining} min`;
-  }, [driverProgress, driverIsArrivalPhase, tripCompleted, currentRide?.duration, routeDuration]);
 
   const renderMap = () => {
     if (Platform.OS === 'web') {
@@ -3021,6 +3128,7 @@ export default function HomeScreen() {
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minHeight: 0, minWidth: 0, backgroundColor: colors.gray50 },
   chatOverlay: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end', zIndex: 100 },
@@ -3541,14 +3649,7 @@ const styles = StyleSheet.create({
     color: colors.gray700,
     marginTop: 2,
   },
-  driverPlate: {
-    fontFamily: font.semibold,
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.gray600,
-    letterSpacing: 0.8,
-    marginTop: 1,
-  },
+
   driverVehiclePreview: { width: 82, alignItems: 'center', gap: 4, marginLeft: spacing.xs },
   driverVehicleImage: { width: 78, height: 48, borderRadius: radius.sm, backgroundColor: colors.gray100 },
   driverVehiclePlaceholder: { alignItems: 'center', justifyContent: 'center' },
@@ -3677,24 +3778,6 @@ const styles = StyleSheet.create({
   cancelNoticeText: { color: colors.gray700, fontFamily: font.medium, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: spacing.sm },
   cancelNoticeHint: { color: colors.gray400, fontFamily: font.medium, fontSize: 11, textAlign: 'center', marginTop: spacing.md },
 
-  waitingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: radius.full,
-    backgroundColor: 'rgba(76, 175, 80, 0.15)',
-    marginTop: spacing.md,
-    alignSelf: 'center',
-  },
-  waitingText: {
-    fontFamily: font.medium,
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.green,
-  },
-
   // Active Trip styles
   activeMapContainer: {
     height: 200,
@@ -3705,12 +3788,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.gray200,
   },
-  activeMapPlaceholder: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.md,
-  },
+
   activeMapStatus: {
     position: 'absolute',
     top: spacing.md,
@@ -3731,58 +3809,13 @@ const styles = StyleSheet.create({
     shadowRadius: 7,
     elevation: 5,
   },
-  mapOverlay: {
-    alignItems: 'center',
-    width: '100%',
-  },
-  routeLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '80%',
-    marginBottom: spacing.md,
-  },
-  routeDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.green,
-    borderWidth: 2,
-    borderColor: colors.gray100,
-  },
-  routeDotEnd: {
-    backgroundColor: colors.blue,
-  },
-  routeLineBar: {
-    flex: 1,
-    height: 3,
-    backgroundColor: colors.gray300,
-    marginHorizontal: 4,
-  },
-  mapStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.white,
-    borderWidth: 1.5,
-    borderColor: colors.white,
-  },
+
   mapStatusText: {
     flexShrink: 1,
     fontFamily: font.semibold,
     fontSize: 12,
     fontWeight: '600',
     color: colors.white,
-  },
-  mapETA: {
-    fontFamily: font.medium,
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.88)',
   },
 
   activeDriverCard: {
@@ -3919,27 +3952,7 @@ const styles = StyleSheet.create({
     color: colors.white,
     letterSpacing: 0.4,
   },
-  driverActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  shareRideButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-    minHeight: 46,
-    marginTop: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.gray200,
-    borderRadius: radius.full,
-    backgroundColor: colors.white,
-  },
-  shareRideButtonText: {
-    fontFamily: font.bold,
-    fontSize: 13,
-    color: colors.gray800,
-  },
+
   actionButton: {
     position: 'relative',
     flex: 1,
@@ -3974,96 +3987,6 @@ const styles = StyleSheet.create({
     borderColor: colors.white,
   },
   unreadMessageBadgeText: { color: colors.white, fontFamily: font.bold, fontSize: 10 },
-
-  tripProgress: {
-    backgroundColor: colors.white,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.gray200,
-  },
-  progressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  progressTitle: {
-    fontFamily: font.medium,
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.gray600,
-  },
-  progressPercent: {
-    fontFamily: font.bold,
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.green,
-  },
-  progressBar: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.gray200,
-    overflow: 'hidden',
-    marginBottom: spacing.md,
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  progressSteps: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  progressStep: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  progressStepActive: {
-    opacity: 1,
-  },
-  progressStepDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.gray300,
-  },
-  progressStepDotActive: {
-    backgroundColor: colors.green,
-  },
-  progressStepText: {
-    fontFamily: font.regular,
-    fontSize: 8,
-    color: colors.gray400,
-    textTransform: 'uppercase',
-  },
-  progressStepTextActive: {
-    color: colors.gray900,
-  },
-  progressStepLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.gray200,
-  },
-
-  sosButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: radius.lg,
-    backgroundColor: colors.red,
-    marginBottom: spacing.sm,
-  },
-  sosButtonText: {
-    fontFamily: font.bold,
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.white,
-  },
 
   ratingBackdrop: {
     flex: 1,
@@ -4399,17 +4322,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     alignItems: 'center',
   },
-  cancelAction: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  cancelActionText: {
-    fontFamily: font.semibold,
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.6)',
-  },
+
   completeAction: {
     backgroundColor: colors.green,
   },

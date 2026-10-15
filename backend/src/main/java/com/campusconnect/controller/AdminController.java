@@ -1,3 +1,9 @@
+// Administrator API: provide dashboard totals, account status changes, driver approval, incident
+// evidence and university settings.
+// Where: AdminController handles /api/admin; @GetMapping/@PostMapping/@PutMapping identify the
+// actions below.
+// How: Spring reads request fields/path IDs, invokes these controller methods and returns their
+// ResponseEntity. Service/repository/JDBC calls inside the methods perform the actual work.
 package com.campusconnect.controller;
 
 import com.campusconnect.entity.Driver;
@@ -24,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/** Provides administrator reporting, driver approval, account management and university settings endpoints. */
 @RestController
 @RequestMapping("/api/admin")
 @CrossOrigin(origins = "*")
@@ -78,6 +85,11 @@ public class AdminController {
         return getStats();
     }
 
+    // Feature: Retrieve account information for the administrator user list.
+    // Where: AdminController.getUsers() below.
+    // How: getUsers() uses jdbcTemplate.queryForList() and users.add() to read, validate or save
+    // the data for this operation. The return/exception handling below supplies its result to the
+    // caller.
     @GetMapping("/users")
     public ResponseEntity<List<Map<String, Object>>> getUsers() {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
@@ -95,6 +107,11 @@ public class AdminController {
         return ResponseEntity.ok(users);
     }
 
+    // Feature: Apply the requested account status change and return the saved result.
+    // Where: AdminController.updateUserStatus() below.
+    // How: updateUserStatus() uses userRepository.findById() and userRepository.save() to read,
+    // validate or save the data for this operation. The return/exception handling below supplies
+    // its result to the caller.
     @PutMapping("/users/{id}/status")
     public ResponseEntity<Map<String, Object>> updateUserStatus(
             @PathVariable Long id,
@@ -118,6 +135,11 @@ public class AdminController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    // Feature: Build ride monitoring records, including related account and vehicle information.
+    // Where: AdminController.getRideMonitoring() below.
+    // How: getRideMonitoring() uses jdbcTemplate.queryForList() and rides.add() to read, validate
+    // or save the data for this operation. The return/exception handling below supplies its result
+    // to the caller.
     @GetMapping("/rides/monitoring")
     public ResponseEntity<List<Map<String, Object>>> getRideMonitoring() {
         String sql = "SELECT r.ride_id, r.status, r.pickup_location, r.destination, "
@@ -162,6 +184,10 @@ public class AdminController {
         return ResponseEntity.ok(rides);
     }
 
+    // Feature: Retrieve incident records and format them for administrator review.
+    // Where: AdminController.getIncidents() below.
+    // How: getIncidents() uses jdbcTemplate.queryForList() to read, validate or save the data for
+    // this operation. The return/exception handling below supplies its result to the caller.
     @GetMapping("/incidents")
     public ResponseEntity<List<Map<String, Object>>> getIncidents() {
         String sql = "SELECT s.alert_id, s.status AS incident_status, s.audio_file_path, "
@@ -197,6 +223,11 @@ public class AdminController {
         return ResponseEntity.ok(incidents);
     }
 
+    // Feature: Retrieve saved university settings or use the default settings when no row exists.
+    // Where: AdminController.getSettings() below.
+    // How: getSettings() uses jdbcTemplate.queryForList() and jdbcTemplate.update() to read,
+    // validate or save the data for this operation. The return/exception handling below supplies
+    // its result to the caller.
     @GetMapping("/settings")
     public ResponseEntity<Map<String, Object>> getSettings() {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
@@ -218,6 +249,11 @@ public class AdminController {
         return ResponseEntity.ok(settingsResponse(rows.get(0)));
     }
 
+    // Feature: Validate the submitted university settings and save the values.
+    // Where: AdminController.updateSettings() below.
+    // How: updateSettings() uses jdbcTemplate.queryForList() and jdbcTemplate.update() to read,
+    // validate or save the data for this operation. The return/exception handling below supplies
+    // its result to the caller.
     @PutMapping("/settings")
     public ResponseEntity<?> updateSettings(@RequestBody Map<String, Object> request) {
         String universityName = textValue(request.get("universityName"));
@@ -292,6 +328,10 @@ public class AdminController {
         }
     }
 
+    // Feature: Retrieve the details of one recorded incident.
+    // Where: AdminController.getIncident() below.
+    // How: getIncident() uses id.equals() and incident.get() to build/check the result returned by
+    // the code below.
     @GetMapping("/incidents/{id}")
     public ResponseEntity<Map<String, Object>> getIncident(@PathVariable Long id) {
         return getIncidents().getBody().stream()
@@ -301,6 +341,10 @@ public class AdminController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    // Feature: Find the incident audio file and return it as an evidence response when present.
+    // Where: AdminController.getIncidentAudio() below.
+    // How: getIncidentAudio() uses jdbcTemplate.queryForList() to read, validate or save the data
+    // for this operation. The return/exception handling below supplies its result to the caller.
     @GetMapping("/incidents/{id}/audio")
     public ResponseEntity<Resource> getIncidentAudio(@PathVariable Long id) {
         List<Map<String, Object>> incidents = jdbcTemplate.queryForList(
@@ -333,6 +377,11 @@ public class AdminController {
         };
     }
 
+    // Feature: Calculate dashboard totals from the current database records.
+    // Where: AdminController.buildStats() below.
+    // How: buildStats() uses jdbcTemplate.queryForObject(), jdbcTemplate.queryForList() and
+    // userRepository.count() to read, validate or save the data for this operation. The
+    // return/exception handling below supplies its result to the caller.
     private Map<String, Object> buildStats() {
         var zone = java.time.ZoneId.of("Africa/Johannesburg");
         var today = java.time.LocalDate.now(zone);
@@ -367,6 +416,11 @@ public class AdminController {
         if (value == null) throw new IllegalStateException("Count unavailable");
         return value;
     }
+    // Feature: Build application cards from driver approval records and their linked accounts.
+    // Where: AdminController.buildPendingApprovals() below.
+    // How: buildPendingApprovals() uses jdbcTemplate.queryForList() to read, validate or save the
+    // data for this operation. The return/exception handling below supplies its result to the
+    // caller.
     private List<Map<String, Object>> buildPendingApprovals(Driver.ApprovalStatus approvalStatus) {
         String sql = "SELECT d.driver_id AS driver_id, d.user_id AS user_id, u.full_name, u.email, u.student_number, u.phone, u.year_of_study, u.application_documents, " +
                 "d.licence_plate, d.vehicle_make, d.vehicle_year, u.created_at " +
@@ -411,6 +465,10 @@ public class AdminController {
         }
     }
 
+    // Feature: Retrieve driver applications for the requested approval state.
+    // Where: AdminController.getPendingDriverApprovals() below.
+    // How: getPendingDriverApprovals() calls buildPendingApprovals() in this class to carry out the
+    // operation. Any failed checks stop the operation with the exception shown below.
     @GetMapping("/driver-approvals")
     public ResponseEntity<List<Map<String, Object>>> getPendingDriverApprovals(
             @RequestParam(value = "status", required = false, defaultValue = "PENDING") String status
@@ -425,6 +483,12 @@ public class AdminController {
         return ResponseEntity.ok(buildPendingApprovals(approvalStatus));
     }
 
+    // Feature: Find the chosen application document and return its stored content to the
+    // administrator.
+    // Where: AdminController.getApplicationDocument() below.
+    // How: getApplicationDocument() uses driverRepository.findById() and userRepository.findById()
+    // to read, validate or save the data for this operation. The return/exception handling below
+    // supplies its result to the caller.
     @GetMapping("/driver-approvals/{id}/documents/{kind}")
     public ResponseEntity<?> getApplicationDocument(@PathVariable Long id, @PathVariable String kind) throws Exception {
         if (!List.of("proof", "licence", "vehicle").contains(kind)) return ResponseEntity.notFound().build();
@@ -445,18 +509,31 @@ public class AdminController {
         return ResponseEntity.ok(buildPendingApprovals(Driver.ApprovalStatus.PENDING));
     }
 
+    // Feature: Apply the approved decision through the shared driver approval handler.
+    // Where: AdminController.approveDriver() below.
+    // How: approveDriver() calls updateDriverApproval() in this class to carry out the operation.
+    // Any failed checks stop the operation with the exception shown below.
     @PostMapping("/driver-approvals/{id}/approve")
     @Transactional
     public ResponseEntity<?> approveDriver(@PathVariable("id") Long id) {
         return updateDriverApproval(id, Driver.ApprovalStatus.APPROVED);
     }
 
+    // Feature: Apply the rejected decision through the shared driver approval handler.
+    // Where: AdminController.rejectDriver() below.
+    // How: rejectDriver() calls updateDriverApproval() in this class to carry out the operation.
+    // Any failed checks stop the operation with the exception shown below.
     @PostMapping("/driver-approvals/{id}/reject")
     @Transactional
     public ResponseEntity<?> rejectDriver(@PathVariable("id") Long id) {
         return updateDriverApproval(id, Driver.ApprovalStatus.REJECTED);
     }
 
+    // Feature: Update the driver and linked account decision, then queue the notification email.
+    // Where: AdminController.updateDriverApproval() below.
+    // How: updateDriverApproval() uses driverRepository.findByIdForUpdate(),
+    // driverRepository.save() and userRepository.findById() to read, validate or save the data for
+    // this operation. The return/exception handling below supplies its result to the caller.
     private ResponseEntity<?> updateDriverApproval(Long id, Driver.ApprovalStatus status) {
         return driverRepository.findByIdForUpdate(id)
                 .map(driver -> {

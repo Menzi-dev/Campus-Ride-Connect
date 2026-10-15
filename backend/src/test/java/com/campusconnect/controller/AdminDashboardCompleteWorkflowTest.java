@@ -1,3 +1,10 @@
+// Test feature: check admin dashboard complete workflow behaviour using the cases below. These
+// cases start the Spring application with test configuration; database-backed cases need the
+// separate test database.
+// Where: AdminDashboardCompleteWorkflowTest in this file, including
+// testCompleteAdminApprovalWorkflow().
+// How: SpringBootTest starts the application with test configuration. The test methods exercise its
+// services/endpoints; database-backed cases use backend/src/test/resources/application.properties.
 package com.campusconnect.controller;
 
 import com.campusconnect.dto.AuthRequest;

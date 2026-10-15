@@ -1,3 +1,11 @@
+// Driver request details: load the selected request and let the driver decline or start face
+// verification. Accept the ride only after the backend returns a face confirmation.
+// Where: mobile/src/screens/ViewRideDetailsScreen.tsx; start at ViewRideDetailsScreen(), then
+// follow the named actions below.
+// How: ViewRideDetailsScreen() renders the screen and keeps its form/list/progress values in React
+// state. loadRideDetails(), acceptVerifiedRide() and handleDecline() contain the API calls;
+// ApiClient.ts adds the /api base path and saved login token.
+/** Loads one driver request and starts face verification before submitting ride acceptance. */
 // mobile/src/screens/ViewRideDetailsScreen.tsx
 import React, { useState, useEffect } from 'react';
 import {
@@ -18,7 +26,6 @@ import {
   ArrowLeft,
   MapPin,
   Clock,
-  User,
   Star,
   AlertCircle,
   RefreshCw,
@@ -67,6 +74,11 @@ export default function ViewRideDetailsScreen() {
   const [declining, setDeclining] = useState(false);
 
   // Load ride details
+  // Feature: Fetch the selected ride request and update the details screen or show an error.
+  // Where: ViewRideDetailsScreen.loadRideDetails() below.
+  // How: loadRideDetails() uses apiClient.get(`/driver/requests/${route.params.requestId}`) through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend. setRefreshing() and
+  // setDetails() update React state, which redraws the related screen content.
   const loadRideDetails = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
 
@@ -81,7 +93,7 @@ export default function ViewRideDetailsScreen() {
       console.error('  Status:', error?.response?.status);
       console.error('  Message:', error?.response?.data?.error || error?.message);
       console.error('  Full error:', error);
-      
+
       showToast(
         error?.response?.data?.error || 'Failed to load ride details',
         'red'
@@ -97,11 +109,21 @@ export default function ViewRideDetailsScreen() {
     loadRideDetails();
   }, [route.params.requestId]);
 
+  // Feature: Open the face check before assigning the driver to this request.
+  // Where: ViewRideDetailsScreen.handleAccept() below.
+  // How: handleAccept() opens RideFaceVerification in driver mode. acceptVerifiedRide() receives
+  // its successful confirmation and sends the actual acceptance request.
   const handleAccept = async () => {
     if (accepting || declining) return;
     setFaceVerificationVisible(true);
   };
 
+  // Feature: Submit the driver face confirmation with acceptance and open the assigned trip on
+  // success.
+  // Where: ViewRideDetailsScreen.acceptVerifiedRide() below.
+  // How: acceptVerifiedRide() posts faceVerificationToken to
+  // /driver/requests/${route.params.requestId}/accept. DriverController calls
+  // DriverRideAcceptanceService.accept(), then the client opens DriverActiveRide.
   const acceptVerifiedRide = async (verificationToken: string) => {
     setAccepting(true);
     try {
@@ -110,7 +132,7 @@ export default function ViewRideDetailsScreen() {
       });
       setFaceVerificationVisible(false);
       showToast('Ride accepted! Starting navigation...', 'green');
-      
+
       // Navigate to active ride with a small delay to show toast
       setTimeout(() => {
         navigation.replace('DriverActiveRide', { requestId: route.params.requestId });
@@ -127,6 +149,11 @@ export default function ViewRideDetailsScreen() {
     }
   };
 
+  // Feature: Send the request decline action and return from the review flow.
+  // Where: ViewRideDetailsScreen.handleDecline() below.
+  // How: handleDecline() uses apiClient.post(`/driver/requests/${route.params.requestId}/decline`)
+  // through mobile/src/services/ApiClient.ts to exchange data with the backend. setDeclining()
+  // update React state, which redraws the related screen content.
   const handleDecline = async () => {
     if (declining || accepting) return;
 
@@ -319,6 +346,7 @@ export default function ViewRideDetailsScreen() {
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: {
     flex: 1, minWidth: 0, minHeight: 0,

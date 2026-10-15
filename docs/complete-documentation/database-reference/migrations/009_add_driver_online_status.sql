@@ -1,4 +1,0 @@
-USE campus_connect;
-
-ALTER TABLE drivers
-    ADD COLUMN online BOOLEAN NOT NULL DEFAULT FALSE;

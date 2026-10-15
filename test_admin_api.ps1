@@ -1,4 +1,9 @@
 #!/usr/bin/env powershell
+# Administrator API check: exercise the selected admin requests and inspect their responses.
+# Where: test_admin_api.ps1.
+# How: PowerShell runs the commands below in order. Its variables supply local inputs; launch
+# commands start a service and any Invoke-RestMethod/Invoke-WebRequest calls exchange data with API
+# endpoints.
 
 # Test script to verify admin endpoints
 

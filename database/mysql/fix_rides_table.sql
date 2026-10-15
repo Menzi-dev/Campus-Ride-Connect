@@ -1,5 +1,12 @@
+-- Ride table repair: run the rebuild steps written below. This is a maintenance operation, not a
+-- normal ride booking request.
 -- Quick migration script to fix the rides table
 -- Run this in MySQL if the schema updates don't apply automatically
+-- Where: SQL statements in database/mysql/fix_rides_table.sql, involving IF, rides and
+-- CURRENT_TIMESTAMP.
+-- How: MySQL executes these statements directly. CREATE/ALTER change structure;
+-- INSERT/UPDATE/DELETE change rows when present. Java entities/repositories use the resulting
+-- application tables.
 
 USE campus_connect;
 

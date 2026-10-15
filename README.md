@@ -1,334 +1,194 @@
-<div align="center">
+﻿# CampusConnect
 
-# CampusConnect
+Campus ride booking and safety app for riders, drivers, university administrators
+and campus security. The client uses Expo/React Native and TypeScript; the backend
+uses Spring Boot, Java 25 and MySQL. A local Python service compares face images.
 
-### Safe campus rides, always.
+## Source layout
 
-A campus transport and safety platform connecting students, drivers, university administrators, and campus security.
+- `mobile/index.js` registers `mobile/App.tsx`, the application's route registry.
+- `mobile/src/screens` contains the screens registered by the app.
+- `mobile/src/components` contains shared navigation, dialogs and face scanning.
+- `mobile/src/hooks` manages map resizing and driver SOS recording/uploading.
+- `mobile/src/services` provides authenticated API requests and device location.
+- `backend/src/main/java/com/campusconnect` contains controllers, services,
+  entities, repositories and authentication.
+- `backend/src/main/resources` configures the backend.
+- `backend/src/test` contains backend regression tests and isolated test settings.
+- `backend/config` contains private local settings and public configuration examples.
+- `backend/face-matcher` contains the Python matching service and its tests.
+- `database/mysql` contains schema and migration scripts.
+- `mobile/scripts` contains the HTTPS preview proxy and mocked browser checks.
 
-![Expo](https://img.shields.io/badge/Expo-57-000020?logo=expo&logoColor=white)
-![React Native](https://img.shields.io/badge/React_Native-0.86-20232A?logo=react&logoColor=61DAFB)
-![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)
-![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5-6DB33F?logo=springboot&logoColor=white)
-![Java](https://img.shields.io/badge/Java-25-ED8B00)
-![MySQL](https://img.shields.io/badge/MySQL-Database-4479A1?logo=mysql&logoColor=white)
+Installed dependencies, local models, HTTPS certificates, build caches and
+`backend/uploads` support development or application data. They are ignored by
+Git. Uploaded driver documents and SOS evidence are application records.
 
-[Explore the app](#a-look-inside) · [Run locally](#run-locally) · [Architecture](#architecture) · [Documentation](#documentation) · [Contribute](#contributing)
+The Markdown guides in `docs` explain API endpoints, configuration, verification,
+security and testing. Report packages and generated document copies are excluded.
 
-</div>
+## Application flow
 
----
-
-## Why CampusConnect?
-
-Getting to class, returning to residence, or travelling across town should be easy to arrange. CampusConnect brings ride booking, driver operations, and campus safety workflows into one application, with dedicated experiences for each role.
-
-The interface is configured around Sol Plaatje University in Kimberley, South Africa, with rand-denominated fares and university settings. Riders can request or schedule transport, drivers can manage trips and earnings, and university teams can review applications, monitor rides, and handle reported incidents.
-
-**Project status:** an actively developed full-stack prototype with web validation and Android/iOS client support. Public deployment, production hardening, and complete physical-device validation remain open work. See [current limitations](#current-limitations) before deploying.
-
-## A look inside
-
-<table>
-  <tr>
-    <td align="center" width="33%"><strong>Welcome & sign-in</strong><br><br><img src="docs/images/sign-in.png" width="240" alt="CampusConnect sign-in screen with role selection and account recovery"></td>
-    <td align="center" width="33%"><strong>Book a campus ride</strong><br><br><img src="docs/images/rider-booking.png" width="240" alt="Rider booking screen showing a route, pickup, destination and estimated fare"></td>
-    <td align="center" width="33%"><strong>Plan your next trip</strong><br><br><img src="docs/images/scheduled-rides.png" width="240" alt="Scheduled ride screen with route selection and date and time controls"></td>
-  </tr>
-  <tr>
-    <td align="center"><strong>Driver earnings</strong><br><br><img src="docs/images/driver-earnings.png" width="240" alt="Driver earnings screen showing completed ride totals and monthly comparisons"></td>
-    <td align="center"><strong>University operations</strong><br><br><img src="docs/images/admin-dashboard.png" width="240" alt="Administrator dashboard showing users, drivers, ride statistics and approval management"></td>
-    <td align="center"><strong>Campus configuration</strong><br><br><img src="docs/images/university-settings.png" width="240" alt="University settings screen with institution details and safety configuration"></td>
-  </tr>
-</table>
-
-Screenshots were supplied in the project owner's *Campus Connct full picture document.docx* and extracted without modification. They illustrate captured app states; displayed fares, counts, and safety indicators are not measured service results or guarantees. These captures may differ from the latest code.
-
-## Built for four roles
-
-| Role | Experience |
-| --- | --- |
-| **Student / rider** | Select pickup and destination, preview routes and fares, request or schedule a ride, follow an active trip, message the driver, review trip history, and leave a rating. |
-| **Driver** | Submit an application, switch availability, review and accept requests, progress through trip stages, update location, message riders, and review earnings and completed trips. |
-| **Administrator** | Review driver applications, approve or reject drivers, manage users, monitor rides, inspect incidents and audio evidence, and configure university settings. |
-| **Campus security** | Monitor active rides, review SOS alerts and available evidence, record dispatch actions, and inspect resolved alerts. |
-
-### Features that connect the experience
-
-- **Accounts and recovery:** role-based navigation, JWT authentication, BCrypt password hashing, and email reset codes with expiry and attempt controls.
-- **Ride coordination:** map-based booking, scheduling, request handling, trip status updates, history, and ratings.
-- **Communication:** ride-specific messaging and trip-sharing controls.
-- **Safety workflows:** rider and driver SOS reporting, GPS context, audio evidence, and a security review queue.
-- **Responsive layouts:** shared navigation and layouts for phone, tablet, and desktop web views.
-- **University oversight:** driver approvals, user management, ride monitoring, incident reporting, and configurable institution details.
-
-Face capture, saved payment details, and payment records are present, but biometric identity checks and payment processing are not complete integrations. See [current limitations](#current-limitations).
-
-## How a ride works
-
-1. **Choose the journey.** A rider selects pickup and destination and reviews the route and fare estimate.
-2. **Request transport.** The request becomes available to eligible drivers; drivers review details and accept or decline.
-3. **Follow the trip.** The assigned driver advances trip status while rider and driver can exchange messages.
-4. **Finish and review.** Completed trips appear in history and support ratings and driver earnings summaries.
-5. **Report a concern when needed.** An SOS report can attach location and audio evidence for campus security to review.
-
-For a guided walkthrough, use the [demo script](docs/report/demo-script.md). Validate emergency workflows with synthetic alerts.
-
-## Architecture
-
-```mermaid
-flowchart LR
-    subgraph Client[Expo / React Native client]
-        R[Rider]
-        D[Driver]
-        A[Administrator]
-        S[Campus security]
-    end
-    Client -->|HTTP API / JWT| API[Spring Boot]
-    API -->|JPA / JDBC| DB[(MySQL)]
-    API -->|Reset emails| SMTP[SMTP service]
-    Client --> MAP[Map and routing services]
-    Client --> DEVICE[Camera / location / audio / files]
-```
-
-The client starts at `mobile/index.js` → `mobile/App.tsx`. React Navigation handles screens, Axios handles API requests, and shared layout components keep navigation and content responsive. Web maps use Leaflet; native mapping uses React Native Maps.
-
-The backend serves `/api` on port `8080`. Spring Security and JWT filtering authenticate requests; Spring Data JPA and selected JDBC operations persist accounts, trips, messages, settings, and incident data. Important live views refresh through **client polling**. An included WebSocket dependency does not establish an operational WebSocket transport.
-
-| Layer | Technologies |
-| --- | --- |
-| Application | Expo 57, React Native 0.86, React 19.2, TypeScript 6 |
-| Navigation & networking | React Navigation, Axios, AsyncStorage |
-| Maps & device features | Leaflet, React Native Maps, Expo camera/location/audio/file APIs |
-| Backend | Java 25, Spring Boot 3.5, Spring Security, Spring Data JPA, JDBC |
-| Authentication | JWT via JJWT, BCrypt |
-| Persistence & email | MySQL, Spring Mail / SMTP |
-
-Versions above describe the repository manifests. Detailed component and data notes are in [architecture](docs/architecture.md) and the [data dictionary](docs/report/data-dictionary.md).
+1. Registration collects account details, driver documents where applicable,
+   and guided face enrollment. Riders verify their email; drivers require approval.
+2. Login stores the JWT and user details, then opens the screen for the user's role.
+3. Riders select a route and payment method, complete face verification, and
+   submit an immediate or scheduled request. The backend creates the ride and
+   payment record together and handles submission retries without duplicates.
+4. An approved driver verifies their face before accepting an available request.
+   The backend locks the ride during acceptance to prevent competing assignments.
+5. Active-trip screens poll for updates and messages. Drivers progress the trip
+   through pickup, arrival, start and completion; users can review and rate trips.
+6. Rider and driver SOS flows send an alert and available location/audio evidence.
+   Campus security reviews alerts and records their actions.
+7. A backend scheduler dispatches verified scheduled rides when they become due.
 
 ## Run locally
 
-### Prerequisites
+Requirements: JDK 25, Maven, Node.js/npm, MySQL and Python with virtual environment
+support. Run backend commands from `backend`, and client commands from `mobile`.
+The examples below use PowerShell and the Windows `mvn.cmd`/`npm.cmd` launchers.
 
-- **JDK 25** and Maven available on your terminal path.
-- **Node.js and npm** compatible with the checked-in Expo dependencies.
-- A local **MySQL** server and an account permitted to create and update a disposable development database.
-- Two terminals: one for the backend, one for Expo.
-- For native development: Android SDK/emulator, or macOS with Xcode for iOS.
+### Configure MySQL and email
 
-The commands below use PowerShell. On other shells, adapt environment assignments and use `npm` / `mvn` in place of `npm.cmd` / `mvn.cmd`.
-
-### 1. Get the project
+From the repository root:
 
 ```powershell
-git clone https://github.com/Menzi-dev/Campus-Ride-Connect.git
-Set-Location Campus-Ride-Connect
+Copy-Item backend/config/database.properties.example backend/config/database.properties
+Copy-Item backend/config/mail.properties.example backend/config/mail.properties
 ```
 
-If you already downloaded the project, open the repository directory containing `backend`, `mobile`, and this README.
+Create the private files only if they do not already exist. Edit the database
+file with your MySQL username and password. Edit the mail file with your SMTP
+account, Google App Password and the frontend URL recipients can open.
+Registration verification and password recovery need working email delivery.
+The backend loads these private files from the repository or backend directory.
 
-### 2. Configure and start the backend
-
-Set these values in the **same terminal** that will run Spring Boot. Replace the placeholders with your local settings; never commit credentials.
+The default database is `campus_connect` on localhost:3306. To use a different
+local database, set `SPRING_DATASOURCE_URL` in the backend terminal. Development
+startup updates mapped tables and repairs additional columns/tables; SQL source
+and migrations remain under `database/mysql`. Review migrations before applying
+them to an existing database.
 
 ```powershell
-$env:SPRING_DATASOURCE_URL = 'jdbc:mysql://localhost:3306/campus_connect_dev?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC'
-$env:SPRING_DATASOURCE_USERNAME = '<your-local-mysql-user>'
-$env:SPRING_DATASOURCE_PASSWORD = '<your-local-mysql-password>'
-$env:APP_JWT_SECRET = '<your-random-secret-at-least-32-UTF8-bytes>'
-
 Set-Location backend
 mvn.cmd spring-boot:run
 ```
 
-The backend listens at `http://localhost:8080`; the API base is `http://localhost:8080/api`.
+The API listens on port 8080. Backend startup also creates or updates the built-in
+administrator and security accounts, including their passwords; see
+`CampusConnectApplication.java` when reviewing that development behaviour.
 
-**Database setup:** local JPA configuration uses `ddl-auto: update`, but historical SQL and entity mappings are not fully aligned. Some features also depend on tables used through JDBC. Treat the first startup as development setup, not a verified clean installation. Review [database setup notes](docs/deployment.md) and relevant scripts in `database/mysql/` if a table is missing. Do not run all migrations blindly: some overlap, and `fix_rides_table.sql` rebuilds the rides table.
+### Face matcher setup and automatic startup
 
-### 3. Start the web app
+From the repository root, install it on a new machine:
 
-In a second terminal, from the repository root:
+```powershell
+python -m venv .local-face/venv
+& ./.local-face/venv/Scripts/python.exe -m pip install -r backend/face-matcher/requirements.txt
+New-Item -ItemType Directory -Force .local-face/models
+```
+
+Download the model weights from OpenCV Zoo and retain their licenses:
+
+- [YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet): save as `.local-face/models/yunet.onnx`.
+- [SFace](https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface): save as `.local-face/models/sface.onnx`.
+
+After installation, `mvn.cmd spring-boot:run` starts the matcher automatically
+with the backend. It reuses an already running healthy matcher on port 8090.
+The backend stops only a matcher that it started itself when shutting down.
+Startup output is saved in `.local-face/matcher-backend.log`.
+
+For manual troubleshooting, you can still start it separately:
+
+```powershell
+& ./.local-face/venv/Scripts/python.exe backend/face-matcher/server.py
+```
+
+It listens on 127.0.0.1:8090. Set `FACE_MATCHER_AUTO_START=false` if managing the
+matcher separately. For a backend launched outside the source checkout, set
+`FACE_MATCHER_PROJECT_ROOT` to the directory containing `backend` and `.local-face`.
+Backend startup reports an error if the environment/models are missing or the
+matcher does not become ready; check the setup and the log above.
+Ride verification fails if the matcher is unavailable. Local face similarity and
+browser movement checks do not provide spoof-resistant identity verification.
+
+### Run the client
+
+In another terminal:
 
 ```powershell
 Set-Location mobile
 npm.cmd ci
-npm.cmd run web -- --port 8083
+npm.cmd run web -- --port 8081
 ```
 
-Open `http://localhost:8083`. Keep both terminals running. API-backed screens need the backend and database; an Expo preview alone does not provide them.
+For native development, use `npm.cmd run android` or `npm.cmd run ios` with the
+appropriate SDK. Guided face scanning currently runs in the web client; the
+native component displays instructions to open the secure web link.
 
-### 4. Connect an emulator or phone
+`mobile/src/services/ApiClient.ts` selects localhost for local web/iOS simulator
+requests and 10.0.2.2 for Android emulators. Set its `LOCAL_IP` for a physical
+phone using the computer's LAN address. Camera, microphone and browser location
+need localhost or a trusted HTTPS origin.
 
-From `mobile`, use `npm.cmd start` for the Expo development server, `npm.cmd run android` for an Android native build, or `npm.cmd run ios` on a configured Mac. Native builds need the corresponding platform toolchain; camera and audio behavior require device checks.
-
-API host selection lives in [`mobile/src/services/ApiClient.ts`](mobile/src/services/ApiClient.ts):
-
-| Target | Backend host |
-| --- | --- |
-| Local web browser | Browser hostname, normally `localhost` |
-| Android emulator | `10.0.2.2` |
-| iOS simulator | `localhost` |
-| Physical Android / iPhone | Set `LOCAL_IP` to your computer's reachable LAN address |
-
-For a phone, put both devices on a reachable network and allow backend port `8080` through your local firewall. LAN-hosted web previews may also need an explicit development CORS origin in the backend configuration.
-
-### Email verification and password reset
-
-Configure Gmail once with hidden password entry. The backend then loads the private configuration automatically on every start:
+For HTTPS previews, keep Expo on 8081 and the API on 8080. From the repository root:
 
 ```powershell
-# From the repository root; stop the existing backend first.
-.\backend\configure-email.ps1  # One time only, using your existing App Password
-.\backend\run-with-gmail.ps1
+$env:TLS_KEY = '<path-to-your-local-key>'
+$env:TLS_CERT = '<path-to-your-local-certificate>'
+node mobile/scripts/secure-preview.cjs
 ```
 
-New registrations require email verification; existing accounts retain access. Driver approvals/rejections also generate queued email notifications. See [email configuration and verification](docs/email-account-verification.md) for private settings, HTTPS links, startup commands and delivery tests.
+The proxy listens on 8084 and forwards API/uploads to the backend and client
+requests to Expo. Without TLS settings, use its HTTP port behind a trusted HTTPS
+tunnel. `/phone` provides a phone-shaped preview of the web app.
 
-### Common setup issues
+## Verify changes
 
-| Symptom | What to check |
-| --- | --- |
-| App opens but requests fail | Backend is running on `8080`, the API host matches your device, and the firewall permits the connection. |
-| Browser reports a CORS error | The preview origin is allowed by `SecurityConfig`; LAN origins are not covered by localhost rules. |
-| Backend cannot connect to MySQL | Server availability, database privileges, and the datasource variables in the backend terminal. |
-| A screen reports a missing table | Compare entity mappings and required JDBC tables with [deployment notes](docs/deployment.md) before applying a relevant script. |
-| Password reset email does not arrive | SMTP sender and App Password configuration; consult [email setup](docs/password-reset-email.md). |
-| Java compilation fails | Both Java and Maven are using JDK 25. |
-
-## Repository guide
-
-```text
-Campus-Ride-Connect/
-├── backend/                 Spring Boot API, security, services and tests
-│   └── src/
-│       ├── main/            Java source and application configuration
-│       └── test/            Service and integration tests
-├── mobile/                  Expo / React Native application
-│   ├── App.tsx              Application navigation and entry UI
-│   ├── src/                Screens, components, context and services
-│   └── scripts/            Browser layout and workflow checks
-├── database/mysql/          SQL schema, historical migrations and maintenance
-├── docs/                    Architecture, API, setup and testing notes
-│   ├── images/              Selected screenshots for this README
-│   └── report/              Report, diagrams, data dictionary and demo guide
-└── submission/              Academic submission package
-```
-
-## API at a glance
-
-Local base URL: `http://localhost:8080/api`. Protected calls use `Authorization: Bearer <token>`. Most requests use JSON; registration and evidence uploads include multipart requests.
-
-| Area | Representative endpoints |
-| --- | --- |
-| Authentication | `POST /auth/register`, `POST /auth/login` |
-| Recovery | `POST /auth/password-reset/request`, `/auth/password-reset/verify`, `/auth/password-reset/confirm` |
-| Rider trips | `POST /rides/request`, `GET /rides/active`, `GET /rides/history` |
-| Driver requests | `GET /driver/requests`, `POST /driver/requests/{id}/accept` |
-| Messaging | `GET /rides/{rideId}/messages`, `POST /rides/{rideId}/messages` |
-| Emergency reporting | `POST /rides/{id}/sos`, `PUT /rides/{id}/sos/{alertId}/audio` |
-| Administration | `GET /admin/dashboard/stats`, `POST /admin/driver-approvals/{id}/approve` |
-| Security | `GET /security/sos`, `POST /security/sos/{id}/dispatch` |
-
-See the [API inventory](docs/api-spec.md) and controller source for exact fields, role requirements, and additional endpoints. The inventory is source-based rather than a generated OpenAPI contract.
-
-## Validation
-
-Run the TypeScript check from `mobile`:
+Client type checking includes unused local/parameter checks:
 
 ```powershell
+Set-Location mobile
 npm.cmd run typecheck
+npx.cmd --no-install expo export --platform web --output-dir .expo/validation-export
 ```
 
-Run backend tests from `backend`:
+Backend tests use `campus_connect_tests`; keep MySQL running and retain the
+isolated URL in `backend/src/test/resources/application.properties`:
 
 ```powershell
-# Repository and email dependencies are mocked in these service tests.
-mvn.cmd "-Dtest=AuthServiceTest,PasswordResetServiceTest" test
-
-# Complete suite: requires local MySQL and an isolated test database.
+Set-Location backend
 mvn.cmd test
 ```
 
-The test datasource is configured in `backend/src/test/resources/application.properties` to use `campus_connect_tests`. Ensure that account has appropriate permissions, and never override it with an application database.
-
-Browser checks use a running Expo preview and Playwright with intercepted API responses. Follow the [browser setup instructions](docs/responsive-layout.md), then run from `mobile`:
+From the repository root, with the local models and sample fixtures installed:
 
 ```powershell
+& ./.local-face/venv/Scripts/python.exe backend/face-matcher/test_matching.py
+```
+
+The matcher tests use `.local-face/lena.jpg` and `.local-face/messi5.jpg`, public
+OpenCV sample images, rather than user enrollments.
+
+Browser scripts use mocked API responses. From `mobile`, install their optional
+Playwright tool in an ignored location and start Expo on 8083:
+
+```powershell
+npm.cmd install --prefix .expo/layout-tools --no-save --package-lock=false playwright
+node .expo/layout-tools/node_modules/playwright/cli.js install chromium
+npm.cmd run web -- --offline --port 8083
+```
+
+In another terminal in `mobile`:
+
+```powershell
+$env:PLAYWRIGHT_MODULE = (Resolve-Path '.expo/layout-tools/node_modules/playwright').Path
 npm.cmd run check:responsive
 npm.cmd run check:pages
-node scripts/check-admin-approvals.cjs
-node scripts/check-normal-rating.cjs
 npm.cmd run check:driver-sos
 ```
 
-Recorded project evidence on **5 October 2026** includes a passing TypeScript check and a complete backend suite of **23 tests with no failures or errors**. Browser evidence covers responsive layouts, driver approvals, ride ratings, and driver SOS workflows with synthetic responses. These are recorded results, not a claim that every integration or device has been validated. See [testing notes](docs/testing.md) for scope and remaining checks.
-
-## Current limitations
-
-The repository implements substantial application workflows, with several integrations and deployment requirements still to finish:
-
-| Area | Current boundary |
-| --- | --- |
-| Identity verification | Face uploads and camera UI exist; biometric matching and liveness verification are not implemented. |
-| Payments | Saved-card display metadata and pending payment records exist; there is no evidenced payment-provider integration or actual charging. |
-| Live updates | Important views use polling; operational WebSocket messaging is not established. |
-| SOS operations | Alerts, evidence, and dispatch actions are application workflows; real emergency response and native permissions need separate validation. |
-| Database installation | Historical migrations and JPA mappings need consolidation and a verified clean-install path. |
-| Production security | Privileged self-registration, startup credential resets, response redaction, token handling, and upload retention need hardening. |
-| Deployment & devices | Public deployment, native hardware checks, offline behavior, and full trip integrations remain to be validated. |
-
-See the [security review](docs/security.md) for the observed blockers. Use disposable data while developing and keep credentials, student records, identity documents, and private audio out of public commits.
-
-## Documentation
-
-| Guide | What it covers |
-| --- | --- |
-| [Architecture](docs/architecture.md) | Client, API, database, and external dependencies |
-| [Requirements](docs/requirements.md) | Functional scope and project requirements |
-| [API inventory](docs/api-spec.md) | Source-based endpoint reference |
-| [Local setup & deployment](docs/deployment.md) | Environment configuration and database caveats |
-| [Security review](docs/security.md) | Implemented controls and production blockers |
-| [Testing evidence](docs/testing.md) | Commands, recorded results, and coverage limits |
-| [Responsive layout guide](docs/responsive-layout.md) | Layout behavior and Playwright setup |
-| [Password reset email](docs/password-reset-email.md) | SMTP launcher and sender configuration |
-| [Demo script](docs/report/demo-script.md) | Guided project walkthrough |
-| [Screen catalogue](docs/report/screen-catalogue.md) | Registered routes and evidence types |
-| [Data dictionary](docs/report/data-dictionary.md) | Entities, fields, and relationship notes |
-| [Project report](docs/report/CampusConnect-Final-Report.pdf) | Downloadable technical and academic report |
-
-## Next milestones
-
-- Consolidate database migrations and verify setup against an empty database.
-- Restrict privileged account creation, isolate development seeds, and complete ownership and role checks.
-- Validate full trip workflows, concurrent driver acceptance, and native location/camera/audio permissions.
-- Integrate a payment provider and define appropriate identity-verification requirements.
-- Prepare HTTPS deployment, secret management, backups, and evidence-retention controls.
-- Conduct the planned usability study and record actual participant results.
-
-## Contributing
-
-Issues and focused pull requests are welcome. Describe the affected role and screen, provide reproducible steps, and include the expected behavior. For UI changes, include phone and desktop screenshots using test data.
-
-1. Create a branch for one change.
-2. Keep updates consistent with the existing client and backend structure.
-3. Run the checks relevant to your change and explain their scope in the pull request.
-4. Update setup or API documentation when behavior changes.
-5. Exclude secrets, real account records, uploaded documents, and recordings.
-
-Use the repository's [issue tracker](https://github.com/Menzi-dev/Campus-Ride-Connect/issues) for bugs and feature proposals. Report security concerns privately to the maintainer rather than including sensitive exploit details in a public issue.
-
-## Maintainer & license
-
-Maintained by [Menzi-dev](https://github.com/Menzi-dev). The screenshots and university configuration show the project's campus context; they do not establish official institutional endorsement.
-
-No license file is currently included. Ask the maintainer about permission before redistributing or reusing the project; a public repository alone does not grant an open-source license.
-
----
-
-<div align="center">
-
-**CampusConnect — bringing campus journeys and safety workflows together.**
-
-[Back to top](#campusconnect)
-
-</div>
+Set `APP_URL` when checking another local port. Physical camera, device layout
+and multi-device trip behaviour still require manual testing. Saved card details
+and payment records do not constitute an integrated payment processor.

@@ -1,3 +1,9 @@
+// Rider navigation: display the main rider tabs and identify which route names belong to those
+// tabs.
+// Where: mobile/src/components/BottomNav.tsx.
+// How: BottomNav() renders its tab definitions and uses onSelectTab or React Navigation to switch
+// screens. isRiderTab() checks the route names used by App.tsx.
+/** Renders the shared rider tabs and delegates route changes to the application navigator. */
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -74,6 +80,7 @@ export default function BottomNav({ active, onSelectTab }: { active: ActiveTab; 
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flexShrink: 0, flexDirection: 'row', backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: colors.gray100, paddingTop: 8 },
   tab: {

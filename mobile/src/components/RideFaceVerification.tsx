@@ -1,5 +1,19 @@
+// Ride face check: guide a fresh capture, ask the backend to compare it and keep the returned
+// confirmation for booking or driver acceptance. Show progress, errors and retry actions.
+// Where: mobile/src/components/RideFaceVerification.tsx.
+// How: RideFaceVerification() renders GuidedFaceScan, calls compare() to get a backend token, then
+// calls submit()/onVerified() to continue the parent ride action.
+/** Compares a fresh face scan with the account enrollment before submitting the verified ride action. */
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import GuidedFaceScan, { FaceScanResult } from './GuidedFaceScan';
 import apiClient from '../services/ApiClient';
 
@@ -15,6 +29,12 @@ export default function RideFaceVerification({ draft, scheduled, mode = 'rider',
   const mounted = useRef(true);
   const busy = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  // Feature: Send the fresh scan to the rider or driver comparison endpoint and keep its returned
+  // confirmation.
+  // Where: RideFaceVerification.compare() below.
+  // How: compare() posts the captured JPEG to /face/verify-driver or /face/verify-ride, depending
+  // on mode. RideFaceVerificationController calls RideFaceVerificationService; setToken() stores
+  // the returned confirmation and setPhase() shows success/error.
   async function compare(result: FaceScanResult) {
     if (busy.current) return;
     busy.current = true; setPhase('matching'); setError('');
@@ -28,6 +48,12 @@ export default function RideFaceVerification({ draft, scheduled, mode = 'rider',
       if (mounted.current) { setError(cause?.response?.data?.error || cause?.message || 'Face match failed. Please try again.'); setPhase('error'); }
     } finally { busy.current = false; }
   }
+  // Keep the verified token for submission retries; the backend handles duplicate requests.
+  // Feature: Pass the successful face confirmation to the parent booking or acceptance action.
+  // Where: RideFaceVerification.submit() below.
+  // How: submit() calls the onVerified(token) callback supplied by the parent screen.
+  // HomeScreen/ScheduleRideScreen use it to create a ride; ViewRideDetailsScreen uses it for driver
+  // acceptance.
   async function submit() {
     if (busy.current) return;
     busy.current = true; setPhase('submitting');
@@ -36,9 +62,13 @@ export default function RideFaceVerification({ draft, scheduled, mode = 'rider',
       if (mounted.current) { setError(cause?.response?.data?.error || 'Could not submit your ride. Scan again to retry.'); setPhase('error'); }
     } finally { busy.current = false; }
   }
+  // Feature: Briefly show the successful match, then continue the verified ride action.
+  // Clear the delay when the phase changes so an old timer cannot submit later.
+  // Where: the effect watching phase and token below, following compare() and submit().
+  // How: a matched phase starts a short 300 ms timer that calls submit(); cleanup clears it.
   useEffect(() => {
     if (phase !== 'matched') return;
-    const timer = setTimeout(() => { if (mounted.current) void submit(); }, 1800);
+    const timer = setTimeout(() => { if (mounted.current) void submit(); }, 300);
     return () => clearTimeout(timer);
   }, [phase, token]);
   return <Modal visible transparent animationType="slide" onRequestClose={() => { if (!busy.current) onClose(); }}>
@@ -53,6 +83,7 @@ export default function RideFaceVerification({ draft, scheduled, mode = 'rider',
     </ScrollView></View></View>
   </Modal>;
 }
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: 'rgba(0,0,0,.45)', alignItems: 'center', justifyContent: 'center', padding: 12 },
   card: { width: '100%', maxWidth: 480, maxHeight: '96%', backgroundColor: 'white', borderRadius: 24 },

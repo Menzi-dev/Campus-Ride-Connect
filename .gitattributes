@@ -1,4 +1,4 @@
-# Preserve exported documents and images byte-for-byte.
+# Uploaded documents, images and recordings are binary application assets.
 *.pdf binary
 *.docx binary
 *.zip binary

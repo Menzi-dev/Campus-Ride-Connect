@@ -1,8 +1,14 @@
+// Database record: store ride alert, reporter, location, audio evidence and response information.
+// The annotations map these fields to table columns; the methods below read and update the record.
+// Where: SosAlert in this file maps to the sos_alerts table.
+// How: @Id identifies its record and @Column/@Enumerated define field storage. Repository/service
+// code reads and updates these fields through the methods below.
 package com.campusconnect.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
+/** Maps a ride safety alert, location, response state and available evidence metadata. */
 @Entity
 @Table(name = "sos_alerts")
 public class SosAlert {

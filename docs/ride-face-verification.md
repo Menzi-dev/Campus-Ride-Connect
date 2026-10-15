@@ -1,5 +1,17 @@
 # Account face matching before ride requests
 
+Ride requests and driver acceptance capture one clear, front-facing photo after a
+brief steady hold. No left/right turns or blink challenge are required for these
+ride actions. Registration retains its original five guided movement/blink steps.
+The server still compares the fresh photo with the saved account enrollment;
+front-facing capture does not add spoof-resistant liveness detection.
+
+Enrollment images in `users.face_enrollment_photo` persist across days and backend
+restarts. Older JPEG enrollments in `users.face_embedding` are also supported.
+Only the per-action confirmation expires after 120 seconds. The backend starts
+or reuses the local Python matcher on port 8090 automatically; a stored enrollment
+alone cannot replace that service.
+
 For both immediate and scheduled bookings, route selection opens payment
 selection without creating a ride. Confirming payment opens the guided scan.
 After successful server comparison with the signed-in account's enrollment
@@ -35,14 +47,16 @@ implementation as guaranteed account-owner verification.
 
 ## Run the matcher
 
-The matcher is currently running on this computer. After a restart, from the
-repository root, run:
+After initial installation, starting the backend starts the matcher automatically.
+An existing healthy matcher is reused. Backend-managed processes stop with the
+backend; independently started processes are left running. Startup errors are
+recorded in `.local-face/matcher-backend.log`. To start it manually for troubleshooting:
 
 ```powershell
 & ./backend/face-matcher/run.ps1
 ```
 
-Keep it running alongside the backend and Expo. It binds only 127.0.0.1:8090;
+Set `FACE_MATCHER_AUTO_START=false` when managing it separately. It binds only 127.0.0.1:8090;
 the HTTPS proxy does not expose that port. If unavailable, verification fails
 closed with a retry message. To install on another development computer:
 

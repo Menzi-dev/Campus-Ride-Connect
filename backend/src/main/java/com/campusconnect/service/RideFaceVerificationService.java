@@ -1,3 +1,10 @@
+// Face comparison rules: call the local Python matcher and issue a short-lived confirmation tied to
+// an account and exact ride details. Check and remove a confirmation when it is used.
+// Where: RideFaceVerificationService, starting with verify(), fingerprint() and consume() in this
+// file.
+// How: verify() loads User enrollment via users.findById(), posts reference/probe JSON to Python at
+// 127.0.0.1:8090/compare and checks matched. receipts stores a UUID with userId, fingerprint(draft)
+// and a 120-second expiry.
 package com.campusconnect.service;
 
 import com.campusconnect.dto.RideRequest;
@@ -15,6 +22,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+/** Calls the local face matcher and issues short-lived, single-use confirmations bound to account and ride details. */
 @Service
 public class RideFaceVerificationService {
     private final UserRepository users;
@@ -28,6 +36,12 @@ public class RideFaceVerificationService {
         this.users = users; this.json = json;
     }
 
+    // Feature: Rate-limit repeated scans, compare the fresh image with enrollment through Python
+    // and issue a 120-second confirmation for the exact ride details.
+    // Where: RideFaceVerificationService.verify() below.
+    // How: verify() loads User enrollment via users.findById(), posts reference/probe JSON to
+    // Python at 127.0.0.1:8090/compare and checks matched. receipts stores a UUID with userId,
+    // fingerprint(draft) and a 120-second expiry.
     public String verify(Long userId, String image, RideRequest draft) throws Exception {
         Instant now = Instant.now();
         synchronized (lastAttempts) {
@@ -65,12 +79,23 @@ public class RideFaceVerificationService {
         return token;
     }
 
+    // Feature: Turn the ride details into a comparable value, excluding the confirmation token
+    // itself.
+    // Where: RideFaceVerificationService.fingerprint() below.
+    // How: fingerprint() uses ObjectMapper.valueToTree() and removes faceVerificationToken. The
+    // resulting JSON is compared when consume() checks that booking details have not changed.
     public String fingerprint(RideRequest draft) {
+        // Exclude the receipt token so verification and submission compare the same journey fields.
         var tree = json.valueToTree(draft);
         ((com.fasterxml.jackson.databind.node.ObjectNode) tree).remove("faceVerificationToken");
         return tree.toString();
     }
 
+    // Feature: Build ride-specific details so a driver confirmation cannot be used for a different
+    // request.
+    // Where: RideFaceVerificationService.driverAcceptanceDraft() below.
+    // How: driverAcceptanceDraft() sets clientRequestId to driver-accept plus the ride ID. verify()
+    // and consume() use this same draft to bind a driver confirmation to one request.
     public RideRequest driverAcceptanceDraft(Long rideId, String token) {
         var draft = new RideRequest();
         draft.setClientRequestId("driver-accept:" + rideId);
@@ -78,7 +103,14 @@ public class RideFaceVerificationService {
         return draft;
     }
 
+    // Feature: Check the confirmation owner, expiry and exact details, then remove it so it cannot
+    // authorise another new action.
+    // Where: RideFaceVerificationService.consume() below.
+    // How: consume() looks up receipts with draft.getFaceVerificationToken(), checks userId,
+    // expiresAt and fingerprint(), then removes the receipt. synchronized prevents two requests
+    // consuming it together.
     public synchronized Receipt consume(Long userId, RideRequest draft) {
+        // Synchronize validation and removal so simultaneous requests cannot reuse one receipt.
         String token = draft.getFaceVerificationToken();
         Receipt receipt = token == null ? null : receipts.get(token);
         if (receipt == null || !receipt.userId().equals(userId) || !receipt.expiresAt().isAfter(Instant.now())

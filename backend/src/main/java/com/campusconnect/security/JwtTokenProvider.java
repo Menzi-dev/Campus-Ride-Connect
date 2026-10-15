@@ -1,3 +1,7 @@
+// Login tokens: create signed JWTs and read their user and role claims after validation.
+// Where: generateToken(), validateToken() and parseClaims() in security/JwtTokenProvider.java.
+// How: JJWT signs/reads tokens using the configured key; the token user/role claims are used by
+// JwtAuthenticationFilter.
 package com.campusconnect.security;
 
 import com.campusconnect.entity.User;
@@ -14,6 +18,7 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
+/** Creates, validates and reads JWT claims using the configured signing secret and expiry. */
 @Component
 public class JwtTokenProvider {
 
@@ -30,6 +35,10 @@ public class JwtTokenProvider {
         key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
+    // Feature: Create a signed session token containing the account identifier and role.
+    // Where: JwtTokenProvider.generateToken() below.
+    // How: generateToken() uses now.getTime(), Jwts.builder() and String.valueOf() to build/check
+    // the result returned by the code below.
     public String generateToken(User user) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + expirationMs);
@@ -44,6 +53,9 @@ public class JwtTokenProvider {
                 .compact();
     }
 
+    // Feature: Parse the token and reject an invalid signature, expired token or other token error.
+    // Where: JwtTokenProvider.validateToken() below.
+    // How: validateToken() uses Jwts.parser() to build/check the result returned by the code below.
     public boolean validateToken(String token) {
         try {
             Jwts.parser().setSigningKey(key).build().parseClaimsJws(token);
@@ -61,6 +73,10 @@ public class JwtTokenProvider {
         return parseClaims(token).get("role", String.class);
     }
 
+    // Feature: Read verified token claims using the configured signing key.
+    // Where: JwtTokenProvider.parseClaims() below.
+    // How: parseClaims() uses Jwts.parser() and jws.getBody() to build/check the result returned by
+    // the code below.
     private Claims parseClaims(String token) {
         Jws<Claims> jws = Jwts.parser().setSigningKey(key).build().parseClaimsJws(token);
         return jws.getBody();

@@ -1,3 +1,8 @@
+// Shared card: keep supplied card content scrollable within its layout.
+// Where: mobile/src/components/ScrollableCard.tsx.
+// How: ScrollableCard() renders its children inside a scrollable container with the supplied style;
+// parent screens supply the card content.
+/** Keeps dialog content scrollable within the available screen height. */
 import React from 'react';
 import { ScrollView, StyleSheet, View, StyleProp, ViewStyle } from 'react-native';
 

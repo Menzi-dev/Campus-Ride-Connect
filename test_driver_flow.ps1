@@ -1,4 +1,9 @@
+# Driver API workflow check: exercise the driver calls below and report returned results.
 # Test driver workflow - login then fetch requests
+# Where: test_driver_flow.ps1.
+# How: PowerShell runs the commands below in order. Its variables supply local inputs; launch
+# commands start a service and any Invoke-RestMethod/Invoke-WebRequest calls exchange data with API
+# endpoints.
 $baseUrl = "http://127.0.0.1:8080/api"
 
 # Step 1: Register a driver if not exists

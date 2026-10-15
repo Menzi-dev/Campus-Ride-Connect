@@ -1,5 +1,10 @@
+-- Sample database data: insert the example records defined below for local development.
 -- Test User Seed Data
 -- This creates a test user for development/testing
+-- Where: SQL statements in database/mysql/seed.sql, involving users.
+-- How: MySQL executes these statements directly. CREATE/ALTER change structure;
+-- INSERT/UPDATE/DELETE change rows when present. Java entities/repositories use the resulting
+-- application tables.
 
 USE campus_connect;
 

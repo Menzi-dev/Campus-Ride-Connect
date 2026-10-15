@@ -1,3 +1,8 @@
+// Request authentication: read the bearer token, validate it and set the signed-in user and role
+// for later access checks.
+// Where: doFilterInternal() in config/JwtAuthenticationFilter.java.
+// How: Read Authorization, validate its bearer token with JwtTokenProvider and set Spring Security
+// authentication before continuing the filter chain.
 package com.campusconnect.config;
 
 import com.campusconnect.security.JwtTokenProvider;
@@ -18,6 +23,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.logging.Logger;
 
+/** Validates bearer tokens and loads account verification state before setting request authentication. */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
@@ -46,6 +52,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String userId = jwtTokenProvider.getUserIdFromToken(token);
                 String role = jwtTokenProvider.getRoleFromToken(token);
                 var account = userRepository.findById(Long.valueOf(userId));
+                // Recheck the account on every request; a valid JWT alone cannot bypass verification.
                 if (account.isEmpty() || account.get().requiresEmailVerification()) {
                     SecurityContextHolder.clearContext();
                     response.setStatus(403);

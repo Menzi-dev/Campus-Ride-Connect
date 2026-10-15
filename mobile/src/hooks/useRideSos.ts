@@ -1,3 +1,8 @@
+// Shared SOS flow: create a ride alert, collect available location/audio evidence, retry queued
+// audio uploads and release recording resources on close.
+// Where: useRideSos() in hooks/useRideSos.ts, called by RideSosModal.tsx.
+// How: confirm() posts the alert, startRecording() starts audio, upload()/uploadPendingChunks()
+// attach evidence and finishRecording()/close() release resources.
 import { useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import { Audio } from 'expo-av';
@@ -38,6 +43,11 @@ export default function useRideSos(rideId: number) {
     if (mounted.current) setAudioMessage(message);
   };
 
+  // Feature: Send audio evidence and its duration to the protected ride alert endpoint.
+  // Where: useRideSos.upload() below.
+  // How: upload() adds the duration to FormData and sends PUT
+  // /rides/${rideId}/sos/${alertId.current}/audio. Web fetch attaches the stored token and uses a
+  // timeout; native requests use ApiClient.ts.
   const upload = async (form: FormData) => {
     form.append('duration', String(Math.max(1, Math.min(MAX_SECONDS, elapsed.current))));
     if (Platform.OS === 'web') {
@@ -55,7 +65,13 @@ export default function useRideSos(rideId: number) {
     }
   };
 
+  // Feature: Upload queued browser audio batches in order and keep failed batches for another
+  // attempt.
+  // Where: useRideSos.uploadPendingChunks() below.
+  // How: uploadPendingChunks() waits for uploadTask, removes the next batch from chunks and calls
+  // upload(). Failed batches are put back at the front so evidence can be retried in order.
   const uploadPendingChunks = async () => {
+    // Serialize uploads to keep evidence batches in order when network requests overlap.
     while (uploadTask.current) await uploadTask.current;
     if (!chunks.current.length || !alertId.current) return;
     const batch = chunks.current.splice(0);
@@ -68,6 +84,7 @@ export default function useRideSos(rideId: number) {
         await upload(form);
         updateAudioMessage('Audio evidence saved for Campus Security.');
       } catch {
+        // Put failed evidence back at the front of the queue for the next upload attempt.
         chunks.current.unshift(...batch);
         updateAudioMessage('Security has the SOS alert. Audio upload failed; it will retry while recording.');
         if (mounted.current && !audioWarningShown.current) {
@@ -81,6 +98,12 @@ export default function useRideSos(rideId: number) {
     if (uploadTask.current === task) uploadTask.current = null;
   };
 
+  // Feature: Stop recording, release microphone resources and finish saving available audio
+  // evidence.
+  // Where: useRideSos.finishRecording() below.
+  // How: finishRecording() stops the recorder and its tracks. Web evidence goes through
+  // uploadPendingChunks(); native evidence uses the recording URI and upload(). finally clears
+  // recording refs and state.
   const finishRecording = () => {
     if (finishTask.current) return finishTask.current;
     if (timer.current) clearInterval(timer.current);
@@ -124,6 +147,10 @@ export default function useRideSos(rideId: number) {
     return task;
   };
 
+  // Feature: Request microphone permission and start recording using the platform audio API.
+  // Where: useRideSos.startRecording() below.
+  // How: startRecording() selects MediaRecorder on web or Expo Audio on native devices. It stores
+  // the recorder refs and starts the duration timer so finishRecording() can stop the session.
   const startRecording = async () => {
     if (Platform.OS === 'web') {
       if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') throw new Error('Microphone unavailable');
@@ -162,6 +189,12 @@ export default function useRideSos(rideId: number) {
     }, 1000);
   };
 
+  // Feature: Send the SOS alert and available coordinates, then collect audio when permission is
+  // available.
+  // Where: useRideSos.confirm() below.
+  // How: confirm() in useRideSos gets an available position, posts /rides/${rideId}/sos and stores
+  // the returned ID in alertId. startRecording() then collects evidence when microphone access is
+  // available.
   const confirm = async () => {
     if (sendingRef.current || alertId.current) return;
     sendingRef.current = true;

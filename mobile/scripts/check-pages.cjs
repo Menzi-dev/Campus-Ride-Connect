@@ -1,3 +1,8 @@
+// Browser page checks: exercise account, payment, administrator, security and driver screens using
+// intercepted API responses.
+// Where: mobile/scripts/check-pages.cjs; follow account(), admin() and security().
+// How: Playwright controls Chromium while mocked API routes supply synthetic records. Node
+// assertions check the resulting page/actions; this does not prove real backend integration.
 /* Mocked page/action checks. Never contacts the real backend or dispatches a unit. */
 const assert = require('node:assert/strict');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');

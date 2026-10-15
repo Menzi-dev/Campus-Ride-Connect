@@ -1,3 +1,11 @@
+// Face capture screen: request camera permission and manage the capture steps shown here. Ride
+// identity comparison is handled separately by the ride face verification component and backend.
+// Where: mobile/src/screens/FaceVerificationScreen.tsx; start at FaceVerificationScreen(), then
+// follow the named actions below.
+// How: FaceVerificationScreen() renders the screen and keeps its form/list/progress values in React
+// state. verifyFace() contain the API calls; ApiClient.ts adds the /api base path and saved login
+// token.
+/** Provides photo capture and result display for the registered FaceVerification route. */
 import { useToast } from '../components/Toast';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -6,7 +14,6 @@ import {
   useWindowDimensions,
   Text,
   StyleSheet,
-  TouchableOpacity,
   Animated,
   StatusBar,
   Linking,
@@ -105,17 +112,12 @@ export default function FaceVerificationScreen() {
         type: 'image/jpeg',
       } as any);
 
-      // Right after registration there's no auth token yet, so we identify
-      // the account by email instead. If your backend issues a token at
-      // registration and this screen runs post-login instead, this field
-      // becomes redundant — the backend can identify the user from the
-      // Authorization header on the apiClient request instead.
+      // Include the route's email when this screen is opened before login.
       if (email) {
         formData.append('email', email);
       }
 
-      // Assumed contract — adjust to match your backend:
-      // POST /verification/face  ->  { success: boolean, confidence: number, message?: string }
+      // This legacy route expects success, optional confidence and a result message.
       const response = await apiClient.post('/verification/face', formData);
 
       const { success, confidence: conf, message } = response.data;
@@ -283,6 +285,7 @@ export default function FaceVerificationScreen() {
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.white },
   centered: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xxl },

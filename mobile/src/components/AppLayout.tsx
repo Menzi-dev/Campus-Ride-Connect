@@ -1,3 +1,8 @@
+// Shared page layout: size the content for the current screen and add the rider navigation and
+// device edge spacing where needed.
+// Where: mobile/src/components/AppLayout.tsx.
+// How: AppLayout() uses routeName with screenChrome.ts spacing rules and BottomNav to wrap the
+// supplied children. The shared wrapper is used by App.tsx.
 import React, { useEffect } from 'react';
 import { Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,6 +42,7 @@ export default function AppLayout({ routeName, onSelectTab, children }: Props) {
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   viewport: { flex: 1, minHeight: 0, minWidth: 0, width: '100%', backgroundColor: '#f3f4f6' },
   frame: { flex: 1, minHeight: 0, minWidth: 0, width: '100%', maxWidth: 1200, alignSelf: 'center' },

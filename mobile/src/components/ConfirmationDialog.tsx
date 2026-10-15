@@ -1,3 +1,9 @@
+// Shared confirmation: show the action message and confirm/cancel buttons, including busy and
+// destructive-action states.
+// Where: mobile/src/components/ConfirmationDialog.tsx.
+// How: ConfirmationDialog() reads message, busy and action props. Its buttons call
+// onConfirm/onCancel, so the parent performs the chosen operation.
+/** Presents a scrollable confirmation dialog whose actions remain reachable on small screens. */
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,6 +42,7 @@ export default function ConfirmationDialog({ visible, title, message, confirmLab
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg, backgroundColor: 'rgba(17,24,39,0.45)' },
   card: { width: '100%', maxWidth: 420, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.white },

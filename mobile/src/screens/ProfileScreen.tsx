@@ -1,3 +1,11 @@
+// Rider profile: load account details, update the photo and editable information, and provide
+// sign-out and emergency contact actions.
+// Where: mobile/src/screens/ProfileScreen.tsx; start at ProfileScreen(), then follow the named
+// actions below.
+// How: ProfileScreen() renders the screen and keeps its form/list/progress values in React state.
+// load(), handleSelectPhoto() and handleSaveProfile() contain the API calls; ApiClient.ts adds the
+// /api base path and saved login token.
+/** Loads rider details, profile photos, payment preferences and ratings, with editing and sign-out actions. */
 import { useToast } from '../components/Toast';
 import React, { useCallback, useState } from 'react';
 import {
@@ -81,6 +89,12 @@ export default function ProfileScreen() {
   const [infoModal, setInfoModal] = useState<'promos' | 'support' | 'notifications' | 'safety' | null>(null);
   const [showSignOutConfirmation, setShowSignOutConfirmation] = useState(false);
 
+  // Feature: Retrieve the records used by this screen and update loading, refresh and error
+  // feedback.
+  // Where: ProfileScreen.load() below.
+  // How: load() uses apiClient.get('/users/me') and apiClient.get('/rides/history') through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend. setRefreshing() and
+  // setLoading() update React state, which redraws the related screen content.
   const load = useCallback(async (refresh = false) => {
     refresh ? setRefreshing(true) : setLoading(true);
 
@@ -156,6 +170,11 @@ export default function ProfileScreen() {
     }, [load])
   );
 
+  // Feature: Choose a profile image and prepare it for the profile photo update.
+  // Where: ProfileScreen.handleSelectPhoto() below.
+  // How: handleSelectPhoto() uses apiClient.put('/users/me/profile-photo') through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend. setProfileImage() and
+  // setUser() update React state, which redraws the related screen content.
   const handleSelectPhoto = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -202,6 +221,11 @@ export default function ProfileScreen() {
     }
   };
 
+  // Feature: Remove an unusable cached profile image so the screen can display its fallback.
+  // Where: ProfileScreen.handleProfileImageError() below.
+  // How: handleProfileImageError() uses AsyncStorage.removeItem() and AsyncStorage.setItem() in the
+  // block below to carry out this step. setProfileImage() and setUser() update React state, which
+  // redraws the related screen content.
   const handleProfileImageError = async () => {
     setProfileImage(null);
     const ownerKey = user?.id || user?.email || 'default';
@@ -213,6 +237,11 @@ export default function ProfileScreen() {
     }
   };
 
+  // Feature: Validate editable account fields and save the changes through the profile API.
+  // Where: ProfileScreen.handleSaveProfile() below.
+  // How: handleSaveProfile() uses apiClient.put('/users/me') through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend. setUser() and
+  // setEditModalVisible() update React state, which redraws the related screen content.
   const handleSaveProfile = async () => {
     const nextUser: StoredUser = {
       ...(user || {
@@ -251,11 +280,18 @@ export default function ProfileScreen() {
     }
   };
 
+  // Feature: Remove the saved session and return to the account entry screen.
+  // Where: ProfileScreen.handleSignOut() below.
+  // How: handleSignOut() uses AsyncStorage.multiRemove() and navigation.reset() in the block below
+  // to carry out this step.
   const handleSignOut = async () => {
     await AsyncStorage.multiRemove(['authToken', 'user']);
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
+  // Feature: Open the configured emergency contact through the phone link.
+  // Where: ProfileScreen.handleEmergencyCall() below.
+  // How: handleEmergencyCall() uses Linking.openURL() in the block below to carry out this step.
   const handleEmergencyCall = async () => {
     try {
       await Linking.openURL('tel:10111');
@@ -541,6 +577,7 @@ function Stat({ value, label }: { value: string | number; label: string }) {
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minHeight: 0, minWidth: 0, backgroundColor: colors.gray50 },
   scrollContent: { paddingBottom: spacing.lg },

@@ -1,3 +1,9 @@
+// Test feature: check admin dashboard accuracy behaviour using the cases below. Use the fixtures
+// and any mocked dependencies defined here to exercise success and failure cases.
+// Where: AdminDashboardAccuracyTest in this file, including counts() and
+// liveCountsReplaceHardcodedSosAndSafetyFigures().
+// How: JUnit executes the test methods. Fixtures and any Mockito mocks in this class provide
+// controlled inputs; assertions check the returned values, errors or saved interactions.
 package com.campusconnect.controller;
 
 import com.campusconnect.repository.*;

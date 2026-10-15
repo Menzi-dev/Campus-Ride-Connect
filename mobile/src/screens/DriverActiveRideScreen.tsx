@@ -1,15 +1,47 @@
+// Driver trip: load the assigned ride, display its route and follow trip updates. Provide arrival,
+// start, completion, cancellation, rider contact, chat, SOS and rider rating actions.
+// Where: mobile/src/screens/DriverActiveRideScreen.tsx; start at DriverActiveRideScreen(), then
+// follow the named actions below.
+// How: DriverActiveRideScreen() renders the screen and keeps its form/list/progress values in React
+// state. loadRide(), pollMessages() and pollCancellation() contain the API calls; ApiClient.ts adds
+// the /api base path and saved login token.
+/** Tracks the assigned ride through pickup, arrival, completion, messaging and driver SOS. */
 import useMapResize from '../hooks/useMapResize';
 import Button from '../components/Button';
 import ScrollableCard from '../components/ScrollableCard';
 import RideSosModal from '../components/RideSosModal';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Modal, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, Linking, ScrollView } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  Linking,
+} from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RouteProp } from '@react-navigation/native';
-import { ArrowLeft, Car, Check, MapPin, Navigation, Route as RouteIcon, Phone, MessageCircle, RefreshCw, Siren, Star, X } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  Car,
+  Check,
+  Navigation,
+  Route as RouteIcon,
+  Phone,
+  MessageCircle,
+  RefreshCw,
+  Siren,
+  Star,
+  X,
+} from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Location from 'expo-location';
+
 import { colors, radius, spacing, font, shadow } from '../theme/theme';
 import apiClient from '../services/ApiClient';
 import { useToast } from '../components/Toast';
@@ -71,12 +103,21 @@ async function getRoute(start: Coordinate, end: Coordinate): Promise<Coordinate[
   return (data.routes?.[0]?.geometry?.coordinates || []).map(([longitude, latitude]: number[]) => ({ latitude, longitude }));
 }
 
+// Feature: Estimate a point along the route for the displayed progress; this calculation is not a
+// fresh GPS reading.
+// Where: DriverActiveRideScreen.interpolateRoute() below.
+// How: interpolateRoute() uses the progress argument and neighbouring route points to calculate a
+// displayed point. It does not contact device GPS.
 function interpolateRoute(route: Coordinate[], progress: number): Coordinate {
   if (!route.length) return NORTH_CAPE_MALL;
   const index = Math.min(route.length - 1, Math.floor(progress * route.length));
   return route[index];
 }
 
+// Feature: Estimate the route direction so the displayed car icon points along the route.
+// Where: DriverActiveRideScreen.getRouteHeading() below.
+// How: getRouteHeading() compares the current position with nearby route points and calculates the
+// angle used by createDriverCarIcon().
 function getRouteHeading(position: Coordinate, routePoints: Coordinate[]): number {
   if (routePoints.length < 2) return 0;
   let nearestIndex = 0;
@@ -163,6 +204,11 @@ export default function DriverActiveRideScreen() {
     ? { latitude: ride?.pickupLat || NORTH_CAPE_MALL.latitude, longitude: ride?.pickupLng || NORTH_CAPE_MALL.longitude }
     : { latitude: ride?.destLat || NORTH_CAPE_MALL.latitude, longitude: ride?.destLng || NORTH_CAPE_MALL.longitude };
 
+  // Feature: Retrieve the assigned ride and update the trip state shown on this screen.
+  // Where: DriverActiveRideScreen.loadRide() below.
+  // How: loadRide() uses apiClient.get(`/driver/rides/${route.params.requestId}`) through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend. setRefreshing() and
+  // setRide() update React state, which redraws the related screen content.
   const loadRide = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     try {
@@ -177,6 +223,9 @@ export default function DriverActiveRideScreen() {
   };
 
   // Make call to rider
+  // Feature: Open the phone app using the available rider contact number.
+  // Where: DriverActiveRideScreen.handleCallRider() below.
+  // How: handleCallRider() uses Linking.openURL() in the block below to carry out this step.
   const handleCallRider = () => {
     const phone = ride?.riderPhone?.replace(/[^\d+]/g, '');
     if (!phone) { showToast('The rider has not provided a phone number. Use Message instead.', 'blue'); return; }
@@ -184,6 +233,10 @@ export default function DriverActiveRideScreen() {
   };
 
   // Send message to rider
+  // Feature: Open the conversation linked to this ride.
+  // Where: DriverActiveRideScreen.handleMessageRider() below.
+  // How: setUnreadCount() and setChatVisible() update React state, which redraws the related screen
+  // content.
   const handleMessageRider = () => {
     if (ride) {
       setUnreadCount(0);
@@ -329,6 +382,7 @@ export default function DriverActiveRideScreen() {
   useEffect(() => {
     if (!ride?.id || !['ACCEPTED', 'ENROUTE', 'STARTED'].includes(phase)) return;
     const publishLocation = () => {
+      // Read the latest animated map position from the ref without recreating the polling interval.
       apiClient.post(`/driver/rides/${ride.id}/location`, carPositionRef.current).catch(() => undefined);
     };
     publishLocation();
@@ -336,6 +390,10 @@ export default function DriverActiveRideScreen() {
     return () => clearInterval(interval);
   }, [ride?.id, phase]);
 
+  // Feature: Send the chosen trip stage to the backend and refresh the trip information.
+  // Where: DriverActiveRideScreen.updateStatus() below.
+  // How: updateStatus() posts the requested stage to /driver/rides/${ride.id}/status.
+  // DriverController checks assignment and verification before saving the updated status.
   const updateStatus = async (status: 'ARRIVED' | 'STARTED' | 'COMPLETED') => {
     if (!ride || updating) return;
     setUpdating(true);
@@ -353,11 +411,21 @@ export default function DriverActiveRideScreen() {
     }
   };
 
+  // Feature: Show the cancellation confirmation so the user can review the action first.
+  // Where: DriverActiveRideScreen.openCancellationDialog() below.
+  // How: setCancelReason() and setCancelDialogVisible() update React state, which redraws the
+  // related screen content.
   const openCancellationDialog = () => {
     setCancelReason('');
     setCancelDialogVisible(true);
   };
 
+  // Feature: Send the cancellation reason and update the local trip view after the backend
+  // responds.
+  // Where: DriverActiveRideScreen.handleConfirmRideCancellation() below.
+  // How: handleConfirmRideCancellation() posts the cancellation reason to the selected
+  // /rides/.../cancel endpoint. The response updates the trip view and closes the waiting/active
+  // flow as appropriate.
   const handleConfirmRideCancellation = async () => {
     if (!ride || cancelSubmitting) return;
     const reason = cancelReason.trim();
@@ -382,6 +450,10 @@ export default function DriverActiveRideScreen() {
     }
   };
 
+  // Feature: Validate and submit feedback about the rider for this trip.
+  // Where: DriverActiveRideScreen.submitRiderRating() below.
+  // How: submitRiderRating() sends the stars and optional comment to the ride rider-rating
+  // endpoint. RideController.rateRider() checks the assigned driver and saves the feedback.
   const submitRiderRating = async () => {
     if (!ride || selectedRiderRating < 1 || submittingRating) return;
     setSubmittingRating(true);
@@ -745,6 +817,7 @@ export default function DriverActiveRideScreen() {
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minWidth: 0, minHeight: 0, position: 'relative', backgroundColor: colors.gray50 },
 

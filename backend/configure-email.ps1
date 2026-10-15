@@ -1,3 +1,8 @@
+# Local email setup: prepare mail configuration using the values supplied to this helper.
+# Where: backend/configure-email.ps1.
+# How: PowerShell runs the commands below in order. Its variables supply local inputs; launch
+# commands start a service and any Invoke-RestMethod/Invoke-WebRequest calls exchange data with API
+# endpoints.
 $ErrorActionPreference = 'Stop'
 $taskDirectory = Join-Path $PSScriptRoot 'config'
 $taskFile = Join-Path $taskDirectory 'mail.properties'

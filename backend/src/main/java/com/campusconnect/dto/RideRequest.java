@@ -1,8 +1,14 @@
+// Booking data: carry journey, schedule, fare, payment and face-confirmation details, including the
+// stable identifier used for request retries.
+// Where: RideRequest fields and getters/setters in this file.
+// How: Spring/Jackson reads or writes JSON using these properties. Controllers pass request objects
+// into services or return the response object to the client.
 package com.campusconnect.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/** Carries journey, payment, scheduling and face-confirmation fields for booking and acceptance validation. */
 public class RideRequest {
     private String pickupLocation;
     private String pickupAddress;

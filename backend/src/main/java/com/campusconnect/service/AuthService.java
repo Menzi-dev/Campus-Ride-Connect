@@ -1,3 +1,10 @@
+// Account rules: validate and save registration details, hash passwords and create pending driver
+// profiles. Check login credentials and required email confirmation before returning a session
+// token.
+// Where: AuthService, starting with register() and login() in this file.
+// How: register() checks required fields and unique email, calls passwordEncoder.encode(), saves
+// User through userRepository and creates a PENDING Driver through driverRepository when needed.
+// EmailVerificationService.issue() handles required confirmation.
 package com.campusconnect.service;
 
 import com.campusconnect.dto.AuthRequest;
@@ -19,6 +26,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.Map;
 
+/** Creates role-specific accounts and authenticates passwords before issuing a JWT and user response. */
 @Service
 public class AuthService {
 
@@ -46,6 +54,12 @@ public class AuthService {
         public EmailNotVerifiedException() { super("Verify your email before signing in. You can request a new verification email."); }
     }
 
+    // Feature: Validate account details, hash the password and save enrollment data. Create a
+    // pending profile for a driver and issue required email confirmation.
+    // Where: AuthService.register() below.
+    // How: register() checks required fields and unique email, calls passwordEncoder.encode(),
+    // saves User through userRepository and creates a PENDING Driver through driverRepository when
+    // needed. EmailVerificationService.issue() handles required confirmation.
     @Transactional
     public User register(RegisterRequest request) {
         try {
@@ -155,6 +169,12 @@ public class AuthService {
         }
     }
 
+    // Feature: Find the account by normalised email, check its BCrypt password and required email
+    // verification, then generate a JWT response.
+    // Where: AuthService.login() below.
+    // How: login() uses userRepository.findByEmail(), passwordEncoder.matches() and
+    // requiresEmailVerification(). jwtTokenProvider.generateToken() creates the token returned in
+    // AuthResponse.
     public AuthResponse login(AuthRequest request) {
         User user = userRepository.findByEmail(request.getEmail().trim().toLowerCase(java.util.Locale.ROOT))
                 .orElseThrow(() -> new RuntimeException("Invalid email or password"));

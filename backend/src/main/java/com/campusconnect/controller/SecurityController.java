@@ -1,3 +1,9 @@
+// Campus security API: provide ride and SOS information, record an alert response and return
+// available audio evidence.
+// Where: SecurityController handles /api/security; @GetMapping/@PostMapping/@PutMapping identify
+// the actions below.
+// How: Spring reads request fields/path IDs, invokes these controller methods and returns their
+// ResponseEntity. Service/repository/JDBC calls inside the methods perform the actual work.
 package com.campusconnect.controller;
 
 import org.springframework.core.io.FileSystemResource;
@@ -15,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/** Provides the security ride feed, SOS queue, incident evidence and alert-response actions. */
 @RestController
 @RequestMapping("/api/security")
 @CrossOrigin(origins = "*")
@@ -25,6 +32,10 @@ public class SecurityController {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    // Feature: Return the security dashboard counts from the current rides and alerts.
+    // Where: SecurityController.dashboard() below.
+    // How: dashboard() calls rideRows() and activeSosRows() in this class to carry out the
+    // operation. Any failed checks stop the operation with the exception shown below.
     @GetMapping("/dashboard")
     public ResponseEntity<Map<String, Object>> dashboard() {
         Map<String, Object> response = new LinkedHashMap<>();
@@ -34,11 +45,19 @@ public class SecurityController {
         return ResponseEntity.ok(response);
     }
 
+    // Feature: Return the ride records used by the security monitoring screen.
+    // Where: SecurityController.rides() below.
+    // How: rides() calls rideRows() in this class to carry out the operation. Any failed checks
+    // stop the operation with the exception shown below.
     @GetMapping("/rides")
     public ResponseEntity<List<Map<String, Object>>> rides() {
         return ResponseEntity.ok(rideRows());
     }
 
+    // Feature: Return the active and resolved SOS records for the security screens.
+    // Where: SecurityController.sos() below.
+    // How: sos() calls activeSosRows() and resolvedSosRows() in this class to carry out the
+    // operation. Any failed checks stop the operation with the exception shown below.
     @GetMapping("/sos")
     public ResponseEntity<Map<String, Object>> sos() {
         Map<String, Object> response = new LinkedHashMap<>();
@@ -47,6 +66,10 @@ public class SecurityController {
         return ResponseEntity.ok(response);
     }
 
+    // Feature: Record the selected security response action for an SOS alert.
+    // Where: SecurityController.dispatch() below.
+    // How: dispatch() uses jdbcTemplate.update() to read, validate or save the data for this
+    // operation. The return/exception handling below supplies its result to the caller.
     @PostMapping("/sos/{id}/dispatch")
     public ResponseEntity<?> dispatch(@PathVariable Long id) {
         int updated = jdbcTemplate.update(
@@ -56,6 +79,10 @@ public class SecurityController {
         return ResponseEntity.ok(Map.of("success", true, "message", "Dispatch unit sent to location", "alertId", id));
     }
 
+    // Feature: Return the recorded audio evidence when the alert has an available file.
+    // Where: SecurityController.audio() below.
+    // How: audio() uses jdbcTemplate.queryForList() to read, validate or save the data for this
+    // operation. The return/exception handling below supplies its result to the caller.
     @GetMapping("/sos/{id}/audio")
     public ResponseEntity<Resource> audio(@PathVariable Long id) {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
@@ -72,6 +99,10 @@ public class SecurityController {
         }
     }
 
+    // Feature: Join ride and account information for the security ride list.
+    // Where: SecurityController.rideRows() below.
+    // How: rideRows() uses jdbcTemplate.queryForList() to read, validate or save the data for this
+    // operation. The return/exception handling below supplies its result to the caller.
     private List<Map<String, Object>> rideRows() {
         String sql = "SELECT r.ride_id, r.status, r.pickup_location, r.destination, r.pickup_lat, r.pickup_lng, r.dest_lat, r.dest_lng, r.current_lat, r.current_lng, "
             + "r.created_at, rider.full_name AS rider_name, rider.phone AS rider_phone, driver.full_name AS driver_name, driver.phone AS driver_phone, "
@@ -105,15 +136,27 @@ public class SecurityController {
         return result;
     }
 
+    // Feature: Retrieve alerts matching the active-alert condition.
+    // Where: SecurityController.activeSosRows() below.
+    // How: activeSosRows() calls sosRows() in this class to carry out the operation. Any failed
+    // checks stop the operation with the exception shown below.
     private List<Map<String, Object>> activeSosRows() {
         return sosRows("s.status NOT IN ('RESOLVED', 'CLOSED') "
             + "AND s.created_at >= DATE_SUB(NOW(), INTERVAL 3 HOUR)");
     }
 
+    // Feature: Retrieve alerts matching the resolved-alert condition.
+    // Where: SecurityController.resolvedSosRows() below.
+    // How: resolvedSosRows() calls sosRows() in this class to carry out the operation. Any failed
+    // checks stop the operation with the exception shown below.
     private List<Map<String, Object>> resolvedSosRows() {
         return sosRows("s.status IN ('RESOLVED', 'CLOSED')");
     }
 
+    // Feature: Join alerts to their ride and reporter details using the supplied status condition.
+    // Where: SecurityController.sosRows() below.
+    // How: sosRows() uses jdbcTemplate.queryForList() to read, validate or save the data for this
+    // operation. The return/exception handling below supplies its result to the caller.
     private List<Map<String, Object>> sosRows(String condition) {
         String sql = "SELECT s.alert_id, s.status, s.gps_lat, s.gps_lng, s.created_at, s.audio_file_path, s.recording_duration, "
                 + "s.triggered_by, reporter.full_name AS triggered_by_name, reporter.role AS triggered_by_role, "

@@ -1,6 +1,30 @@
+// Audio evidence: retrieve protected incident audio, play it or save a copy. Release playback
+// resources when leaving the screen.
+// Where: mobile/src/screens/AudioRecordingsScreen.tsx; start at AudioRecordingsScreen(), then
+// follow the named actions below.
+// How: AudioRecordingsScreen() renders the screen and keeps its form/list/progress values in React
+// state. loadIncident(), openRecording() and downloadRecording() contain the API calls;
+// ApiClient.ts adds the /api base path and saved login token.
+/** Loads incident audio with authentication and releases playback resources when the screen loses focus. */
 import React, { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { ArrowDownToLine, ArrowLeft, Headphones, Pause, Play, TriangleAlert } from 'lucide-react-native';
+import {
+  ActivityIndicator,
+  Platform,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import {
+  ArrowDownToLine,
+  ArrowLeft,
+  Headphones,
+  Pause,
+  Play,
+  TriangleAlert,
+} from 'lucide-react-native';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -35,6 +59,9 @@ export default function AudioRecordingsScreen() {
   const audioPath = `${securityRecording ? '/security/sos' : '/admin/incidents'}/${route.params.incidentId}/audio`;
   const recordingUrl = `${apiClient.defaults.baseURL || ''}${audioPath}`;
 
+  // Feature: Stop and release the audio player and any temporary browser audio URL.
+  // Where: AudioRecordingsScreen.releasePlayer() below.
+  // How: releasePlayer() uses URL.revokeObjectURL() in the block below to carry out this step.
   const releasePlayer = useCallback(() => {
     playerRef.current?.pause();
     playerRef.current = null;
@@ -44,6 +71,12 @@ export default function AudioRecordingsScreen() {
     nativeSoundRef.current = null;
   }, []);
 
+  // Feature: Retrieve the selected incident details needed to locate its audio evidence.
+  // Where: AudioRecordingsScreen.loadIncident() below.
+  // How: loadIncident() uses apiClient.get('/security/sos') and
+  // apiClient.get(`/admin/incidents/${route.params.incidentId}`) through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend. setLoading() and
+  // setIncident() update React state, which redraws the related screen content.
   const loadIncident = useCallback(async () => {
     setLoading(true);
     try {
@@ -68,6 +101,10 @@ export default function AudioRecordingsScreen() {
     return () => { focused.current = false; releasePlayer(); };
   }, [loadIncident, releasePlayer]));
 
+  // Feature: Retrieve protected audio and prepare playback for this platform.
+  // Where: AudioRecordingsScreen.openRecording() below.
+  // How: openRecording() retrieves the incident audio through its protected API. It creates a
+  // browser audio URL or uses Expo Audio for native playback; releasePlayer() cleans up the player.
   const openRecording = async () => {
     if (openingRef.current) return;
     openingRef.current = true;
@@ -117,6 +154,10 @@ export default function AudioRecordingsScreen() {
     } finally { openingRef.current = false; setOpening(false); }
   };
 
+  // Feature: Retrieve the available audio evidence and offer a local copy.
+  // Where: AudioRecordingsScreen.downloadRecording() below.
+  // How: downloadRecording() fetches the protected audio and uses the platform file/download
+  // handling below to offer a copy with the matching audio extension.
   const downloadRecording = async () => {
     if (downloadingRef.current) return;
     downloadingRef.current = true;
@@ -185,6 +226,7 @@ export default function AudioRecordingsScreen() {
   </View>;
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
   header: { backgroundColor: colors.white, paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg },

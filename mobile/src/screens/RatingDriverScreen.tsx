@@ -1,5 +1,23 @@
+// Driver feedback: collect a star rating and optional comment, submit them for the selected ride
+// and show the result.
+// Where: mobile/src/screens/RatingDriverScreen.tsx; start at RatingDriverScreen(), then follow the
+// named actions below.
+// How: RatingDriverScreen() renders the screen and keeps its form/list/progress values in React
+// state. submitRating() contain the API calls; ApiClient.ts adds the /api base path and saved login
+// token.
+/** Submits the rider rating and optional comment for the completed ride passed in the route. */
 import React, { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -21,6 +39,11 @@ export default function RatingDriverScreen() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
 
+  // Feature: Validate the selected driver rating and send it with any optional comment.
+  // Where: RatingDriverScreen.submitRating() below.
+  // How: submitRating() uses apiClient.post(`/rides/${route.params.rideId}/rating`) through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend. setSubmitting() and
+  // setError() update React state, which redraws the related screen content.
   const submitRating = async () => {
     if (selectedRating < 1 || submitting) return;
     setSubmitting(true);
@@ -129,6 +152,7 @@ export default function RatingDriverScreen() {
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.white },
   header: {

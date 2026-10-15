@@ -1,4 +1,9 @@
+// Screen layout rules: decide which routes use a native header and which need shared spacing around
+// device edges.
 // These screens already render their own header, or are primary navigation tabs.
+// Where: CUSTOM_HEADERS, OWN_SAFE_AREA and OWN_BOTTOM_INSET in navigation/screenChrome.ts.
+// How: usesNativeHeader(), needsTopInset() and needsBottomInset() check these route sets; App.tsx
+// and AppLayout.tsx use the results for screen layout.
 const CUSTOM_HEADERS = new Set([
   'Landing', 'Login', 'EmailVerification', 'CreateAccount', 'Legal', 'AdminDashboard', 'DriverDashboard',
   'SecurityDashboard', 'Home', 'RiderHistory', 'RiderSchedule', 'RiderProfile',

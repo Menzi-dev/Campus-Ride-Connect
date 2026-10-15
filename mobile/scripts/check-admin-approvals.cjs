@@ -1,3 +1,8 @@
+// Browser approval checks: simulate driver applications, administrator decisions, refresh and
+// failure/retry using mocked API responses.
+// Where: mobile/scripts/check-admin-approvals.cjs; follow the browser check functions.
+// How: Playwright controls Chromium while mocked API routes supply synthetic records. Node
+// assertions check the resulting page/actions; this does not prove real backend integration.
 /* Synthetic API fixtures: no real registration or approval requests. */
 const assert = require('node:assert/strict');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');

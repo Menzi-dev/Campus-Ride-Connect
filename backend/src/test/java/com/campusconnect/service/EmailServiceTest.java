@@ -1,3 +1,9 @@
+// Test feature: check email service behaviour using the cases below. Use the fixtures and any
+// mocked dependencies defined here to exercise success and failure cases.
+// Where: EmailServiceTest in this file, including configure() and
+// missingConfigurationCanFailFastWithoutExposingSecrets().
+// How: JUnit executes the test methods. Fixtures and any Mockito mocks in this class provide
+// controlled inputs; assertions check the returned values, errors or saved interactions.
 package com.campusconnect.service;
 import org.junit.jupiter.api.Test;
 import org.springframework.mail.MailAuthenticationException;

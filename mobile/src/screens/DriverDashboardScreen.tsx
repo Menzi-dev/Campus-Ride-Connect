@@ -1,4 +1,11 @@
-// mobile/src/screens/DriverDashboardScreen.tsx
+// Driver dashboard: load approval status, totals and available ride requests. Let the driver change
+// online status, open a request, decline it or sign out.
+// Where: mobile/src/screens/DriverDashboardScreen.tsx; start at DriverDashboardScreen(), then
+// follow the named actions below.
+// How: DriverDashboardScreen() renders the screen and keeps its form/list/progress values in React
+// state. checkApprovalStatus(), loadDashboardData() and toggleOnline() contain the API calls;
+// ApiClient.ts adds the /api base path and saved login token.
+/** Shows driver availability and incoming requests; accepted rides open the active-ride screen. */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
@@ -12,7 +19,6 @@ import {
   StatusBar,
   Animated,
   Easing,
-  Dimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -131,6 +137,11 @@ export default function DriverDashboardScreen() {
   };
 
   // Load user data
+  // Feature: Read the saved session/account details needed by this screen.
+  // Where: DriverDashboardScreen.loadUserData() below.
+  // How: loadUserData() uses AsyncStorage.getItem() and user.fullName.split() in the block below to
+  // carry out this step. setUserEmail() and setDriverName() update React state, which redraws the
+  // related screen content.
   const loadUserData = async () => {
     try {
       const userStr = await AsyncStorage.getItem('user');
@@ -152,6 +163,11 @@ export default function DriverDashboardScreen() {
   };
 
   // Check if driver is approved
+  // Feature: Retrieve the driver approval state and update the dashboard access information.
+  // Where: DriverDashboardScreen.checkApprovalStatus() below.
+  // How: checkApprovalStatus() reads the backend account/approval response and updates the driver
+  // dashboard state. The backend still performs its own approval check in
+  // DriverRideAcceptanceService.checkDriver().
   const checkApprovalStatus = async (isRefresh = false) => {
     if (isRefresh) setCheckingApproval(true);
 
@@ -165,11 +181,11 @@ export default function DriverDashboardScreen() {
 
       const user = JSON.parse(userStr);
       console.log('Checking approval for user:', user.id);
-      
+
       try {
         const response = await apiClient.get(`/users/${user.id}/status`);
         console.log('Approval response:', response.data);
-        
+
         const approved = response.data?.approved === true;
         setIsApproved(approved);
         if (!approved) waitingForApproval.current = true;
@@ -191,7 +207,7 @@ export default function DriverDashboardScreen() {
         }
       } catch (err: any) {
         console.error('Approval check error:', err?.response?.status);
-        
+
         // Handle 404 as pending
         if (err?.response?.status === 404) {
           console.log('User status not found - treating as pending');
@@ -199,7 +215,7 @@ export default function DriverDashboardScreen() {
           startPulseAnimation();
           return;
         }
-        
+
         // Handle auth errors as pending
         if (err?.response?.status === 401 || err?.response?.status === 403) {
           console.log('Auth error - user not approved');
@@ -207,7 +223,7 @@ export default function DriverDashboardScreen() {
           startPulseAnimation();
           return;
         }
-        
+
         // Other errors - treat as pending
         console.log('Other error in approval check:', err?.message);
         setIsApproved(false);
@@ -222,12 +238,18 @@ export default function DriverDashboardScreen() {
   };
 
   // Load dashboard data from API
+  // Feature: Retrieve the dashboard figures and request list and update loading or error feedback.
+  // Where: DriverDashboardScreen.loadDashboardData() below.
+  // How: loadDashboardData() uses apiClient.get('/driver/stats') and
+  // apiClient.get('/driver/requests') through mobile/src/services/ApiClient.ts to exchange data
+  // with the backend. setRefreshing() and setStats() update React state, which redraws the related
+  // screen content.
   const loadDashboardData = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
 
     try {
       console.log('Loading dashboard data...');
-      
+
       // Verify token is available
       const token = await AsyncStorage.getItem('authToken');
       const user = await AsyncStorage.getItem('user');
@@ -236,12 +258,12 @@ export default function DriverDashboardScreen() {
         const userData = JSON.parse(user);
         console.log('📋 Current user role:', userData.role);
       }
-      
+
       // Get driver stats
       console.log('📡 Fetching /driver/stats...');
       const statsResponse = await apiClient.get('/driver/stats');
       console.log('✓ Stats loaded:', statsResponse.data);
-      
+
       setStats(prev => ({
         ...prev,
         todayRides: statsResponse.data?.todayRides || 0,
@@ -282,13 +304,13 @@ export default function DriverDashboardScreen() {
   const loadDashboard = useCallback(async () => {
     console.log('Loading dashboard...');
     setLoading(true);
-    
+
     // Load user data
     await loadUserData();
-    
+
     // Check approval status
     await checkApprovalStatus(false);
-    
+
     setHasLoaded(true);
     setLoading(false);
   }, []);
@@ -296,7 +318,7 @@ export default function DriverDashboardScreen() {
   // Initial load
   useEffect(() => {
     loadDashboard();
-    
+
     return () => {
       stopPulseAnimation();
     };
@@ -329,6 +351,11 @@ export default function DriverDashboardScreen() {
   }, [isApproved, hasLoaded, approvalReady]);
 
   // Toggle online status
+  // Feature: Send the driver availability change and update the online indicator.
+  // Where: DriverDashboardScreen.toggleOnline() below.
+  // How: toggleOnline() uses apiClient.post('/driver/online') through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend. setTogglingOnline() and
+  // setOnline() update React state, which redraws the related screen content.
   const toggleOnline = async () => {
     if (!isApproved) {
       showToast('Your account is pending approval', 'blue');
@@ -342,9 +369,9 @@ export default function DriverDashboardScreen() {
 
     try {
       console.log('Toggling online to:', newStatus);
-      
+
       const response = await apiClient.post('/driver/online', { online: newStatus });
-      
+
       if (response.data?.success !== false) {
         setOnline(newStatus);
         setStats(prev => ({ ...prev, online: newStatus }));
@@ -364,6 +391,10 @@ export default function DriverDashboardScreen() {
   };
 
   // Handle logout
+  // Feature: Clear the saved session and return to the account entry screen.
+  // Where: DriverDashboardScreen.handleLogout() below.
+  // How: handleLogout() uses apiClient.post('/driver/online') through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend.
   const handleLogout = async () => {
     try {
       if (online) {
@@ -378,6 +409,11 @@ export default function DriverDashboardScreen() {
   };
 
   // Handle ride request
+  // Feature: Open a selected request or send its decline action.
+  // Where: DriverDashboardScreen.handleRequestAction() below.
+  // How: handleRequestAction() uses apiClient.post(`/driver/requests/${requestId}/decline`) through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend. setRequests() update React
+  // state, which redraws the related screen content.
   const handleRequestAction = async (requestId: string, action: 'view' | 'decline') => {
     if (action === 'view') {
       // Navigate to view ride details
@@ -415,7 +451,7 @@ export default function DriverDashboardScreen() {
     return (
       <View style={styles.pendingContainer}>
         <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
-        
+
         <ScrollView
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}
           refreshControl={
@@ -437,7 +473,7 @@ export default function DriverDashboardScreen() {
             <Animated.View style={[styles.pendingIconContainer, { transform: [{ scale: pulseAnim }] }]}>
               {approvalReady ? <ShieldCheck size={48} color={colors.green} strokeWidth={1.5} /> : <Hourglass size={48} color={colors.orange} strokeWidth={1.5} />}
             </Animated.View>
-            
+
             <Text style={styles.pendingTitle}>{approvalReady ? 'Account Approved' : 'Waiting for Approval'}</Text>
             <Text style={styles.pendingSubtitle}>
               {approvalReady ? 'Your driver account has been approved. Please log in to continue.' : 'Your driver account is pending review by an administrator.'}
@@ -480,7 +516,7 @@ export default function DriverDashboardScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
-      
+
       <ScrollView
         contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}
         refreshControl={
@@ -632,6 +668,7 @@ function RideRequestCard({
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
   centered: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xxxl },
@@ -879,29 +916,6 @@ const styles = StyleSheet.create({
   },
 
   // Quick Actions
-  quickActions: {
-    marginHorizontal: spacing.xxl,
-    marginTop: spacing.xl,
-    backgroundColor: colors.white,
-    borderRadius: radius.lg,
-    overflow: 'hidden',
-    ...shadow.sm,
-  },
-  actionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.md,
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray100,
-  },
-  actionText: {
-    flex: 1,
-    fontFamily: font.medium,
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.gray700,
-  },
 
   // Pending Approval Styles
   pendingContainer: { flex: 1, backgroundColor: colors.white },

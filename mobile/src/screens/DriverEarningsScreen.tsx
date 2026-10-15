@@ -1,5 +1,19 @@
+// Driver earnings: retrieve earnings summaries from the backend and display the returned values.
+// These records describe application earnings, not a transfer of money to a bank account.
+// Where: mobile/src/screens/DriverEarningsScreen.tsx; start at DriverEarningsScreen(), then follow
+// the named actions below.
+// How: DriverEarningsScreen() renders the screen and keeps its form/list/progress values in React
+// state. load() contain the API calls; ApiClient.ts adds the /api base path and saved login token.
+/** Summarizes driver earnings from completed ride records and supports month selection. */
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import apiClient from '../services/ApiClient';
 import DriverBottomNav from '../components/DriverBottomNav';
@@ -9,6 +23,12 @@ type Period = { amount: string | number; rides: number };
 type Month = { month: string; amount: string | number; rides: number };
 export default function DriverEarningsScreen() {
   const [months, setMonths] = useState<Month[]>([]); const [thisWeek, setThisWeek] = useState<Period>({ amount: '0', rides: 0 }); const [lastWeek, setLastWeek] = useState<Period>({ amount: '0', rides: 0 }); const [total, setTotal] = useState('0'); const [loading, setLoading] = useState(true); const [refreshing, setRefreshing] = useState(false);
+  // Feature: Retrieve the records used by this screen and update loading, refresh and error
+  // feedback.
+  // Where: DriverEarningsScreen.load() below.
+  // How: load() uses apiClient.get('/driver/earnings') through mobile/src/services/ApiClient.ts to
+  // exchange data with the backend. setRefreshing() and setLoading() update React state, which
+  // redraws the related screen content.
   const load = useCallback(async (refresh = false) => { refresh ? setRefreshing(true) : setLoading(true); try { const response = await apiClient.get('/driver/earnings'); setMonths(response.data?.months || []); setThisWeek(response.data?.thisWeek || { amount: '0', rides: 0 }); setLastWeek(response.data?.lastWeek || { amount: '0', rides: 0 }); setTotal(response.data?.total || '0'); } finally { setLoading(false); setRefreshing(false); } }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
   const current = months[0];
@@ -23,4 +43,5 @@ export default function DriverEarningsScreen() {
     </>}
   </ScrollView><DriverBottomNav active="DriverEarnings" /></View>;
 }
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({ container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 }, content: { padding: spacing.lg, paddingBottom: spacing.xl }, title: { color: colors.gray900, fontFamily: font.extrabold, fontSize: 22, marginTop: spacing.sm }, subtitle: { color: colors.gray600, fontFamily: font.medium, fontSize: 12, marginTop: 4 }, compare: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.lg }, earnCard: { flexGrow: 1, flexBasis: 140, minWidth: 0, minHeight: 102, backgroundColor: colors.white, borderRadius: radius.lg, padding: spacing.md, ...shadow.sm }, monthCard: { minHeight: 92 }, primary: { backgroundColor: colors.green }, cardLabel: { color: colors.gray700, fontFamily: font.bold, fontSize: 9 }, cardLabelLight: { color: colors.white, fontFamily: font.bold, fontSize: 9 }, primaryValue: { color: colors.white, fontFamily: font.extrabold, fontSize: 25, marginTop: 8 }, primaryMeta: { color: colors.white, fontFamily: font.medium, fontSize: 11, marginTop: 2 }, value: { color: colors.gray900, fontFamily: font.extrabold, fontSize: 22, marginTop: 8 }, meta: { color: colors.gray600, fontFamily: font.medium, fontSize: 11, marginTop: 2 }, section: { color: colors.gray700, fontFamily: font.bold, fontSize: 11, marginTop: spacing.xl, marginBottom: spacing.sm }, row: { backgroundColor: colors.white, padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.gray100, flexDirection: 'row', justifyContent: 'space-between' }, month: { color: colors.gray900, fontFamily: font.bold, fontSize: 13 }, amount: { color: colors.greenDark, fontFamily: font.bold, fontSize: 13 }, loader: { marginTop: spacing.xxxl } });

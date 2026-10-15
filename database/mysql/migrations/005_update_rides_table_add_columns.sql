@@ -1,5 +1,12 @@
+-- Database migration: update rides table add columns. Apply these schema/data changes to the
+-- intended database after checking its current structure.
 -- Add missing columns to rides table for entity mapping
 -- This migration adds columns that are expected by the Ride entity
+-- Where: SQL statements in database/mysql/migrations/005_update_rides_table_add_columns.sql,
+-- involving rides and CURRENT_TIMESTAMP.
+-- How: MySQL executes these statements directly. CREATE/ALTER change structure;
+-- INSERT/UPDATE/DELETE change rows when present. Java entities/repositories use the resulting
+-- application tables.
 
 USE campus_connect;
 

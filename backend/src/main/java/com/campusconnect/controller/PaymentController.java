@@ -1,3 +1,9 @@
+// Payment record API: save a pending payment record for a ride. This code does not call a real card
+// payment provider.
+// Where: PaymentController handles /api/rides/{rideId}/payment;
+// @GetMapping/@PostMapping/@PutMapping identify the actions below.
+// How: Spring reads request fields/path IDs, invokes these controller methods and returns their
+// ResponseEntity. Service/repository/JDBC calls inside the methods perform the actual work.
 package com.campusconnect.controller;
 
 import com.campusconnect.entity.Ride;
@@ -11,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/** Creates and reads payment records; stored status changes do not represent payment-gateway settlement. */
 @RestController
 @RequestMapping("/api/rides/{rideId}/payment")
 @CrossOrigin(origins = "*")
@@ -22,6 +29,12 @@ public class PaymentController {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    // Feature: Validate the ride/payment request and insert a pending record without charging a
+    // real bank card.
+    // Where: PaymentController.createPayment() below.
+    // How: createPayment() uses rideRepository.findById() and jdbcTemplate.update() to read,
+    // validate or save the data for this operation. The return/exception handling below supplies
+    // its result to the caller.
     @PostMapping
     public ResponseEntity<?> createPayment(@PathVariable Long rideId, @RequestBody Map<String, String> request) {
         try {
@@ -59,6 +72,11 @@ public class PaymentController {
         }
     }
 
+    // Feature: Read the signed-in account identifier from Spring Security instead of trusting a
+    // client-supplied identity.
+    // Where: PaymentController.currentUserId() below.
+    // How: currentUserId() uses Long.valueOf() and SecurityContextHolder.getContext() to
+    // build/check the result returned by the code below.
     private Long currentUserId() {
         return Long.valueOf((String) SecurityContextHolder.getContext().getAuthentication().getPrincipal());
     }

@@ -1,7 +1,32 @@
+// Administrator ride monitoring: load ride information, select a ride and show its route and
+// reported or displayed position on the web map.
+// Where: mobile/src/screens/RideMonitoringScreen.tsx; start at RideMonitoringScreen(), then follow
+// the named actions below.
+// How: RideMonitoringScreen() renders the screen and keeps its form/list/progress values in React
+// state. loadRides() contain the API calls; ApiClient.ts adds the /api base path and saved login
+// token.
+/** Loads administrator ride-monitoring data and displays route and vehicle progress on a map. */
 import useMapResize from '../hooks/useMapResize';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { ArrowLeft, ChevronLeft, ChevronRight, Crosshair, MapPin, Radio, TriangleAlert } from 'lucide-react-native';
+import {
+  ActivityIndicator,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Crosshair,
+  MapPin,
+  Radio,
+  TriangleAlert,
+} from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import apiClient from '../services/ApiClient';
@@ -65,6 +90,10 @@ function MonitoringMapUpdater({ points }: { points: Coordinate[] }) {
 	return null;
 }
 
+// Feature: Estimate the route direction so the displayed car icon points along the route.
+// Where: RideMonitoringScreen.getRouteHeading() below.
+// How: getRouteHeading() compares the current position with nearby route points and calculates the
+// angle used by createDriverCarIcon().
 function getRouteHeading(position: Coordinate, routePoints: Coordinate[]): number {
 	if (routePoints.length < 2) return 0;
 	let nearestIndex = 0;
@@ -82,6 +111,10 @@ function getRouteHeading(position: Coordinate, routePoints: Coordinate[]): numbe
 	return (Math.atan2(longitudeDelta, latitudeDelta) * 180) / Math.PI;
 }
 
+// Feature: Build a coloured location marker for the browser map.
+// Where: RideMonitoringScreen.createLocationPinIcon() below.
+// How: createLocationPinIcon() uses require() and L.divIcon() in the block below to carry out this
+// step.
 function createLocationPinIcon(color: string, size: number = 28) {
 	if (typeof window === 'undefined' || !MapContainer) return null;
 	const pinHeight = Math.round(size * 1.35);
@@ -104,6 +137,10 @@ function createLocationPinIcon(color: string, size: number = 28) {
 	}
 }
 
+// Feature: Build the browser map car marker using its displayed direction.
+// Where: RideMonitoringScreen.createDriverCarIcon() below.
+// How: createDriverCarIcon() uses require() and L.divIcon() in the block below to carry out this
+// step.
 function createDriverCarIcon(heading: number) {
 	if (typeof window === 'undefined' || !MapContainer) return null;
 	try {
@@ -136,7 +173,8 @@ function MonitoringMap({ ride, rides }: { ride: ActiveRide | null; rides: Active
 	const end = { latitude: ride?.destLat ?? CAMPUS.latitude + 0.004, longitude: ride?.destLng ?? CAMPUS.longitude + 0.004 };
 	const [routePoints, setRoutePoints] = useState<Coordinate[]>([start, end]);
 	const [carPosition, setCarPosition] = useState<Coordinate>(start);
-	const [carProgress, setCarProgress] = useState(0);
+	// Progress lives in the updater; each tick also updates the visible car position.
+	const [, setCarProgress] = useState(0);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -274,6 +312,7 @@ function RideCard({ ride, selected, onTrack }: { ride: ActiveRide; selected: boo
 	return <View style={[styles.rideCard, selected && styles.selectedCard]}><View style={styles.rideTop}><Text style={styles.rideId}>#R-{ride.id}</Text>{ride.sos?.status === 'DISPATCHED' && <Text style={styles.sosTag}>SOS</Text>}<Text style={styles.rideStatus}>{ride.status}</Text></View><Text style={styles.routeNames}>{ride.riderName || 'Unknown rider'} <Text style={styles.routeArrow}>→</Text> {ride.driverName || 'Unassigned driver'}</Text><Text style={styles.routeMeta}>{ride.pickupLocation || 'Pickup location'} → {ride.destination || 'Destination'}</Text><TouchableOpacity style={styles.trackButton} onPress={onTrack}><Crosshair size={16} color={colors.white} /><Text style={styles.trackText}>Track Live</Text></TouchableOpacity></View>;
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
 	container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
 	body: { flex: 1, minHeight: 0 },

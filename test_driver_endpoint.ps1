@@ -1,4 +1,9 @@
+# Driver endpoint check: call the selected driver API and inspect the response.
 # Test driver request endpoint
+# Where: test_driver_endpoint.ps1.
+# How: PowerShell runs the commands below in order. Its variables supply local inputs; launch
+# commands start a service and any Invoke-RestMethod/Invoke-WebRequest calls exchange data with API
+# endpoints.
 $baseUrl = "http://127.0.0.1:8080/api"
 $driverToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4IiwiZW1haWwiOiJkcml2ZXIyQGV4YW1wbGUuY29tIiwicm9sZSI6IkRSSVZFUiIsImlhdCI6MTcyNTk0ODAyMiwiZXhwIjo5OTk5OTk5OTk5fQ.jVnrRKAEYhgBSl1pOeFp8PKQfVP3qr2PvCKlzQj5OiI"
 

@@ -1,3 +1,11 @@
+// Account access: check login details, save the returned session and open the screen for the user
+// role. The password recovery flow requests a code, checks it and submits a new password.
+// Where: mobile/src/screens/LoginScreen.tsx; start at LoginScreen(), then follow the named actions
+// below.
+// How: LoginScreen() renders the screen and keeps its form/list/progress values in React state.
+// requestResetCode(), verifyResetCode() and submitPasswordReset() contain the API calls;
+// ApiClient.ts adds the /api base path and saved login token.
+/** Authenticates accounts, routes users by role and handles the email-code password recovery flow. */
 // mobile/src/screens/LoginScreen.tsx
 import React, { useRef, useState } from 'react';
 import {
@@ -33,7 +41,7 @@ import {
 } from 'lucide-react-native';
 import BottomSheetModal from '../components/BottomSheetModal';
 import { useToast } from '../components/Toast';
-import { colors, radius, spacing, font } from '../theme/theme';
+import { colors, radius, font } from '../theme/theme';
 import apiClient from '../services/ApiClient';
 
 // 👇 Your uploaded icon
@@ -106,6 +114,10 @@ export default function LoginScreen() {
     return () => clearTimeout(timer);
   }, [resetSheetVisible, resetStep, resendCountdown]);
 
+  // Feature: Reset the recovery dialog fields and open the password reset flow.
+  // Where: LoginScreen.openPasswordReset() below.
+  // How: openPasswordReset() clears the recovery form state and opens the reset dialog. The next
+  // actions are requestResetCode(), verifyResetCode() and submitPasswordReset().
   const openPasswordReset = () => {
     setResetEmail(email.trim());
     setResetCode('');
@@ -116,6 +128,10 @@ export default function LoginScreen() {
     setResetSheetVisible(true);
   };
 
+  // Feature: Validate the email and request an emailed recovery code from the backend.
+  // Where: LoginScreen.requestResetCode() below.
+  // How: requestResetCode() sends the email to /auth/password-reset/request. The backend
+  // AuthController calls PasswordResetService; resetLoading and showToast() give request feedback.
   const requestResetCode = async () => {
     const normalizedEmail = resetEmail.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
@@ -141,6 +157,10 @@ export default function LoginScreen() {
     }
   };
 
+  // Feature: Send the recovery code for validation before showing the new password step.
+  // Where: LoginScreen.verifyResetCode() below.
+  // How: verifyResetCode() sends email/code to /auth/password-reset/verify and advances the dialog
+  // only after the backend accepts the code.
   const verifyResetCode = async () => {
     if (!/^\d{6}$/.test(resetCode.trim())) {
       showToast('Enter the 6-digit code from your email', 'red');
@@ -161,6 +181,10 @@ export default function LoginScreen() {
     }
   };
 
+  // Feature: Check the new password fields and submit the recovery code with the chosen password.
+  // Where: LoginScreen.submitPasswordReset() below.
+  // How: submitPasswordReset() sends the code and new password to /auth/password-reset/confirm;
+  // PasswordResetService validates the code and saves a BCrypt hash.
   const submitPasswordReset = async () => {
     if (newPassword.length < 8) {
       showToast('Your new password must be at least 8 characters', 'red');
@@ -194,6 +218,11 @@ export default function LoginScreen() {
     }
   };
 
+  // Feature: Check the login form, request a session and save the returned account before opening
+  // its role screen.
+  // Where: LoginScreen.handleLogin() below.
+  // How: handleLogin() checks email/password, sends POST /auth/login through ApiClient.ts, saves
+  // authToken and user with AsyncStorage, then uses navigation.replace() to open the role screen.
   const handleLogin = async () => {
     const trimmedEmail = email.trim();
 
@@ -618,6 +647,7 @@ export default function LoginScreen() {
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.white, overflow: 'hidden' },
 

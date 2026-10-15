@@ -1,8 +1,31 @@
+// Rider history: retrieve saved trips, display summaries and open the driver rating flow for an
+// eligible trip.
+// Where: mobile/src/screens/TripHistoryScreen.tsx; start at TripHistoryScreen(), then follow the
+// named actions below.
+// How: TripHistoryScreen() renders the screen and keeps its form/list/progress values in React
+// state. load() contain the API calls; ApiClient.ts adds the /api base path and saved login token.
+/** Loads rider trips, calculates history summaries and opens ratings for completed rides. */
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
-import { ArrowUpRight, Check, ChevronLeft, ChevronRight, Clock3, MapPin, Star } from 'lucide-react-native';
+import {
+  ArrowUpRight,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  MapPin,
+  Star,
+} from 'lucide-react-native';
 import { colors, font, radius, spacing } from '../theme/theme';
 import apiClient from '../services/ApiClient';
 
@@ -34,6 +57,12 @@ export default function TripHistoryScreen() {
   const [error, setError] = useState('');
   const [page, setPage] = useState(0);
 
+  // Feature: Retrieve the records used by this screen and update loading, refresh and error
+  // feedback.
+  // Where: TripHistoryScreen.load() below.
+  // How: load() uses apiClient.get('/rides/history') through mobile/src/services/ApiClient.ts to
+  // exchange data with the backend. setRefreshing() and setLoading() update React state, which
+  // redraws the related screen content.
   const load = useCallback(async (refresh = false) => {
     refresh ? setRefreshing(true) : setLoading(true);
     try {
@@ -63,6 +92,9 @@ export default function TripHistoryScreen() {
     .filter(Number.isFinite);
   const totalSpent = fares.reduce((total, fare) => total + fare, 0);
 
+  // Feature: Open driver feedback for the selected trip.
+  // Where: TripHistoryScreen.openRating() below.
+  // How: openRating() uses navigation.navigate() in the block below to carry out this step.
   const openRating = (ride: Ride) => {
     const driverName = ride.driverName || (ride.driverId ? `Driver #${ride.driverId}` : undefined);
     navigation.navigate('RatingDriver', {
@@ -217,6 +249,7 @@ function formatFare(value?: number | string | null) {
   return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(amount);
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
   scroll: { flex: 1, minHeight: 0 },

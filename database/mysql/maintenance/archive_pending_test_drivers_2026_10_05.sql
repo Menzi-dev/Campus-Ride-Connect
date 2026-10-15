@@ -1,6 +1,13 @@
+-- Test-data maintenance: archive pending test drivers 2026 10 05. This script changes the
+-- specifically selected test records below.
 -- Confirmed fixtures from AdminControllerPendingDriversTest and
 -- AdminControllerWithAuthenticationTest, inspected on 2026-10-05.
 -- Archive only these pending, unused fixtures; retain account records.
+-- Where: SQL statements in database/mysql/maintenance/archive_pending_test_drivers_2026_10_05.sql,
+-- involving confirmed_pending_test_drivers, drivers, rides and users.
+-- How: MySQL executes these statements directly. CREATE/ALTER change structure;
+-- INSERT/UPDATE/DELETE change rows when present. Java entities/repositories use the resulting
+-- application tables.
 USE campus_connect;
 START TRANSACTION;
 CREATE TEMPORARY TABLE confirmed_pending_test_drivers AS

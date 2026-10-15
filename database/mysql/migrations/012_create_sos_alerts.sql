@@ -1,3 +1,10 @@
+-- Database migration: create sos alerts. Apply these schema/data changes to the intended database
+-- after checking its current structure.
+-- Where: SQL statements in database/mysql/migrations/012_create_sos_alerts.sql, involving
+-- sos_alerts.
+-- How: MySQL executes these statements directly. CREATE/ALTER change structure;
+-- INSERT/UPDATE/DELETE change rows when present. Java entities/repositories use the resulting
+-- application tables.
 CREATE TABLE IF NOT EXISTS sos_alerts (
     alert_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     ride_id BIGINT NOT NULL,

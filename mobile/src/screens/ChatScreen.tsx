@@ -1,5 +1,24 @@
+// Ride conversation: load messages for the selected ride, refresh them while the screen is open and
+// send new text through the protected ride messaging API.
+// Where: mobile/src/screens/ChatScreen.tsx; start at ChatScreen(), then follow the named actions
+// below.
+// How: ChatScreen() renders the screen and keeps its form/list/progress values in React state.
+// loadMessages() and sendMessage() contain the API calls; ApiClient.ts adds the /api base path and
+// saved login token.
+/** Loads and sends messages for one ride, polling for new messages while the conversation is open. */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -52,6 +71,10 @@ export default function ChatScreen({ rideId: rideIdProp, otherPartyName: otherPa
     }
   }, [rideId, showToast, userId]);
 
+  // Feature: Fetch the selected ride conversation and update the message list.
+  // Where: ChatScreen.refreshMessages() below.
+  // How: refreshMessages() gets /rides/${rideId}/messages through ApiClient.ts. MessageController
+  // checks ride participation; setMessages() refreshes the visible conversation.
   const refreshMessages = async () => {
     setRefreshing(true);
     try {
@@ -76,6 +99,10 @@ export default function ChatScreen({ rideId: rideIdProp, otherPartyName: otherPa
     }
   }, [messages.length]);
 
+  // Feature: Submit non-empty text to this ride conversation and refresh the messages.
+  // Where: ChatScreen.sendMessage() below.
+  // How: sendMessage() checks the typed text, posts it to /rides/${rideId}/messages and refreshes
+  // the conversation. MessageController saves the sender from the signed-in account.
   const sendMessage = async () => {
     const message = draft.trim();
     if (!message || sending) return;
@@ -144,6 +171,7 @@ export default function ChatScreen({ rideId: rideIdProp, otherPartyName: otherPa
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
   header: { padding: spacing.lg, paddingTop: spacing.xxl, backgroundColor: colors.white, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.gray200 },

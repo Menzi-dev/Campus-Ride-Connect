@@ -1,5 +1,20 @@
+// Driver history: retrieve previous trips and show their details, status and summary values.
+// Where: mobile/src/screens/DriverHistoryScreen.tsx; start at DriverHistoryScreen(), then follow
+// the named actions below.
+// How: DriverHistoryScreen() renders the screen and keeps its form/list/progress values in React
+// state. load() contain the API calls; ApiClient.ts adds the /api base path and saved login token.
+/** Displays the driver trip history and links to completed ride details. */
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ChevronLeft, ChevronRight, Clock3, MapPin, Star } from 'lucide-react-native';
 import apiClient from '../services/ApiClient';
@@ -28,6 +43,12 @@ export default function DriverHistoryScreen() {
   const [error, setError] = useState('');
   const [page, setPage] = useState(0);
 
+  // Feature: Retrieve the records used by this screen and update loading, refresh and error
+  // feedback.
+  // Where: DriverHistoryScreen.load() below.
+  // How: load() uses apiClient.get('/driver/history') through mobile/src/services/ApiClient.ts to
+  // exchange data with the backend. setRides() and setError() update React state, which redraws the
+  // related screen content.
   const load = useCallback(async () => {
     try {
       const response = await apiClient.get('/driver/history');
@@ -205,6 +226,7 @@ function formatFare(value?: number | string | null) {
   return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(amount);
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
   scroll: { flex: 1, minHeight: 0 },

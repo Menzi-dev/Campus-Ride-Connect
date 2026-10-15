@@ -1,6 +1,14 @@
+// Scheduled booking: choose a future journey and complete payment selection and face verification.
+// This screen loads saved bookings and follows dispatch, the active trip, cancellation, sharing,
+// SOS and ratings.
+// Where: mobile/src/screens/ScheduleRideScreen.tsx; start at ScheduleScreen(), then follow the
+// named actions below.
+// How: ScheduleScreen() renders the screen and keeps its form/list/progress values in React state.
+// submitScheduledRide(), submitFaceVerifiedRide() and loadScheduledRides() contain the API calls;
+// ApiClient.ts adds the /api base path and saved login token.
+/** Coordinates scheduled bookings and restores their active-trip state from the backend. */
 import ScrollableCard from '../components/ScrollableCard';
 import useMapResize from '../hooks/useMapResize';
-// mobile/src/screens/ScheduleScreen.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -63,8 +71,6 @@ import ChatScreen from './ChatScreen';
 import { useToast } from '../components/Toast';
 import { colors, radius, spacing, font, shadow } from '../theme/theme';
 import apiClient from '../services/ApiClient';
-
-
 
 // ---------- Leaflet (web only) ----------
 let MapContainer: any = null;
@@ -192,6 +198,10 @@ const TIME_WHEEL_VISIBLE_HEIGHT = TIME_WHEEL_ROW_HEIGHT * 5;
 const TIME_WHEEL_VERTICAL_PADDING = (TIME_WHEEL_VISIBLE_HEIGHT - TIME_WHEEL_ROW_HEIGHT) / 2;
 
 // ---------- helpers ----------
+// Feature: Calculate an approximate straight-line distance between two coordinates.
+// Where: ScheduleRideScreen.distanceKm() below.
+// How: distanceKm() converts coordinate differences to radians and uses the formula below to
+// estimate straight-line distance. This is separate from the OSRM driving-route distance.
 function distanceKm(a: Coords, b: Coords): number {
   const R = 6371;
   const dLat = ((b.latitude - a.latitude) * Math.PI) / 180;
@@ -226,13 +236,26 @@ function formatOsmCategory(tags: Record<string, string>): string {
   if (tags.aeroway) return 'Airport';
   return 'Place';
 }
+// Feature: Calculate the displayed fare estimate from the route distance using the formula below.
+// Where: ScheduleRideScreen.estimateFare() below.
+// How: estimateFare() uses its distance argument in the exact fare formula returned below; the
+// calling screen displays that estimate and includes it in the booking draft.
 function estimateFare(km: number) {
   const fare = BASE_FARE + km * RATE_PER_KM;
   return Math.round(fare * 2) / 2;
 }
+// Feature: Convert routing service points into the latitude/longitude objects used by the map.
+// Where: ScheduleRideScreen.routeToMapCoords() below.
+// How: routeToMapCoords() maps each routing point into the latitude/longitude object shape consumed
+// by the map component.
 function routeToMapCoords(routeCoords: RoutePoint[]): Coords[] {
   return routeCoords.map(([lng, lat]) => ({ latitude: lat, longitude: lng }));
 }
+// Feature: Estimate a point along the route for the displayed progress; this calculation is not a
+// fresh GPS reading.
+// Where: ScheduleRideScreen.interpolateRoute() below.
+// How: interpolateRoute() uses the progress argument and neighbouring route points to calculate a
+// displayed point. It does not contact device GPS.
 function interpolateRoute(route: Coords[], progress: number): Coords {
   if (!route.length) return FALLBACK_REGION;
   if (route.length === 1) return route[0];
@@ -256,6 +279,10 @@ function estimateRouteProgress(route: Coords[], position: Coords): number {
   const clampedIndex = Math.min(route.length - 1, Math.max(0, nearestIndex));
   return clampedIndex / Math.max(1, route.length - 1);
 }
+// Feature: Estimate the route direction so the displayed car icon points along the route.
+// Where: ScheduleRideScreen.getRouteHeading() below.
+// How: getRouteHeading() compares the current position with nearby route points and calculates the
+// angle used by createDriverCarIcon().
 function getRouteHeading(position: Coords, routePoints: Coords[]): number {
   if (routePoints.length < 2) return 0;
   let nearestIndex = 0;
@@ -414,16 +441,7 @@ async function getRoute(start: Coords, end: Coords): Promise<{ coordinates: Rout
 }
 
 // ---------- WebMap ----------
-const WebMap = ({
-  userLocation,
-  destination,
-  routePoints,
-  places,
-  onLocationSelect,
-  loading,
-  driverPosition,
-  driverMarker,
-}: {
+const WebMap = ({ userLocation, destination, routePoints, loading, driverPosition, driverMarker }: {
   userLocation: Coords;
   destination: CampusLocation | null;
   routePoints: Coords[];
@@ -457,6 +475,10 @@ const WebMap = ({
     }
   }, []);
 
+  // Feature: Build a coloured location marker for the browser map.
+  // Where: ScheduleRideScreen.createLocationPinIcon() below.
+  // How: createLocationPinIcon() uses require() and L.divIcon() in the block below to carry out
+  // this step.
   const createLocationPinIcon = (color: string, size: number = 28) => {
     if (typeof window === 'undefined' || !MapContainer) return null;
     const pinHeight = Math.round(size * 1.35);
@@ -479,6 +501,10 @@ const WebMap = ({
     }
   };
 
+  // Feature: Build the browser map car marker using its displayed direction.
+  // Where: ScheduleRideScreen.createDriverCarIcon() below.
+  // How: createDriverCarIcon() uses require() and L.divIcon() in the block below to carry out this
+  // step.
   const createDriverCarIcon = (heading: number) => {
     if (typeof window === 'undefined' || !MapContainer) return null;
     try {
@@ -726,7 +752,6 @@ export default function ScheduleScreen() {
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD'>('CASH');
   const [savedPaymentCards, setSavedPaymentCards] = useState<SavedPaymentCard[]>([]);
   const [selectedCard, setSelectedCard] = useState('');
-  const [paymentRide, setPaymentRide] = useState<ScheduledRide | null>(null);
 
   const [scheduledRides, setScheduledRides] = useState<ScheduledRide[]>([]);
   const scheduledRidesRef = useRef<ScheduledRide[]>([]);
@@ -747,8 +772,7 @@ export default function ScheduleScreen() {
   const [cancellationNotice, setCancellationNotice] = useState('');
   const [cancellationNoticeVisible, setCancellationNoticeVisible] = useState(false);
   const [driverName, setDriverName] = useState('');
-  const [driverRating, setDriverRating] = useState(0);
-  const [driverCar, setDriverCar] = useState('');
+
   const [driverPlate, setDriverPlate] = useState('');
   const [driverPhone, setDriverPhone] = useState('');
 
@@ -856,6 +880,9 @@ export default function ScheduleScreen() {
     };
   }, []);
 
+  // Feature: Save the locally tracked dispatch information for later screen restoration.
+  // Where: ScheduleRideScreen.persistDispatched() below.
+  // How: persistDispatched() uses AsyncStorage.setItem() in the block below to carry out this step.
   const persistDispatched = async () => {
     try {
       await AsyncStorage.setItem(
@@ -865,6 +892,9 @@ export default function ScheduleScreen() {
     } catch {}
   };
 
+  // Feature: Read locally retained booking details used by the scheduled ride flow.
+  // Where: ScheduleRideScreen.loadHeldPayloads() below.
+  // How: loadHeldPayloads() uses AsyncStorage.getItem() in the block below to carry out this step.
   const loadHeldPayloads = async (): Promise<Record<string, ScheduledRide>> => {
     try {
       const raw = await AsyncStorage.getItem(HELD_RIDES_KEY);
@@ -875,6 +905,10 @@ export default function ScheduleScreen() {
       return {};
     }
   };
+  // Feature: Keep the selected booking details in local storage for this flow.
+  // Where: ScheduleRideScreen.saveHeldPayload() below.
+  // How: saveHeldPayload() uses loadHeldPayloads() and AsyncStorage.setItem() in the block below to
+  // carry out this step.
   const saveHeldPayload = async (ride: ScheduledRide) => {
     try {
       const current = await loadHeldPayloads();
@@ -882,6 +916,10 @@ export default function ScheduleScreen() {
       await AsyncStorage.setItem(HELD_RIDES_KEY, JSON.stringify(current));
     } catch {}
   };
+  // Feature: Remove the retained local details for the selected booking.
+  // Where: ScheduleRideScreen.removeHeldPayload() below.
+  // How: removeHeldPayload() uses loadHeldPayloads() and AsyncStorage.setItem() in the block below
+  // to carry out this step.
   const removeHeldPayload = async (rideId: string | number) => {
     try {
       const current = await loadHeldPayloads();
@@ -890,6 +928,10 @@ export default function ScheduleScreen() {
     } catch {}
   };
 
+  // Feature: Clear the client-side scheduled dispatch timer.
+  // Where: ScheduleRideScreen.clearScheduledDispatchAlarm() below.
+  // How: clearScheduledDispatchAlarm() uses clearTimeout() in the block below to carry out this
+  // step.
   const clearScheduledDispatchAlarm = () => {
     if (dispatchAlarmRef.current) {
       clearTimeout(dispatchAlarmRef.current);
@@ -897,6 +939,12 @@ export default function ScheduleScreen() {
     }
   };
 
+  // Feature: Set the next client-side check for a due booking; the backend scheduler also handles
+  // dispatch.
+  // Where: ScheduleRideScreen.scheduleNextScheduledDispatch() below.
+  // How: scheduleNextScheduledDispatch() uses clearScheduledDispatchAlarm(),
+  // dispatchedRideIdsRef.current.has() and scheduledTimeMs() in the block below to carry out this
+  // step.
   const scheduleNextScheduledDispatch = () => {
     clearScheduledDispatchAlarm();
 
@@ -994,6 +1042,12 @@ export default function ScheduleScreen() {
     rotateLoopRef.current?.stop();
   };
 
+  // Feature: Request the current device position and update pickup information or show location
+  // help.
+  // Where: ScheduleRideScreen.detectLocation() below.
+  // How: detectLocation() calls requestCurrentLocation(), copies the coordinates into pickup state
+  // and loads nearby suggestions. On failure, location help explains the retry/manual-pickup
+  // options.
   const detectLocation = async () => {
     setLocationHelp(null);
     setLocating(true);
@@ -1012,6 +1066,11 @@ export default function ScheduleScreen() {
     }
   };
 
+  // Feature: Retrieve nearby place suggestions for the current pickup coordinates.
+  // Where: ScheduleRideScreen.loadNearbyPlaces() below.
+  // How: loadNearbyPlaces() uses fetchNearbyPlaces() in the block below to carry out this step.
+  // setNearbyLoading() and setNearbyPlaces() update React state, which redraws the related screen
+  // content.
   const loadNearbyPlaces = async (coords: Coords) => {
     setNearbyLoading(true);
     const places = await fetchNearbyPlaces(coords);
@@ -1019,6 +1078,10 @@ export default function ScheduleScreen() {
     setNearbyLoading(false);
   };
 
+  // Feature: Request a driving route and update the map line, distance and duration.
+  // Where: ScheduleRideScreen.updateRoute() below.
+  // How: updateRoute() calls the route helper for pickup and dropoff, then sets routePoints,
+  // routeDistance and routeDuration so the map, fare and time display update together.
   const updateRoute = async (pickup: Coords, dropoff: CampusLocation) => {
     setRouting(true);
     try {
@@ -1036,6 +1099,11 @@ export default function ScheduleScreen() {
     }
   };
 
+  // Feature: Update destination search and request suggestions after the search delay.
+  // Where: ScheduleRideScreen.handleSearch() below.
+  // How: handleSearch() uses clearTimeout(), text.trim() and searchPlacesByText() in the block
+  // below to carry out this step. setSearch() and setShowSearchResults() update React state, which
+  // redraws the related screen content.
   const handleSearch = (text: string) => {
     setSearch(text);
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
@@ -1055,6 +1123,11 @@ export default function ScheduleScreen() {
     }, 400);
   };
 
+  // Feature: Update pickup search and request suggestions after the search delay.
+  // Where: ScheduleRideScreen.handlePickupSearch() below.
+  // How: handlePickupSearch() uses clearTimeout(), text.trim() and searchPlacesByText() in the
+  // block below to carry out this step. setPickupSearch() and setPickupSearchResults() update React
+  // state, which redraws the related screen content.
   const handlePickupSearch = (text: string) => {
     setPickupSearch(text);
     if (pickupSearchDebounceRef.current) clearTimeout(pickupSearchDebounceRef.current);
@@ -1072,6 +1145,11 @@ export default function ScheduleScreen() {
     }, 400);
   };
 
+  // Feature: Set the chosen pickup and refresh route information when a destination exists.
+  // Where: ScheduleRideScreen.selectPickupLocation() below.
+  // How: selectPickupLocation() uses loadNearbyPlaces() and updateRoute() in the block below to
+  // carry out this step. setPickupCoords() and setUserLocation() update React state, which redraws
+  // the related screen content.
   const selectPickupLocation = (location: CampusLocation) => {
     setPickupCoords(location.coords);
     setUserLocation(location.coords);
@@ -1084,6 +1162,11 @@ export default function ScheduleScreen() {
     showToast(`Pickup set to ${location.name}`, 'green');
   };
 
+  // Feature: Set the chosen destination and prepare the route and booking details.
+  // Where: ScheduleRideScreen.handleLocationSelect() below.
+  // How: handleLocationSelect() uses updateRoute() in the block below to carry out this step.
+  // setDestination() and setDestSheetVisible() update React state, which redraws the related screen
+  // content.
   const handleLocationSelect = async (location: CampusLocation) => {
     setDestination(location);
     setDestSheetVisible(false);
@@ -1203,6 +1286,10 @@ export default function ScheduleScreen() {
     [destination, pickupCoords.latitude, pickupCoords.longitude, pickupLabel, fare, tripDistanceKm, etaMinutes]
   );
 
+  // Feature: Validate the future booking and prepare its payment and verification flow.
+  // Where: ScheduleRideScreen.submitScheduledRide() below.
+  // How: submitScheduledRide() checks the selected future date/time, prepares the booking details
+  // and opens payment selection. The request remains local until submitFaceVerifiedRide() runs.
   const submitScheduledRide = async () => {
     if (!pickupLabel.trim()) return showToast('Please choose a pickup location', 'red');
     if (!destination) return showToast('Please choose a destination', 'red');
@@ -1279,6 +1366,12 @@ export default function ScheduleScreen() {
     }
   };
 
+  // Feature: Keep the chosen payment details and open face verification before creating the
+  // booking.
+  // Where: ScheduleRideScreen.confirmPayment() below.
+  // How: confirmPayment() adds paymentMethod and the chosen card last four digits to
+  // pendingRideDraft. It hides payment selection and opens RideFaceVerification instead of saving a
+  // ride yet.
   const confirmPayment = async () => {
     if (!pendingRideDraft) return;
     const chosenCard = savedPaymentCards.find((card) => card.id === selectedCard);
@@ -1292,13 +1385,19 @@ export default function ScheduleScreen() {
     setFaceVerificationVisible(true);
   };
 
+  // Feature: Send the prepared ride with its face confirmation and keep the request identifier
+  // stable for retries.
+  // Where: ScheduleRideScreen.submitFaceVerifiedRide() below.
+  // How: submitFaceVerifiedRide() posts pendingRideDraft and faceVerificationToken to
+  // /rides/request. RideController calls RideService.requestRide(), which stores the ride/payment.
+  // The client then uses the returned ride to continue its booking flow.
   const submitFaceVerifiedRide = async (verificationToken: string) => {
     if (!pendingRideDraft) throw new Error('Ride details are missing. Choose your route again.');
     const response = await apiClient.post('/rides/request', {
       ...pendingRideDraft, faceVerificationToken: verificationToken,
     }, { timeout: 30000 });
     const newRide: ScheduledRide = response.data;
-    setPaymentRide(newRide);
+
     setFaceVerificationVisible(false);
     setPendingRideDraft(null);
     showToast(`Ride scheduled for ${formatScheduleDateTime(newRide.scheduledAt)}`, 'green');
@@ -1309,6 +1408,12 @@ export default function ScheduleScreen() {
     scheduleNextScheduledDispatch();
   };
 
+  // Feature: Retrieve scheduled-flow records and update the saved booking list.
+  // Where: ScheduleRideScreen.loadScheduledRides() below.
+  // How: loadScheduledRides() uses apiClient.get('/rides/scheduled') and
+  // apiClient.get('/rides/active') through mobile/src/services/ApiClient.ts to exchange data with
+  // the backend. setListLoading() and setScheduledRides() update React state, which redraws the
+  // related screen content.
   const loadScheduledRides = async () => {
     setListLoading(true);
     try {
@@ -1349,6 +1454,10 @@ export default function ScheduleScreen() {
     }
   };
 
+  // Feature: Check due saved bookings and request dispatch for eligible rides through the backend.
+  // Where: ScheduleRideScreen.checkAndDispatchDueRides() below.
+  // How: checkAndDispatchDueRides() uses apiClient.post(`/rides/${ride.id}/dispatch`) through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend.
   const checkAndDispatchDueRides = async () => {
     const now = Date.now();
     const list = scheduledRidesRef.current;
@@ -1397,6 +1506,11 @@ export default function ScheduleScreen() {
     scheduleNextScheduledDispatch();
   };
 
+  // Feature: Load the selected booking and open its waiting or active trip flow.
+  // Where: ScheduleRideScreen.enterRideSession() below.
+  // How: enterRideSession() uses scheduledRidesRef.current.find(), hydrateActiveRide() and
+  // routeCoordinates.every() in the block below to carry out this step. setActiveRide() and
+  // setActiveRideId() update React state, which redraws the related screen content.
   const enterRideSession = async (rideId: string, seedRide?: ScheduledRide) => {
     const seed = seedRide ?? scheduledRidesRef.current.find((r) => String(r.id) === rideId);
     if (seed) {
@@ -1473,6 +1587,10 @@ export default function ScheduleScreen() {
     });
   };
 
+  // Feature: Open the waiting or trip session for a dispatched scheduled booking.
+  // Where: openFindingDriversFlow() delegates to enterRideSession() in this file.
+  // How: avoid reopening the same visible session, reset the shown waiting time and
+  // let enterRideSession() load the ride and choose its waiting/active-trip view.
   const openFindingDriversFlow = (rideId: string) => {
     if (activeRideId === rideId && (findingDriversVisible || activeTripVisible)) return;
     setElapsedSeconds(0);
@@ -1532,6 +1650,12 @@ export default function ScheduleScreen() {
     }, 2500);
   };
 
+  // Feature: Repeatedly fetch the chosen booking progress and update the waiting or active trip
+  // view.
+  // Where: ScheduleRideScreen.startStatusPolling() below.
+  // How: startStatusPolling() repeatedly gets /rides/${rideId}/status, copies the response into the
+  // scheduled trip state and switches between waiting and active trip views. Its timers are cleared
+  // when the flow ends.
   const startStatusPolling = (rideId: string, opts?: { fromFinding?: boolean }) => {
     if (statusPollRef.current) clearInterval(statusPollRef.current);
     setActiveRideId(rideId);
@@ -1578,8 +1702,7 @@ export default function ScheduleScreen() {
         if (['accepted', 'enroute', 'arrived', 'started'].includes(status)) {
           if (ride.driver) {
             setDriverName(ride.driver.fullName || '');
-            setDriverRating(ride.driver.rating || 0);
-            setDriverCar(`${ride.driver.vehicleMake || ''} ${ride.driver.vehicleModel || ''}`.trim());
+
             setDriverPlate(ride.driver.licencePlate || '');
             setDriverPhone(ride.driver.phone || '');
             Animated.timing(driverFadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
@@ -1654,6 +1777,11 @@ export default function ScheduleScreen() {
     statusPollRef.current = setInterval(poll, STATUS_POLL_MS);
   };
 
+  // Feature: Request a route for the displayed driver journey and update its navigation state.
+  // Where: ScheduleRideScreen.loadDriverRoute() below.
+  // How: loadDriverRoute() uses getRoute(), routeToMapCoords() and interpolateRoute() in the block
+  // below to carry out this step. setDriverProgress() and setDriverCarPosition() update React
+  // state, which redraws the related screen content.
   const loadDriverRoute = async (start: Coords, end: Coords, status: string) => {
     const requestId = ++driverRouteRequestRef.current;
     const waitingAtPickup = status === 'arrived';
@@ -1678,6 +1806,10 @@ export default function ScheduleScreen() {
     }
   };
 
+  // Feature: Clear stored route/progress state for the displayed driver journey.
+  // Where: ScheduleRideScreen.clearDriverNavigation() below.
+  // How: setDriverRoutePoints() and setDriverCarPosition() update React state, which redraws the
+  // related screen content.
   const clearDriverNavigation = () => {
     driverRouteRequestRef.current += 1;
     setDriverRoutePoints([]);
@@ -1689,7 +1821,7 @@ export default function ScheduleScreen() {
 
   const driverPhase = String(activeRide?.status || tripStatus || '').toLowerCase();
   const driverHeadingToPickup = driverPhase === 'accepted' || driverPhase === 'enroute' || driverPhase === 'pending';
-  const driverIsArrivalPhase = driverPhase === 'arrived';
+
   const driverIsDestinationPhase = driverPhase === 'started';
   const tripCompleted = driverPhase === 'completed' || tripStatus === 'completed';
 
@@ -1811,11 +1943,21 @@ export default function ScheduleScreen() {
     };
   }, [activeRideId, userId, activeTripVisible]);
 
+  // Feature: Open a cancellation confirmation while waiting for a driver.
+  // Where: ScheduleRideScreen.handleCancelSearch() below.
+  // How: setCancelReason() and setCancelDialogVisible() update React state, which redraws the
+  // related screen content.
   const handleCancelSearch = () => {
     setCancelReason('');
     setCancelDialogVisible(true);
   };
 
+  // Feature: Send the cancellation reason and update the local trip view after the backend
+  // responds.
+  // Where: ScheduleRideScreen.handleConfirmRideCancellation() below.
+  // How: handleConfirmRideCancellation() posts the cancellation reason to the selected
+  // /rides/.../cancel endpoint. The response updates the trip view and closes the waiting/active
+  // flow as appropriate.
   const handleConfirmRideCancellation = async () => {
     if (cancelling) return;
     const reason = cancelReason.trim();
@@ -1890,6 +2032,10 @@ export default function ScheduleScreen() {
     );
   };
 
+  // Feature: Open the phone app using the available driver contact number.
+  // Where: ScheduleRideScreen.handleCallDriver() below.
+  // How: handleCallDriver() uses driverPhone.replace() and Linking.openURL() in the block below to
+  // carry out this step.
   const handleCallDriver = () => {
     if (driverPhone) {
       const phoneUrl = `tel:${driverPhone.replace(/[^\d+]/g, '')}`;
@@ -1899,6 +2045,10 @@ export default function ScheduleScreen() {
     }
   };
 
+  // Feature: Open the conversation linked to this ride.
+  // Where: ScheduleRideScreen.handleMessageDriver() below.
+  // How: setUnreadMessageCount() and setChatVisible() update React state, which redraws the related
+  // screen content.
   const handleMessageDriver = () => {
     if (activeRideId) {
       setUnreadMessageCount(0);
@@ -1908,17 +2058,30 @@ export default function ScheduleScreen() {
     }
   };
 
+  // Feature: Show the available ride sharing actions.
+  // Where: ScheduleRideScreen.openShareRideSheet() below.
+  // How: openShareRideSheet() uses shareSheetAnim.setValue(), Animated.timing() and Easing.out() in
+  // the block below to carry out this step. setShareRideVisible() update React state, which redraws
+  // the related screen content.
   const openShareRideSheet = () => {
     setShareRideVisible(true);
     shareSheetAnim.setValue(0);
     Animated.timing(shareSheetAnim, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
   };
+  // Feature: Close the ride sharing panel.
+  // Where: ScheduleRideScreen.closeShareRideSheet() below.
+  // How: closeShareRideSheet() uses Animated.timing() and Easing.in() in the block below to carry
+  // out this step. setShareRideVisible() update React state, which redraws the related screen
+  // content.
   const closeShareRideSheet = () => {
     Animated.timing(shareSheetAnim, { toValue: 0, duration: 170, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
       if (finished) setShareRideVisible(false);
     });
   };
   const shareLink = activeRideId ? `campusconnect.app/t/${activeRideId}` : '';
+  // Feature: Copy the prepared ride information/link through the available clipboard API.
+  // Where: ScheduleRideScreen.handleCopyRideLink() below.
+  // How: handleCopyRideLink() uses Share.share() in the block below to carry out this step.
   const handleCopyRideLink = async () => {
     try {
       if (Platform.OS === 'web' && (navigator as any).clipboard) {
@@ -1931,6 +2094,10 @@ export default function ScheduleScreen() {
       showToast('Could not copy ride link', 'red');
     }
   };
+  // Feature: Open WhatsApp or SMS with the prepared ride text for the user to share.
+  // Where: ScheduleRideScreen.handleShareRide() below.
+  // How: handleShareRide() uses encodeURIComponent() and Linking.openURL() in the block below to
+  // carry out this step.
   const handleShareRide = async (channel: 'whatsapp' | 'sms') => {
     const text = `Track my CampusConnect ride: ${shareLink}`;
     const url = channel === 'whatsapp' ? `https://wa.me/?text=${encodeURIComponent(text)}` : `sms:?body=${encodeURIComponent(text)}`;
@@ -1946,11 +2113,19 @@ export default function ScheduleScreen() {
     return rideId ? String(rideId) : null;
   };
 
+  // Feature: Open the SOS confirmation for the current trip.
+  // Where: ScheduleRideScreen.handleSOS() below.
+  // How: setSosVisible() and setSosDispatched() update React state, which redraws the related
+  // screen content.
   const handleSOS = async () => {
     setSosVisible(true);
     setSosDispatched(false);
   };
 
+  // Feature: Request microphone access and start the browser or native audio recording.
+  // Where: ScheduleRideScreen.startSosRecording() below.
+  // How: startSosRecording() uses MediaRecorder for browser audio or Audio.Recording for native
+  // audio. Recorder refs keep the active recording, and timers update the shown recording duration.
   const startSosRecording = async () => {
     if (Platform.OS === 'web') {
       if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
@@ -1981,6 +2156,10 @@ export default function ScheduleScreen() {
     sosRecordingRef.current = recording;
   };
 
+  // Feature: Stop or rotate the recording and attach the collected evidence to the saved alert.
+  // Where: ScheduleRideScreen.finishSosRecording() below.
+  // How: finishSosRecording() stops/rotates the current recorder, builds an audio FormData payload
+  // and sends it to the saved ride alert. Recorder and stream refs allow microphone cleanup.
   const finishSosRecording = async (continueRecording = false) => {
     const recording = sosRecordingRef.current;
     const alertId = sosAlertIdRef.current;
@@ -2052,6 +2231,10 @@ export default function ScheduleScreen() {
     }
   };
 
+  // Feature: Upload the collected browser audio segment for the current alert.
+  // Where: ScheduleRideScreen.uploadWebSosSegment() below.
+  // How: uploadWebSosSegment() builds audio from the buffered browser chunks and sends it to
+  // /rides/.../sos/.../audio with the saved session token.
   const uploadWebSosSegment = async () => {
     const alertId = sosAlertIdRef.current;
     const rideId = activeRideId || (activeRide?.id ? String(activeRide.id) : null);
@@ -2080,6 +2263,12 @@ export default function ScheduleScreen() {
     }
   };
 
+  // Feature: Create the trip alert with available location and start collecting permitted audio
+  // evidence.
+  // Where: ScheduleRideScreen.confirmSOS() below.
+  // How: confirmSOS() gets the current ride ID and available position, then posts
+  // /rides/${rideId}/sos. RideController.sosAlert() saves the alert; the returned alert ID links
+  // later audio uploads to that record.
   const confirmSOS = async () => {
     if (sosSending) return;
     setSosSending(true);
@@ -2176,6 +2365,11 @@ export default function ScheduleScreen() {
     if (sosToastTimerRef.current) clearTimeout(sosToastTimerRef.current);
   }, []);
 
+  // Feature: Submit the selected driver rating and optional comment for the completed trip.
+  // Where: ScheduleRideScreen.handleRateDriver() below.
+  // How: handleRateDriver() submits the selected rating/comment to the ride rating endpoint.
+  // RideController.rateDriver() checks and stores feedback; the client clears or closes its
+  // completed-trip view after success.
   const handleRateDriver = async () => {
     const rideId = resolveCurrentRideId();
     if (!rideId) {
@@ -2219,6 +2413,11 @@ export default function ScheduleScreen() {
     }
   };
 
+  // Feature: Ask for confirmation before cancelling the selected saved booking.
+  // Where: ScheduleRideScreen.cancelScheduledRide() below.
+  // How: cancelScheduledRide() uses scheduledRides.find() in the block below to carry out this
+  // step. setActiveRide() and setActiveRideId() update React state, which redraws the related
+  // screen content.
   const cancelScheduledRide = (rideId: string | number) => {
     const ride = scheduledRides.find((candidate) => String(candidate.id) === String(rideId)) || null;
     setActiveRide(ride);
@@ -2228,6 +2427,11 @@ export default function ScheduleScreen() {
     setCancelDialogVisible(true);
   };
 
+  // Feature: Open tracking for the selected scheduled-flow ride.
+  // Where: ScheduleRideScreen.trackScheduledRide() below.
+  // How: trackScheduledRide() uses openFindingDriversFlow(), hydrateActiveRide() and
+  // startStatusPolling() in the block below to carry out this step. setScheduledListVisible() and
+  // setActiveRide() update React state, which redraws the related screen content.
   const trackScheduledRide = (ride: ScheduledRide) => {
     setScheduledListVisible(false);
     const st = String(ride.status || '').toLowerCase();
@@ -3529,6 +3733,7 @@ export default function ScheduleScreen() {
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
   formScroll: { flex: 1, minHeight: 0 },
@@ -4013,15 +4218,11 @@ const styles = StyleSheet.create({
   ratingBigSubmitText: { color: colors.white, fontFamily: font.bold, fontSize: 15 },
 
   ratingBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, backgroundColor: 'rgba(17,24,39,0.55)' },
-  ratingCard: { width: '100%', maxWidth: 360, alignItems: 'center', padding: spacing.xxl, borderRadius: radius.xl, backgroundColor: colors.white, ...shadow.lg },
+
   thankYouCard: { width: '100%', maxWidth: 330, alignItems: 'center', padding: spacing.xxl, borderRadius: radius.xl, backgroundColor: colors.white, ...shadow.lg },
   ratingTitle: { color: colors.gray900, fontFamily: font.bold, fontSize: 20, textAlign: 'center' },
   ratingSubtitle: { marginTop: spacing.sm, color: colors.gray500, fontFamily: font.regular, fontSize: 13, textAlign: 'center' },
-  ratingStars: { flexDirection: 'row', marginVertical: spacing.xxl },
-  ratingStarButton: { paddingHorizontal: spacing.xs },
-  submitRatingButton: { width: '100%', alignItems: 'center', justifyContent: 'center', minHeight: 50, borderRadius: radius.md, backgroundColor: colors.green },
-  submitRatingDisabled: { backgroundColor: colors.gray300 },
-  submitRatingText: { color: colors.white, fontFamily: font.bold, fontSize: 15 },
+
   thankYouIcon: { alignItems: 'center', justifyContent: 'center', width: 58, height: 58, marginBottom: spacing.lg, borderRadius: radius.full, backgroundColor: colors.green },
 
   shareModalLayer: {

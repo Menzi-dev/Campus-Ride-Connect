@@ -1,5 +1,19 @@
+// Location help: explain why location could not be used and offer retry or close actions.
+// Where: mobile/src/components/LocationPermissionDialog.tsx.
+// How: LocationPermissionDialog() displays the supplied message and calls onRetry/onClose.
+// CurrentLocation.ts performs location requests for the calling screen.
+/** Explains a location failure and offers retry or dismissal without blocking manual route selection. */
 import React, { useState } from 'react';
-import { Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 export default function LocationPermissionDialog({ message, onClose, onRetry }: {
   message: string | null; onClose: () => void; onRetry: () => void;
@@ -40,6 +54,7 @@ export default function LocationPermissionDialog({ message, onClose, onRetry }: 
   </Modal>;
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   card: { width: '100%', maxWidth: 440, maxHeight: '90%', backgroundColor: '#fff', borderRadius: 20, padding: 24 },

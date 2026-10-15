@@ -1,3 +1,9 @@
+# Local face comparison: load YuNet and SFace models and expose a loopback HTTP endpoint for the
+# Java backend. Decode each request in memory; compare similarity rather than claiming spoof-proof
+# identity checks.
+# Where: feature(), Handler.do_POST() and HTTPServer startup in backend/face-matcher/server.py.
+# How: OpenCV detects/aligns each JPEG with YuNet, extracts SFace vectors and compares cosine
+# similarity. Java RideFaceVerificationService calls /compare and receives matched/similarity JSON.
 """Loopback-only YuNet/SFace inference. Images exist only in request memory."""
 import base64
 import json
@@ -14,7 +20,13 @@ recognizer = cv2.FaceRecognizerSF.create(str(MODEL_DIR / 'sface.onnx'), '')
 THRESHOLD = float(os.environ.get('FACE_MATCH_THRESHOLD', '0.45'))
 
 
+# Feature: Require one usable JPEG face, align it and calculate the SFace feature vector for
+# comparison.
+# Where: feature() below.
+# How: Base64/NumPy decode the JPEG, detector.detect() requires one face and
+# recognizer.alignCrop()/feature() return its vector.
 def feature(data_url):
+    """Validate one JPEG face, align it, and return the SFace vector used for comparison."""
     if not isinstance(data_url, str) or not data_url.startswith('data:image/jpeg;base64,'):
         raise ValueError('Use a JPEG camera image.')
     data = base64.b64decode(data_url.split(',', 1)[1], validate=True)
@@ -46,10 +58,19 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(encoded)
 
+    # Feature: Return the matcher readiness response for the health endpoint.
+    # Where: do_GET() below.
+    # How: Handler.do_GET() checks self.path and send_json() returns ready for /health.
     def do_GET(self):
         self.send_json(200 if self.path == '/health' else 404, {'ready': self.path == '/health'})
 
+    # Feature: Read the two images, calculate cosine similarity and return whether it reaches the
+    # configured threshold. Return helpful errors for invalid images.
+    # Where: do_POST() below.
+    # How: Handler.do_POST() calls feature() for reference/probe, then recognizer.match() compares
+    # cosine similarity against THRESHOLD.
     def do_POST(self):
+        # Only the loopback backend calls this endpoint; images are decoded in memory.
         if self.path != '/compare':
             return self.send_json(404, {'error': 'Not found'})
         length = int(self.headers.get('Content-Length', '0'))
@@ -67,6 +88,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(500, {'error': 'Face comparison is temporarily unavailable.'})
 
 
+# Feature: Start the local service on port 8090; the public preview does not expose this port.
 if __name__ == '__main__':
     print('Local face matcher ready on 127.0.0.1:8090', flush=True)
     HTTPServer(('127.0.0.1', 8090), Handler).serve_forever()

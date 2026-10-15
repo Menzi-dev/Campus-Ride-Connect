@@ -1,13 +1,26 @@
+// Secure local preview: forward app requests to Expo and API/upload requests to Spring Boot. Use
+// supplied TLS files for HTTPS and serve the phone-shaped preview at /phone.
 // Same-origin proxy for the Expo web app and Spring API. Supply TLS_KEY and
 // TLS_CERT for LAN HTTPS, or run behind a trusted HTTPS tunnel on port 8084.
+// Where: targetFor(), proxy() and server creation in mobile/scripts/secure-preview.cjs.
+// How: Node HTTP/HTTPS forwards app/API traffic to the local services; TLS_KEY/TLS_CERT select
+// HTTPS and /phone serves phone-preview.html.
 const http = require('node:http');
 const https = require('node:https');
 const fs = require('node:fs');
 const path = require('node:path');
 
+// Feature: Choose the backend or Expo target for a preview request.
+// Where: secure-preview.targetFor() below.
+// How: targetFor() checks the request path to choose the Spring Boot API/upload port or the Expo
+// client port.
 function targetFor(url) {
   return /^\/(api|uploads)(\/|\?|$)/.test(url || '') ? 8080 : 8081;
 }
+// Feature: Forward preview requests and responses to the chosen local service.
+// Where: secure-preview.proxy() below.
+// How: proxy() forwards the incoming request to targetFor(), pipes the response back and serves the
+// phone preview for /phone.
 function proxy(req, res) {
   if (new URL(req.url, 'http://localhost').pathname === '/phone') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });

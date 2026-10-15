@@ -1,6 +1,10 @@
+// App navigation: register rider, driver, administrator and security screens, provide shared
+// layout/notifications and handle an email verification link.
+// Where: App() and RootStackParamList in mobile/App.tsx; screen files are in mobile/src/screens.
+// How: Stack.Screen registers each route. NavigationContainer/navigationRef track it, while
+// AppLayout, SafeAreaProvider and ToastProvider provide shared layout and messages.
 import 'react-native-gesture-handler';
-import React from 'react';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, TouchableOpacity, View, Platform } from 'react-native';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -11,7 +15,7 @@ import AppLayout from './src/components/AppLayout';
 import { isRiderTab, RiderTab } from './src/components/BottomNav';
 import { usesNativeHeader } from './src/navigation/screenChrome';
 
-// Import Screens
+// This is the app's route registry for rider, driver, administrator and security screens.
 import LandingScreen from './src/screens/LandingScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import EmailVerificationScreen from './src/screens/EmailVerificationScreen';
@@ -44,6 +48,8 @@ import ResolvedSosScreen from './src/screens/ResolvedSosScreen';
 import UniversitySettingsScreen from './src/screens/UniversitySettingsScreen';
 import { ArrowLeft } from 'lucide-react-native';
 
+// Feature: List the information each navigation route may receive so screen links can be checked by
+// TypeScript.
 type RootStackParamList = {
   Landing: undefined;
   Login: undefined;
@@ -88,14 +94,19 @@ export default function App() {
   const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
   const [verificationToken, setVerificationToken] = useState<string | undefined>();
   const [routeName, setRouteName] = useState('Landing');
+  // Feature: Request a driving route and update the map line, distance and duration.
   const updateRoute = () => setRouteName(navigationRef.getCurrentRoute()?.name || 'Landing');
+  // Feature: Replace the rider navigation stack when a tab is selected so Back does not reopen the
+  // previous tab trip.
   const selectTab = (tab: RiderTab) => {
     if (!navigationRef.isReady()) return;
+    // Switching tabs replaces the stack so Back does not reopen a previous tab's trip.
     navigationRef.resetRoot({ index: 0, routes: [{ name: tab, ...(tab === 'Home' ? { params: { skipActiveRideRestore: true } } : {}) }] });
   };
 
   useEffect(() => {
     if (Platform.OS === 'web' && window.location.hash.startsWith('#verify-email=')) {
+      // Read the email link once, then remove its token from the browser address bar.
       const token = window.location.hash.slice('#verify-email='.length);
       window.history.replaceState(null, '', window.location.pathname + window.location.search);
       setVerificationToken(token);

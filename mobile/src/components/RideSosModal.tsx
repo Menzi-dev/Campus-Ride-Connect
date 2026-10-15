@@ -1,5 +1,21 @@
+// SOS dialog: present the alert confirmation and recording state from the shared SOS hook. Close
+// the flow through its cleanup action.
+// Where: mobile/src/components/RideSosModal.tsx.
+// How: RideSosModal() uses useRideSos(rideId) from hooks/useRideSos.ts. Its controls call the hook
+// actions while the hook sends alerts and manages recording.
+/** Displays driver SOS confirmation, recording progress and evidence-upload feedback from useRideSos. */
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Animated,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { ArrowLeft, AlertTriangle } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useRideSos from '../hooks/useRideSos';
@@ -72,6 +88,7 @@ export default function RideSosModal({ visible, rideId, onClose }: Props) {
   </Modal>;
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   overlay: { flex: 1, minHeight: 0, justifyContent: 'flex-end', alignItems: 'center', paddingHorizontal: 20, backgroundColor: 'rgba(15,23,42,0.46)' },
   confirmation: { width: '100%', maxWidth: 520, padding: spacing.xl, borderRadius: 24, backgroundColor: colors.white, alignItems: 'center' },

@@ -1,3 +1,10 @@
+-- Database migration: persist user payment methods. Apply these schema/data changes to the intended
+-- database after checking its current structure.
+-- Where: SQL statements in database/mysql/migrations/015_persist_user_payment_methods.sql,
+-- involving users and user_payment_methods.
+-- How: MySQL executes these statements directly. CREATE/ALTER change structure;
+-- INSERT/UPDATE/DELETE change rows when present. Java entities/repositories use the resulting
+-- application tables.
 ALTER TABLE users
     ADD COLUMN default_payment_method VARCHAR(20) NOT NULL DEFAULT 'CASH';
 

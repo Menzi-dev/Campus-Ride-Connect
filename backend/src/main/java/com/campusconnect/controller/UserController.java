@@ -1,3 +1,9 @@
+// Account profile API: retrieve and update user details, profile photos and saved payment
+// preferences.
+// Where: UserController handles /api/users; @GetMapping/@PostMapping/@PutMapping identify the
+// actions below.
+// How: Spring reads request fields/path IDs, invokes these controller methods and returns their
+// ResponseEntity. Service/repository/JDBC calls inside the methods perform the actual work.
 package com.campusconnect.controller;
 
 import com.campusconnect.entity.Driver;
@@ -23,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+/** Provides the signed-in account profile, photos, face enrollment and saved payment preferences. */
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
@@ -39,6 +46,11 @@ public class UserController {
         this.driverRepository = driverRepository;
     }
 
+    // Feature: Build the account list returned by this endpoint.
+    // Where: UserController.getAllUsers() below.
+    // How: getAllUsers() uses jdbcTemplate.queryForList() and users.add() to read, validate or save
+    // the data for this operation. The return/exception handling below supplies its result to the
+    // caller.
     @GetMapping
     public ResponseEntity<List<Map<String, Object>>> getAllUsers() {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
@@ -81,6 +93,11 @@ public class UserController {
             .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    // Feature: Return profile information for the signed-in account.
+    // Where: UserController.getCurrentUser() below.
+    // How: getCurrentUser() uses userRepository.findById() and jdbcTemplate.queryForObject() to
+    // read, validate or save the data for this operation. The return/exception handling below
+    // supplies its result to the caller.
     @GetMapping("/me")
     public ResponseEntity<Map<String, Object>> getCurrentUser() {
         Long userId = Long.valueOf((String) SecurityContextHolder.getContext().getAuthentication().getPrincipal());
@@ -107,6 +124,11 @@ public class UserController {
         }).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    // Feature: Validate and save the editable signed-in profile details.
+    // Where: UserController.updateCurrentUser() below.
+    // How: updateCurrentUser() uses userRepository.findById(), email.length() and email.trim() to
+    // read, validate or save the data for this operation. The return/exception handling below
+    // supplies its result to the caller.
     @PutMapping("/me")
     public ResponseEntity<Map<String, Object>> updateCurrentUser(@RequestBody Map<String, Object> request) {
         Long userId = currentUserId();
@@ -155,6 +177,11 @@ public class UserController {
         }
     }
 
+    // Feature: Validate the supplied photo and save it for the signed-in account.
+    // Where: UserController.updateProfilePhoto() below.
+    // How: updateProfilePhoto() uses userRepository.findById() and userRepository.save() to read,
+    // validate or save the data for this operation. The return/exception handling below supplies
+    // its result to the caller.
     @PutMapping("/me/profile-photo")
     public ResponseEntity<Map<String, Object>> updateProfilePhoto(@RequestBody Map<String, String> request) {
         String profilePhoto = request.get("profilePhoto");
@@ -173,11 +200,21 @@ public class UserController {
         }).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    // Feature: Retrieve saved card display information for the signed-in user.
+    // Where: UserController.getPaymentMethods() below.
+    // How: getPaymentMethods() calls paymentMethodsFor() and currentUserId() in this class to carry
+    // out the operation. Any failed checks stop the operation with the exception shown below.
     @GetMapping("/me/payment-methods")
     public ResponseEntity<?> getPaymentMethods() {
         return ResponseEntity.ok(paymentMethodsFor(currentUserId()));
     }
 
+    // Feature: Save card display metadata and default preference without accepting a full card
+    // number or charging it.
+    // Where: UserController.addPaymentMethod() below.
+    // How: addPaymentMethod() validates the display fields and uses jdbcTemplate to insert
+    // user_payment_methods for currentUserId(). It rejects full-card secret fields and does not
+    // contact a payment gateway.
     @PostMapping("/me/payment-methods")
     public ResponseEntity<?> addPaymentMethod(@RequestBody Map<String, Object> request) {
         Long userId = currentUserId();
@@ -210,6 +247,11 @@ public class UserController {
         return ResponseEntity.ok(paymentMethodsFor(userId));
     }
 
+    // Feature: Choose an owned saved card as the default card.
+    // Where: UserController.setDefaultCard() below.
+    // How: setDefaultCard() uses jdbcTemplate.queryForObject() and jdbcTemplate.update() to read,
+    // validate or save the data for this operation. The return/exception handling below supplies
+    // its result to the caller.
     @PutMapping("/me/payment-methods/{cardId}/default")
     public ResponseEntity<?> setDefaultCard(@PathVariable Long cardId) {
         Long userId = currentUserId();
@@ -221,6 +263,11 @@ public class UserController {
         return ResponseEntity.ok(paymentMethodsFor(userId));
     }
 
+    // Feature: Remove the selected owned card and update the remaining default choice if needed.
+    // Where: UserController.deletePaymentMethod() below.
+    // How: deletePaymentMethod() uses jdbcTemplate.update() and jdbcTemplate.queryForObject() to
+    // read, validate or save the data for this operation. The return/exception handling below
+    // supplies its result to the caller.
     @DeleteMapping("/me/payment-methods/{cardId}")
     public ResponseEntity<?> deletePaymentMethod(@PathVariable Long cardId) {
         Long userId = currentUserId();
@@ -238,6 +285,11 @@ public class UserController {
         return ResponseEntity.ok(paymentMethodsFor(userId));
     }
 
+    // Feature: Save the account preferred payment category, such as cash or card.
+    // Where: UserController.updateDefaultPaymentMethod() below.
+    // How: updateDefaultPaymentMethod() uses jdbcTemplate.queryForObject() to read, validate or
+    // save the data for this operation. The return/exception handling below supplies its result to
+    // the caller.
     @PutMapping("/me/payment-method")
     public ResponseEntity<?> updateDefaultPaymentMethod(@RequestBody Map<String, String> request) {
         Long userId = currentUserId();
@@ -254,6 +306,10 @@ public class UserController {
         return ResponseEntity.ok(Map.of("defaultPaymentMethod", method));
     }
 
+    // Feature: Retrieve saved payment display records belonging to one account.
+    // Where: UserController.paymentMethodsFor() below.
+    // How: paymentMethodsFor() uses jdbcTemplate.queryForList() to read, validate or save the data
+    // for this operation. The return/exception handling below supplies its result to the caller.
     private List<Map<String, Object>> paymentMethodsFor(Long userId) {
         return jdbcTemplate.queryForList(
                 "SELECT CAST(id AS CHAR) AS id, label, last_four AS lastFour, brand, expiry, cardholder, is_default AS isDefault "
@@ -264,6 +320,11 @@ public class UserController {
         jdbcTemplate.update("UPDATE users SET default_payment_method = ? WHERE user_id = ?", method, userId);
     }
 
+    // Feature: Read the signed-in account identifier from Spring Security instead of trusting a
+    // client-supplied identity.
+    // Where: UserController.currentUserId() below.
+    // How: currentUserId() uses Long.valueOf() and SecurityContextHolder.getContext() to
+    // build/check the result returned by the code below.
     private Long currentUserId() {
         return Long.valueOf((String) SecurityContextHolder.getContext().getAuthentication().getPrincipal());
     }

@@ -1,3 +1,8 @@
+// Map layout: notify the browser map when its container size changes so tiles and controls fit the
+// visible area.
+// Where: useMapResize(map) in hooks/useMapResize.ts.
+// How: Its effect watches layout changes and calls map.invalidateSize() so Leaflet recalculates the
+// visible map area.
 import { useEffect } from 'react';
 
 /** Leaflet also needs to redraw when its parent changes size without a window resize. */

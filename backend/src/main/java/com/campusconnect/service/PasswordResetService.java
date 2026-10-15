@@ -1,3 +1,10 @@
+// Password recovery: issue and check a temporary emailed code, then replace the password with a new
+// hash after successful validation.
+// Where: PasswordResetService, starting with requestCode(), verifyCode() and resetPassword() in
+// this file.
+// How: requestCode() creates a random temporary code, stores its hash and expiry through the
+// reset-code repository and sends instructions using EmailService. The code itself is sent by
+// email.
 package com.campusconnect.service;
 
 import com.campusconnect.entity.PasswordResetCode;
@@ -12,6 +19,7 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Locale;
 
+/** Issues expiring hashed reset codes and replaces the password only after a successful code check. */
 @Service
 public class PasswordResetService {
 
@@ -34,6 +42,12 @@ public class PasswordResetService {
         this.emailService = emailService;
     }
 
+    // Feature: Create a temporary recovery code, store its hash and expiry, and send recovery
+    // instructions by email.
+    // Where: PasswordResetService.requestCode() below.
+    // How: requestCode() creates a random temporary code, stores its hash and expiry through the
+    // reset-code repository and sends instructions using EmailService. The code itself is sent by
+    // email.
     public void requestCode(String rawEmail) {
         String email = normalizeEmail(rawEmail);
         if (userRepository.findByEmail(email).isEmpty()) {
@@ -68,11 +82,21 @@ public class PasswordResetService {
         }
     }
 
+    // Feature: Validate the email and recovery code through the shared expiry and attempt checks.
+    // Where: PasswordResetService.verifyCode() below.
+    // How: verifyCode() calls findAndVerifyCode() and normalizeEmail() in this class to carry out
+    // the operation. Any failed checks stop the operation with the exception shown below.
     @Transactional(noRollbackFor = IllegalArgumentException.class)
     public void verifyCode(String rawEmail, String code) {
+        // Commit failed-attempt updates and expired-code deletion despite validation errors.
         findAndVerifyCode(normalizeEmail(rawEmail), code);
     }
 
+    // Feature: Check the recovery code and new password, save a new password hash and remove the
+    // used code.
+    // Where: PasswordResetService.resetPassword() below.
+    // How: resetPassword() uses findAndVerifyCode(), hashes the new password with passwordEncoder
+    // and saves the User. The used recovery code is removed from the reset repository.
     @Transactional(noRollbackFor = IllegalArgumentException.class)
     public void resetPassword(String rawEmail, String code, String newPassword) {
         String email = normalizeEmail(rawEmail);
@@ -85,6 +109,11 @@ public class PasswordResetService {
         resetCodeRepository.delete(resetCode);
     }
 
+    // Feature: Check expiry and failed attempts before accepting the recovery code.
+    // Where: PasswordResetService.findAndVerifyCode() below.
+    // How: findAndVerifyCode() uses resetCodeRepository.findByEmail(), resetCodeRepository.delete()
+    // and passwordEncoder.matches() to read, validate or save the data for this operation. The
+    // return/exception handling below supplies its result to the caller.
     private PasswordResetCode findAndVerifyCode(String email, String code) {
         PasswordResetCode resetCode = resetCodeRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("That code is invalid or expired"));

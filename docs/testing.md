@@ -71,5 +71,5 @@ driver acceptance, ownership/role negatives, SMTP, native camera/audio/location,
 keyboard/rotation, device file sharing, offline states and actual trip workflows.
 Use synthetic alerts; never initiate a real emergency dispatch as a test.
 
-Real-user study protocol and blank dataset: report/usability-study.md and
-report/usability-results.csv. Do not report uncollected timings or satisfaction.
+For current setup and test commands, see the repository README. Test results
+describe the checked environment; physical-device behaviour requires separate checks.

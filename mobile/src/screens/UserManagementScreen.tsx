@@ -1,3 +1,11 @@
+// Account management: load registered users, filter the displayed list and send account status
+// changes to the backend.
+// Where: mobile/src/screens/UserManagementScreen.tsx; start at UserManagementScreen(), then follow
+// the named actions below.
+// How: UserManagementScreen() renders the screen and keeps its form/list/progress values in React
+// state. loadUsers() and confirmStatusChange() contain the API calls; ApiClient.ts adds the /api
+// base path and saved login token.
+/** Loads the administrator user list and applies confirmed account-management actions. */
 import ScrollableCard from '../components/ScrollableCard';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -11,7 +19,14 @@ import {
 	View,
 } from 'react-native';
 import type { StackScreenProps } from '@react-navigation/stack';
-import { ArrowLeft, Ban, CheckCircle, ChevronLeft, ChevronRight, Search } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  Ban,
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+} from 'lucide-react-native';
 import apiClient from '../services/ApiClient';
 import { colors, font, radius, shadow, spacing } from '../theme/theme';
 
@@ -44,6 +59,11 @@ export default function UserManagementScreen({ navigation }: Props) {
 	 const [updatingId, setUpdatingId] = useState<number | string | null>(null);
 	 const [pendingStatusChange, setPendingStatusChange] = useState<RegisteredUser | null>(null);
 
+	// Feature: Retrieve the administrator account list and update loading/error feedback.
+	// Where: UserManagementScreen.loadUsers() below.
+	// How: loadUsers() uses apiClient.get('/admin/users') through mobile/src/services/ApiClient.ts to
+	// exchange data with the backend. setLoading() and setError() update React state, which redraws
+	// the related screen content.
 	const loadUsers = useCallback(async () => {
 		setLoading(true);
 		setError(null);
@@ -81,18 +101,32 @@ export default function UserManagementScreen({ navigation }: Props) {
 		safePage * USERS_PER_PAGE + USERS_PER_PAGE
 	);
 
+	// Feature: Update account search and return the displayed list to its first page.
+	// Where: UserManagementScreen.updateSearch() below.
+	// How: setSearch() and setPage() update React state, which redraws the related screen content.
 	const updateSearch = (value: string) => {
 		setSearch(value);
 		setPage(0);
 	};
 
+	 // Feature: Select an account filter and return the displayed list to its first page.
+	 // Where: UserManagementScreen.changeFilter() below.
+	 // How: setFilter() and setPage() update React state, which redraws the related screen content.
 	 const changeFilter = (nextFilter: UserFilter) => {
 		setFilter(nextFilter);
 		setPage(0);
 	 };
 
+	 // Feature: Open the account status confirmation for the selected user.
+	 // Where: UserManagementScreen.updateStatus() below.
+	 // How: updateStatus() stores the chosen account in pendingStatusChange. confirmStatusChange()
+	 // sends /admin/users/${user.id}/status after the user confirms.
 	 const updateStatus = (user: RegisteredUser) => setPendingStatusChange(user);
 
+	 // Feature: Send the confirmed account status change and refresh the user list.
+	 // Where: UserManagementScreen.confirmStatusChange() below.
+	 // How: confirmStatusChange() chooses ACTIVE/SUSPENDED, sends PUT /admin/users/${user.id}/status
+	 // and uses setUsers() to replace the returned status in the visible list.
 	 const confirmStatusChange = async () => {
 		if (!pendingStatusChange) return;
 		const user = pendingStatusChange;
@@ -238,6 +272,7 @@ function UserCard({ user, index, updating, onToggleStatus }: { user: RegisteredU
 	);
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
 	container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
 	header: { backgroundColor: colors.white, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg },
@@ -255,7 +290,7 @@ const styles = StyleSheet.create({
 	loader: { marginTop: spacing.xxxl },
 	resultText: { color: colors.gray500, fontFamily: font.medium, fontSize: 12, marginTop: spacing.lg, marginBottom: spacing.sm },
 	userList: { paddingBottom: spacing.xl },
-	userScroll: { flex: 1, minHeight: 0 },
+
 	userCard: { backgroundColor: colors.white, borderRadius: radius.md, padding: spacing.sm, marginBottom: spacing.sm, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', ...shadow.sm },
 	avatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginRight: spacing.sm },
 	greenAvatar: { backgroundColor: colors.green },
@@ -266,11 +301,11 @@ const styles = StyleSheet.create({
 	userMeta: { color: colors.gray400, fontFamily: font.regular, fontSize: 10, marginTop: 1 },
 	statusBadge: { borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 4, marginLeft: spacing.xs },
 	activeBadge: { backgroundColor: colors.greenLight },
-	inactiveBadge: { backgroundColor: colors.orangeLight },
+
 	suspendedBadge: { backgroundColor: colors.redLight },
 	statusText: { fontFamily: font.bold, fontSize: 9 },
 	activeText: { color: colors.greenDark },
-	inactiveText: { color: colors.orange },
+
 	suspendedText: { color: colors.red },
 	suspendButton: { width: '100%', height: 38, borderWidth: 1, borderColor: colors.redLight, borderRadius: radius.full, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: spacing.sm },
 	suspendText: { color: colors.red, fontFamily: font.semibold, fontSize: 12 },

@@ -1,6 +1,36 @@
+// Incident review: load incident records, show the selected report and provide access to its
+// available audio evidence.
+// Where: mobile/src/screens/IncidentReportsScreen.tsx; start at IncidentReportsScreen(), then
+// follow the named actions below.
+// How: IncidentReportsScreen() renders the screen and keeps its form/list/progress values in React
+// state. loadIncidents() contain the API calls; ApiClient.ts adds the /api base path and saved
+// login token.
+/** Loads administrator incident reports and opens their available audio evidence. */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { AlertTriangle, ArrowLeft, ChevronLeft, ChevronRight, Eye, Headphones, RefreshCw, Search, X } from 'lucide-react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  Modal,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  Headphones,
+  RefreshCw,
+  Search,
+  X,
+} from 'lucide-react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import apiClient from '../services/ApiClient';
@@ -41,6 +71,11 @@ export default function IncidentReportsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<TextInput>(null);
 
+  // Feature: Retrieve incident reports and update the list or show a retry error.
+  // Where: IncidentReportsScreen.loadIncidents() below.
+  // How: loadIncidents() uses apiClient.get('/admin/incidents') through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend. setRefreshing() and
+  // setLoading() update React state, which redraws the related screen content.
   const loadIncidents = useCallback(async (refresh = false) => {
     if (refresh) setRefreshing(true); else setLoading(true);
     try {
@@ -180,6 +215,7 @@ function Detail({ label, value }: { label: string; value: string }) {
   return <View style={styles.detail}><Text style={styles.detailLabel}>{label}</Text><Text style={styles.detailValue}>{value}</Text></View>;
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
   header: { backgroundColor: colors.white, paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg, zIndex: 2, elevation: 4, borderBottomWidth: 1, borderBottomColor: colors.gray200 },

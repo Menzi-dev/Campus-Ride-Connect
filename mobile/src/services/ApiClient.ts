@@ -1,3 +1,8 @@
+// Backend connection: create one shared HTTP client, choose a reachable API address, attach saved
+// login tokens and handle connection/authentication failures.
+// Where: getHostChoices(), axios.create() and both interceptors in services/ApiClient.ts.
+// How: The client joins each screen endpoint to baseURL, attaches the saved authToken and tries
+// another local host on connection failure. HTTP 401 removes the saved session.
 import axios, { AxiosRequestHeaders } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
@@ -14,6 +19,11 @@ import { Platform } from 'react-native';
 const LOCAL_IP: string = ''; // Set this only for a real physical device. Leave empty for emulators.
 const PORT = 8080;
 
+// Feature: Choose backend addresses suitable for the browser, emulator or configured physical
+// phone.
+// Where: ApiClient.getHostChoices() below.
+// How: getHostChoices() checks LOCAL_IP and Platform.OS. Android emulator choices include 10.0.2.2;
+// browser choices use window.location.hostname. axios.create() uses the resulting API address.
 const getHostChoices = () => {
   if (LOCAL_IP) {
     return [LOCAL_IP];
@@ -54,6 +64,8 @@ const isNetworkError = (error: any) => {
   return !error.response && error.request;
 };
 
+// Feature: Retry another local host after a network failure. Clear the saved session when the
+// server rejects authentication.
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -71,6 +83,7 @@ apiClient.interceptors.response.use(
     }
 
     if (error.response?.status === 401) {
+      // Expired credentials must not be reused by subsequent requests or restored sessions.
       await AsyncStorage.multiRemove(['authToken', 'user']);
     }
     return Promise.reject(error);
@@ -83,21 +96,21 @@ apiClient.interceptors.request.use(async (config) => {
   const isPasswordResetRequest = config.url?.startsWith('/auth/password-reset/');
   const isUnauthenticatedAuthRequest = isLoginRequest || isPasswordResetRequest || config.url?.startsWith('/auth/email-verification/') || config.url === '/auth/register';
   const token = isUnauthenticatedAuthRequest ? null : await AsyncStorage.getItem('authToken');
-  
-  // Debug logging
+
+  // Report session presence without printing the JWT itself.
   if (!token && !isUnauthenticatedAuthRequest) {
     console.warn('[ApiClient] ⚠️ WARNING: No authToken found in AsyncStorage for request to', config.url);
   } else if (token) {
     console.log('[ApiClient] ✓ Token found, adding to Authorization header for:', config.url);
   }
-  
+
   // Don't set Content-Type for FormData; let axios/the FormData API handle it
   if (!(config.data instanceof FormData)) {
     if (!config.headers['Content-Type']) {
       config.headers['Content-Type'] = 'application/json';
     }
   }
-  
+
   if (token) {
     config.headers = {
       ...(config.headers ?? {}),

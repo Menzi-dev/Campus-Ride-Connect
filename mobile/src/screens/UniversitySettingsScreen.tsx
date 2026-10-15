@@ -1,8 +1,37 @@
+// University settings: load platform settings into the form, send edited values to the backend and
+// report whether saving succeeded.
+// Where: mobile/src/screens/UniversitySettingsScreen.tsx; start at UniversitySettingsScreen(), then
+// follow the named actions below.
+// How: UniversitySettingsScreen() renders the screen and keeps its form/list/progress values in
+// React state. loadSettings() and saveSettings() contain the API calls; ApiClient.ts adds the /api
+// base path and saved login token.
+/** Loads and saves university contact, transport and safety settings for administrators. */
 import ConfirmationDialog from '../components/ConfirmationDialog';
 import { useToast } from '../components/Toast';
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { ArrowLeft, Building2, Check, ChevronRight, Clock3, Mail, Phone, Save, ShieldCheck, TriangleAlert } from 'lucide-react-native';
+import React, { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import {
+  ArrowLeft,
+  Building2,
+  Check,
+  ChevronRight,
+  Clock3,
+  Mail,
+  Phone,
+  Save,
+  ShieldCheck,
+  TriangleAlert,
+} from 'lucide-react-native';
 import { NavigationAction, useFocusEffect, useNavigation, usePreventRemove } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import apiClient from '../services/ApiClient';
@@ -65,6 +94,11 @@ export default function UniversitySettingsScreen() {
     else navigation.navigate('AdminDashboard');
   };
 
+  // Feature: Send the edited university settings and show whether the save succeeded.
+  // Where: UniversitySettingsScreen.saveSettings() below.
+  // How: saveSettings() sends the edited fields to /admin/settings.
+  // AdminController.updateSettings() validates and saves the platform settings; the screen reports
+  // success or the returned error.
   const saveSettings = async () => {
     if (saving) return;
     setSaving(true);
@@ -121,6 +155,7 @@ function SettingInput({ icon, label, value, onChangeText, ...props }: { icon: Re
   return <View style={styles.inputCard}><View style={styles.inputIcon}>{icon}</View><View style={styles.inputContent}><Text style={styles.inputLabel}>{label}</Text><View style={styles.valueRow}><TextInput value={value} onChangeText={onChangeText} style={styles.input} accessibilityLabel={label} {...props} /><ChevronRight size={18} color={colors.gray300} /></View></View>{suffix && <Text style={styles.suffix}>{suffix}</Text>}</View>;
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 }, centered: { alignItems: 'center', justifyContent: 'center' }, loadingText: { color: colors.gray500, fontFamily: font.medium, marginTop: spacing.md },
   header: { backgroundColor: colors.white, paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.gray200 },

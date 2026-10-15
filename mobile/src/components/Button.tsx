@@ -1,5 +1,20 @@
+// Shared button: display the label and optional icon, show loading state and pass allowed presses
+// to the supplied action.
+// Where: mobile/src/components/Button.tsx.
+// How: Button() reads label, onPress, loading and disabled props, then renders the shared press
+// control and loading indicator. Screens supply the action; the button does not make an API request
+// itself.
+/** Provides the shared button appearance, disabled state and loading feedback used by screens. */
 import React from 'react';
-import { TouchableOpacity, Text, View, StyleSheet, ActivityIndicator, StyleProp, ViewStyle } from 'react-native';
+import {
+  TouchableOpacity,
+  Text,
+  View,
+  StyleSheet,
+  ActivityIndicator,
+  StyleProp,
+  ViewStyle,
+} from 'react-native';
 import { colors, radius, spacing, font } from '../theme/theme';
 
 type ButtonProps = {
@@ -43,6 +58,7 @@ export default function Button({ label, onPress, style, loading = false, icon, d
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   button: {
     flexDirection: 'row',

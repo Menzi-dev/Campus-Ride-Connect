@@ -16,6 +16,16 @@ ios/
 # Logs
 *.log
 
+# Local diagnostic output (not application fixtures)
+admin_token.txt
+project_file_inventory.txt
+/users.json
+/dashboard.json
+/backend/users*.json
+/backend/dashboard*.json
+/backend/response.json
+/backend/effective-pom
+
 # OS files
 .DS_Store
 Thumbs.db

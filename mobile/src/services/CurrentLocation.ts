@@ -1,6 +1,17 @@
+// Current position: provide a shared location request for browser and native screens.
+// Where: requestCurrentLocation() in services/CurrentLocation.ts; ride screens call it for
+// pickup/location.
+// How: Platform.OS chooses browser geolocation or Expo Location; rejected permissions return an
+// error for the calling screen to explain.
 import { Platform } from 'react-native';
 import * as Location from 'expo-location';
 
+/** Returns device coordinates or an actionable permission/service error for the screen. */
+// Feature: Use browser or Expo location APIs to obtain a current position with the required
+// permission.
+// Where: CurrentLocation.requestCurrentLocation() below.
+// How: requestCurrentLocation() selects browser geolocation on web or Expo Location on native
+// devices. Callers receive the position or handle the rejected permission/request.
 export async function requestCurrentLocation() {
   if (Platform.OS === 'web') {
     if (!window.isSecureContext) {

@@ -1,5 +1,11 @@
+// Registration data: carry account details, optional driver information and enrollment/application
+// data between the controller and service.
+// Where: RegisterRequest fields and getters/setters in this file.
+// How: Spring/Jackson reads or writes JSON using these properties. Controllers pass request objects
+// into services or return the response object to the client.
 package com.campusconnect.dto;
 
+/** Carries account, driver-document and face-enrollment fields submitted during registration. */
 public class RegisterRequest {
 	private String fullName;
 	private String email;

@@ -1,9 +1,16 @@
+// Database record: store journey details, rider/driver references, status, timing, face-check
+// records and ratings. The annotations map these fields to table columns; the methods below read
+// and update the record.
+// Where: Ride in this file maps to the rides table.
+// How: @Id identifies its record and @Column/@Enumerated define field storage. Repository/service
+// code reads and updates these fields through the methods below.
 package com.campusconnect.entity;
 
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/** Maps journey details, assignment, status, verification and rider feedback to a persisted ride. */
 @Entity
 @Table(name = "rides")
 public class Ride {
@@ -13,12 +20,22 @@ public class Ride {
     @Column(name = "ride_id")
     private Long id;
 
+    // Feature: Link the ride to its rider and eventual driver. The driver stays empty
+    // while the request is waiting for acceptance.
+    // Where: riderId and driverId fields below, mapped to rides.rider_id/driver_id.
+    // How: RideService sets the rider during booking; DriverRideAcceptanceService.accept()
+    // sets the driver after approval, face confirmation and availability checks.
     @Column(name = "rider_id", nullable = false)
     private Long riderId;
 
     @Column(name = "driver_id")
     private Long driverId; // nullable until a driver accepts
 
+    // Feature: Store journey locations and coordinates, including the latest saved
+    // trip position used by monitoring screens.
+    // Where: pickupLocation through currentLng in the fields below.
+    // How: RideService copies the booking coordinates; DriverController's location
+    // endpoint updates the current position used by client monitoring requests.
     @Column(name = "pickup_location")
     private String pickupLocation;
 
@@ -43,6 +60,9 @@ public class Ride {
     @Column(name = "current_lng")
     private Double currentLng;
 
+    // Feature: Keep the fare, distance and estimated duration with the ride record.
+    // Where: fare, distanceKm and durationMinutes map to the rides table columns below.
+    // How: RideService.requestRide() copies these values from RideRequest before saving.
     @Column(name = "fare")
     private BigDecimal fare;
 
@@ -52,6 +72,11 @@ public class Ride {
     @Column(name = "duration_min")
     private Double durationMinutes;
 
+    // Feature: Track the journey stage and booking/start/completion times so the
+    // client and backend can follow the same trip progress.
+    // Where: status, scheduledAt, startedAt and completedAt fields below.
+    // How: @Enumerated stores the RideStatus name; booking, dispatch and trip-action
+    // code update these fields, and the client retrieves them through ride endpoints.
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
     private RideStatus status;
@@ -65,6 +90,9 @@ public class Ride {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    // Feature: Keep cancellation details and both participants' feedback with the trip.
+    // Where: cancellationReason/cancelledBy and rider/driver rating fields below.
+    // How: RideController cancellation and rating methods set these values before saving.
     @Column(name = "cancellation_reason", length = 500)
     private String cancellationReason;
 
@@ -86,6 +114,11 @@ public class Ride {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    // Feature: Record successful rider/driver comparisons and the request details
+    // used to recognise an exact booking retry. Internal retry fields are hidden from JSON.
+    // Where: faceMatchedAt, driverFaceMatchedAt, faceVerificationKey and related fields below.
+    // How: booking/acceptance services set match times after consume() validates a token;
+    // RideService checks the request key/details on retries. @JsonIgnore hides internal fields.
     @Column(name = "face_matched_at")
     private LocalDateTime faceMatchedAt;
     @Column(name = "driver_face_matched_at")

@@ -1,3 +1,9 @@
+// Driver API: provide dashboard, earnings, history, profile and request data. Handle online status,
+// verified acceptance and assigned-trip updates.
+// Where: DriverController handles /api/driver; @GetMapping/@PostMapping/@PutMapping identify the
+// actions below.
+// How: Spring reads request fields/path IDs, invokes these controller methods and returns their
+// ResponseEntity. Service/repository/JDBC calls inside the methods perform the actual work.
 package com.campusconnect.controller;
 
 import com.campusconnect.entity.Driver;
@@ -20,6 +26,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.*;
 
+/** Provides driver request, availability, trip status, location, history and earnings endpoints. */
 @RestController
 @RequestMapping("/api/driver")
 @CrossOrigin(origins = "*")
@@ -41,11 +48,21 @@ public class DriverController {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    // Feature: Read the signed-in account identifier from Spring Security instead of trusting a
+    // client-supplied identity.
+    // Where: DriverController.currentUserId() below.
+    // How: currentUserId() uses SecurityContextHolder.getContext() and Long.valueOf() to
+    // build/check the result returned by the code below.
     private Long currentUserId() {
         String userId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         return Long.valueOf(userId);
     }
 
+    // Feature: Calculate dashboard totals and return the driver availability and approval
+    // information.
+    // Where: DriverController.getDriverStats() below.
+    // How: getDriverStats() uses jdbcTemplate.queryForObject() to read, validate or save the data
+    // for this operation. The return/exception handling below supplies its result to the caller.
     /**
      * GET /api/driver/stats
      * Returns driver statistics: todayRides, earnings, rating, totalRides, online status
@@ -131,6 +148,11 @@ public class DriverController {
         }
     }
 
+    // Feature: Retrieve the signed-in driver earnings summaries for display.
+    // Where: DriverController.getDriverEarnings() below.
+    // How: getDriverEarnings() uses jdbcTemplate.queryForObject() and jdbcTemplate.queryForList()
+    // to read, validate or save the data for this operation. The return/exception handling below
+    // supplies its result to the caller.
     @GetMapping("/earnings")
     public ResponseEntity<?> getDriverEarnings() {
         Long driverId = currentUserId();
@@ -155,6 +177,10 @@ public class DriverController {
         return ResponseEntity.ok(response);
     }
 
+    // Feature: Calculate the selected week earnings using the driver and date range.
+    // Where: DriverController.earningsForWeek() below.
+    // How: earningsForWeek() uses jdbcTemplate.queryForObject() to read, validate or save the data
+    // for this operation. The return/exception handling below supplies its result to the caller.
     private Map<String, Object> earningsForWeek(Long driverId, int weeksAgo) {
         Map<String, Object> result = new LinkedHashMap<>();
         BigDecimal amount = jdbcTemplate.queryForObject(
@@ -170,6 +196,10 @@ public class DriverController {
         return result;
     }
 
+    // Feature: Retrieve the signed-in driver previous trips.
+    // Where: DriverController.getDriverHistory() below.
+    // How: getDriverHistory() uses jdbcTemplate.queryForList() to read, validate or save the data
+    // for this operation. The return/exception handling below supplies its result to the caller.
     @GetMapping("/history")
     public ResponseEntity<?> getDriverHistory() {
         Long driverId = currentUserId();
@@ -189,6 +219,11 @@ public class DriverController {
             return ResponseEntity.ok(rows);
     }
 
+    // Feature: Retrieve the driver account and vehicle profile information.
+    // Where: DriverController.getDriverProfile() below.
+    // How: getDriverProfile() uses userRepository.findById(), driverRepository.findByUserId() and
+    // jdbcTemplate.queryForObject() to read, validate or save the data for this operation. The
+    // return/exception handling below supplies its result to the caller.
     @GetMapping("/profile")
     public ResponseEntity<?> getDriverProfile() {
         Long userId = currentUserId();
@@ -216,6 +251,10 @@ public class DriverController {
         return ResponseEntity.ok(profile);
     }
 
+    // Feature: Build the available request list using driver eligibility and the ride queue checks.
+    // Where: DriverController.getDriverRequests() below.
+    // How: getDriverRequests() uses jdbcTemplate.queryForList() to read, validate or save the data
+    // for this operation. The return/exception handling below supplies its result to the caller.
     /**
      * GET /api/driver/requests
      * Returns pending ride requests (PENDING status in rides table where driver_id is NULL)
@@ -272,6 +311,12 @@ public class DriverController {
         }
     }
 
+    // Feature: Load the selected request and prepare the details needed by the driver review
+    // screen.
+    // Where: DriverController.getRideRequestDetails() below.
+    // How: getRideRequestDetails() uses rideRepository.findById(), userRepository.findById() and
+    // jdbcTemplate.queryForObject() to read, validate or save the data for this operation. The
+    // return/exception handling below supplies its result to the caller.
     /**
      * GET /api/driver/requests/{id}
      * Returns details of a specific PENDING ride request (before driver accepts it)
@@ -334,6 +379,11 @@ public class DriverController {
         }
     }
 
+    // Feature: Return the chosen trip only when it belongs to the signed-in driver.
+    // Where: DriverController.getAssignedRide() below.
+    // How: getAssignedRide() uses rideRepository.findById() and userRepository.findById() to read,
+    // validate or save the data for this operation. The return/exception handling below supplies
+    // its result to the caller.
     @GetMapping("/rides/{id}")
     public ResponseEntity<?> getAssignedRide(@PathVariable("id") Long rideId) {
         try {
@@ -368,6 +418,13 @@ public class DriverController {
         }
     }
 
+    // Feature: Check driver ownership and required verification, then apply the requested trip
+    // stage.
+    // Where: DriverController.updateAssignedRideStatus() below.
+    // How: updateAssignedRideStatus() uses rideRepository.findById(),
+    // driverRepository.findByUserId() and driverRepository.save() to read, validate or save the
+    // data for this operation. The return/exception handling below supplies its result to the
+    // caller.
     @PostMapping("/rides/{id}/status")
     public ResponseEntity<?> updateAssignedRideStatus(
             @PathVariable("id") Long rideId,
@@ -424,6 +481,11 @@ public class DriverController {
         }
     }
 
+    // Feature: Check assignment and save the driver supplied coordinates for the trip.
+    // Where: DriverController.updateAssignedRideLocation() below.
+    // How: updateAssignedRideLocation() uses rideRepository.findById() and rideRepository.save() to
+    // read, validate or save the data for this operation. The return/exception handling below
+    // supplies its result to the caller.
     @PostMapping("/rides/{id}/location")
     public ResponseEntity<?> updateAssignedRideLocation(
             @PathVariable("id") Long rideId,
@@ -453,6 +515,10 @@ public class DriverController {
         catch (NumberFormatException ignored) { return null; }
     }
 
+    // Feature: Check the driver profile and update whether the driver is available for requests.
+    // Where: DriverController.setOnlineStatus() below.
+    // How: setOnlineStatus() uses driverRepository.save() to read, validate or save the data for
+    // this operation. The return/exception handling below supplies its result to the caller.
     /**
      * POST /api/driver/online
      * Updates driver online status
@@ -487,6 +553,12 @@ public class DriverController {
         }
     }
 
+    // Feature: Find the driver profile or build a missing profile from its existing account
+    // details.
+    // Where: DriverController.findOrCreateDriverProfile() below.
+    // How: findOrCreateDriverProfile() uses driverRepository.findByUserId(),
+    // userRepository.findById() and driverRepository.save() to read, validate or save the data for
+    // this operation. The return/exception handling below supplies its result to the caller.
     private Optional<Driver> findOrCreateDriverProfile(Long userId) {
         Optional<Driver> existing = driverRepository.findByUserId(userId);
         if (existing.isPresent()) {
@@ -513,6 +585,12 @@ public class DriverController {
         return Optional.of(driverRepository.save(driver));
     }
 
+    // Feature: Pass the request and face confirmation to the acceptance service and return the
+    // assignment result.
+    // Where: DriverController.acceptRequest() below.
+    // How: acceptRequest() takes the signed-in user and faceVerificationToken to
+    // DriverRideAcceptanceService.accept(). The service performs approval, confirmation and locked
+    // assignment checks.
     /**
      * POST /api/driver/requests/{id}/accept
      * Driver accepts a ride request
@@ -539,6 +617,10 @@ public class DriverController {
         }
     }
 
+    // Feature: Handle the driver decline action without assigning the request to that driver.
+    // Where: DriverController.declineRequest() below.
+    // How: declineRequest() uses rideRepository.findById() to read, validate or save the data for
+    // this operation. The return/exception handling below supplies its result to the caller.
     /**
      * POST /api/driver/requests/{id}/decline
      * Driver declines a ride request

@@ -1,3 +1,9 @@
+// Test feature: check persistent email configuration behaviour using the cases below. Use the
+// fixtures and any mocked dependencies defined here to exercise success and failure cases.
+// Where: PersistentEmailConfigurationTest in this file, including
+// privatePropertiesAreLoadedOnTwoIndependentStartsWithGmailTlsSettings().
+// How: JUnit executes the test methods. Fixtures and any Mockito mocks in this class provide
+// controlled inputs; assertions check the returned values, errors or saved interactions.
 package com.campusconnect.service;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

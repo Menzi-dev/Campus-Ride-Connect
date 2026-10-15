@@ -1,3 +1,9 @@
+// Account API: receive registration, login, enrollment upload, email confirmation and password
+// recovery requests. Delegate account rules to services and return a result to the client.
+// Where: AuthController handles /api/auth; @GetMapping/@PostMapping/@PutMapping identify the
+// actions below.
+// How: Spring reads request fields/path IDs, invokes these controller methods and returns their
+// ResponseEntity. Service/repository/JDBC calls inside the methods perform the actual work.
 package com.campusconnect.controller;
 
 import com.campusconnect.dto.AuthRequest;
@@ -19,6 +25,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
+/** Handles registration, login, email verification and password recovery HTTP requests. */
 @RestController
 @RequestMapping("/api/auth")
 @CrossOrigin(origins = "*")
@@ -39,11 +46,21 @@ public class AuthController {
     @Autowired
     private com.campusconnect.security.JwtTokenProvider jwtTokenProvider;
 
+    // Feature: Validate registration details and save the account through the registration service.
+    // Where: AuthController.register() below.
+    // How: register() passes the JSON request to registerInternal() in this class. That shared
+    // handler calls AuthService.register() and returns the account result.
     @PostMapping(value = "/register", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
         return registerInternal(request);
     }
 
+    // Feature: Collect form fields, enrollment data and uploaded driver files into one registration
+    // request.
+    // Where: AuthController.registerMultipart() below.
+    // How: registerMultipart() calls addApplicationDocument() and registerInternal() in this class
+    // to carry out the operation. Any failed checks stop the operation with the exception shown
+    // below.
     @PostMapping(value = "/register", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> registerMultipart(
             @RequestParam("fullName") String fullName,
@@ -157,6 +174,12 @@ public class AuthController {
         return ResponseEntity.status(410).body(Map.of("success", false, "message", "Photo uploads cannot verify identity. Use registration guided enrollment."));
     }
 
+    // Feature: Run the shared registration flow and return the next account verification or
+    // approval step.
+    // Where: AuthController.registerInternal() below.
+    // How: registerInternal() uses authService.register() and jwtTokenProvider.generateToken() to
+    // read, validate or save the data for this operation. The return/exception handling below
+    // supplies its result to the caller.
     private ResponseEntity<?> registerInternal(RegisterRequest request) {
         try {
             User user = authService.register(request);
@@ -177,6 +200,11 @@ public class AuthController {
         }
     }
 
+    // Feature: Read an uploaded application file and add its name, type and content to the stored
+    // document details.
+    // Where: AuthController.addApplicationDocument() below.
+    // How: addApplicationDocument() uses file.isEmpty(), file.getSize() and file.getBytes() to
+    // build/check the result returned by the code below.
     private void addApplicationDocument(Map<String, Object> documents, String kind, MultipartFile file) throws IOException {
         if (file == null || file.isEmpty()) return;
         if (file.getSize() > 4L * 1024 * 1024) throw new IllegalArgumentException("Documents must be 4 MB or smaller");
@@ -189,6 +217,11 @@ public class AuthController {
         documents.put(kind, Map.of("contentType", type, "data", Base64.getEncoder().encodeToString(bytes)));
     }
 
+    // Feature: Check the email and password and return the login result, including the session
+    // token on success.
+    // Where: AuthController.login() below.
+    // How: login() calls authService.login(request); it returns the token/account or handles the
+    // login exception for the client.
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody AuthRequest request) {
         try {
@@ -203,6 +236,10 @@ public class AuthController {
         }
     }
 
+    // Feature: Check the emailed link token and mark the account email verified if it is valid.
+    // Where: AuthController.confirmEmail() below.
+    // How: confirmEmail() uses emailVerificationService.verify() to read, validate or save the data
+    // for this operation. The return/exception handling below supplies its result to the caller.
     @PostMapping("/email-verification/confirm")
     public ResponseEntity<?> confirmEmail(@RequestBody Map<String, String> request) {
         try {
@@ -213,6 +250,11 @@ public class AuthController {
         }
     }
 
+    // Feature: Request another verification email while applying the service resend rules.
+    // Where: AuthController.resendVerification() below.
+    // How: resendVerification() uses emailVerificationService.resend() to read, validate or save
+    // the data for this operation. The return/exception handling below supplies its result to the
+    // caller.
     @PostMapping("/email-verification/resend")
     public ResponseEntity<?> resendVerification(@RequestBody Map<String, String> request) {
         String address = request.get("email");
@@ -222,6 +264,11 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("message", "If this account needs verification, a verification email will be sent. Please wait at least 60 seconds before requesting another."));
     }
 
+    // Feature: Check the submitted email and code through the email verification service.
+    // Where: AuthController.confirmEmailCode() below.
+    // How: confirmEmailCode() uses emailVerificationService.verifyCode() to read, validate or save
+    // the data for this operation. The return/exception handling below supplies its result to the
+    // caller.
     @PostMapping("/email-verification/confirm-code")
     public ResponseEntity<?> confirmEmailCode(@RequestBody Map<String, String> request) {
         String address = request.get("email");
@@ -235,6 +282,11 @@ public class AuthController {
         }
     }
 
+    // Feature: Ask the recovery service to issue an emailed password reset code.
+    // Where: AuthController.requestPasswordReset() below.
+    // How: requestPasswordReset() uses email.isBlank() and passwordResetService.requestCode() to
+    // read, validate or save the data for this operation. The return/exception handling below
+    // supplies its result to the caller.
     @PostMapping("/password-reset/request")
     public ResponseEntity<?> requestPasswordReset(@RequestBody Map<String, String> request) {
         String email = request.get("email");
@@ -247,6 +299,11 @@ public class AuthController {
                 "message", "If an account exists for that email, a reset code has been sent"));
     }
 
+    // Feature: Check the submitted recovery code before allowing the next reset step.
+    // Where: AuthController.verifyPasswordResetCode() below.
+    // How: verifyPasswordResetCode() uses email.isBlank() and passwordResetService.verifyCode() to
+    // read, validate or save the data for this operation. The return/exception handling below
+    // supplies its result to the caller.
     @PostMapping("/password-reset/verify")
     public ResponseEntity<?> verifyPasswordResetCode(@RequestBody Map<String, String> request) {
         String email = request.get("email");
@@ -263,6 +320,11 @@ public class AuthController {
         }
     }
 
+    // Feature: Validate the recovery details and ask the service to save the new password.
+    // Where: AuthController.confirmPasswordReset() below.
+    // How: confirmPasswordReset() uses email.isBlank() and passwordResetService.resetPassword() to
+    // read, validate or save the data for this operation. The return/exception handling below
+    // supplies its result to the caller.
     @PostMapping("/password-reset/confirm")
     public ResponseEntity<?> confirmPasswordReset(@RequestBody Map<String, String> request) {
         String email = request.get("email");

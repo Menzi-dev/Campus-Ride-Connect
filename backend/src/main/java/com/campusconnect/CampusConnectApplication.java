@@ -1,3 +1,8 @@
+// Backend startup: launch Spring Boot and run the local development account and database setup
+// routines.
+// Where: main(), seedAdmin(), seedSecurityAccount() and repairRideSchema() in this file.
+// How: SpringApplication.run() starts the backend. CommandLineRunner beans then save development
+// accounts and run the existing schema helpers; these routines run at startup.
 package com.campusconnect;
 
 import com.campusconnect.entity.User;
@@ -11,12 +16,19 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
 
+/** Starts the backend and applies its development account and database initialization routines. */
 @SpringBootApplication
 public class CampusConnectApplication {
     public static void main(String[] args) {
         SpringApplication.run(CampusConnectApplication.class, args);
     }
 
+    // Feature: Create or update the development administrator account, including resetting its
+    // configured password at startup.
+    // Where: CampusConnectApplication.seedAdmin() below.
+    // How: seedAdmin() uses userRepository.findByEmail(), passwordEncoder.encode() and
+    // userRepository.save() to read, validate or save the data for this operation. The
+    // return/exception handling below supplies its result to the caller.
     @Bean
     public CommandLineRunner seedAdmin(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         return args -> {
@@ -39,6 +51,12 @@ public class CampusConnectApplication {
         };
     }
 
+    // Feature: Create or update the development security account, including resetting its
+    // configured password at startup.
+    // Where: CampusConnectApplication.seedSecurityAccount() below.
+    // How: seedSecurityAccount() uses userRepository.findByEmail(), passwordEncoder.encode() and
+    // userRepository.save() to read, validate or save the data for this operation. The
+    // return/exception handling below supplies its result to the caller.
     @Bean
     public CommandLineRunner seedSecurityAccount(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         return args -> {
@@ -61,6 +79,11 @@ public class CampusConnectApplication {
         };
     }
 
+    // Feature: Run the existing development schema helpers for missing profile, rating, payment and
+    // settings fields.
+    // Where: CampusConnectApplication.repairRideSchema() below.
+    // How: repairRideSchema() calls ensureUserColumn() and ensureRideColumn() in this class to
+    // carry out the operation. Any failed checks stop the operation with the exception shown below.
     @Bean
     public CommandLineRunner repairRideSchema(JdbcTemplate jdbcTemplate) {
         return args -> {

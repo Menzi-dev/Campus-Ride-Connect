@@ -1,5 +1,19 @@
+// SOS history: retrieve resolved alerts and display their recorded details and times.
+// Where: mobile/src/screens/ResolvedSosScreen.tsx; start at ResolvedSosScreen(), then follow the
+// named actions below.
+// How: ResolvedSosScreen() renders the screen and keeps its form/list/progress values in React
+// state. load() contain the API calls; ApiClient.ts adds the /api base path and saved login token.
+/** Displays resolved security alerts and allows available incident audio to be reviewed. */
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -31,6 +45,12 @@ export default function ResolvedSosScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
 
+  // Feature: Retrieve the records used by this screen and update loading, refresh and error
+  // feedback.
+  // Where: ResolvedSosScreen.load() below.
+  // How: load() uses apiClient.get('/security/sos') through mobile/src/services/ApiClient.ts to
+  // exchange data with the backend. setRefreshing() and setLoading() update React state, which
+  // redraws the related screen content.
   const load = useCallback(async (refresh = false) => {
     refresh ? setRefreshing(true) : setLoading(true);
     try {
@@ -113,6 +133,7 @@ export default function ResolvedSosScreen() {
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
   header: { padding: spacing.lg, paddingBottom: spacing.md, backgroundColor: colors.white, borderBottomWidth: 1, borderBottomColor: colors.gray200 },

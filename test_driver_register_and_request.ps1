@@ -1,4 +1,10 @@
+# Driver workflow check: send the registration and ride-request API calls below and inspect their
+# responses.
 # Register and test driver
+# Where: test_driver_register_and_request.ps1.
+# How: PowerShell runs the commands below in order. Its variables supply local inputs; launch
+# commands start a service and any Invoke-RestMethod/Invoke-WebRequest calls exchange data with API
+# endpoints.
 $baseUrl = "http://127.0.0.1:8080/api"
 
 # Step 1: Register driver

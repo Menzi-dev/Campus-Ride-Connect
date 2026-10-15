@@ -1,3 +1,9 @@
+// Test feature: check password reset service behaviour using the cases below. Use the fixtures and
+// any mocked dependencies defined here to exercise success and failure cases.
+// Where: PasswordResetServiceTest in this file, including
+// requestCodeDoesNotDiscloseUnknownAccounts() and requestCodeEmailsCodeAndStoresOnlyItsHash().
+// How: JUnit executes the test methods. Fixtures and any Mockito mocks in this class provide
+// controlled inputs; assertions check the returned values, errors or saved interactions.
 package com.campusconnect.service;
 
 import com.campusconnect.entity.PasswordResetCode;

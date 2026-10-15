@@ -1,3 +1,11 @@
+// Payment preferences: load saved card display details, add or remove them and choose the default
+// method. These actions do not charge a bank card.
+// Where: mobile/src/screens/PaymentMethodsScreen.tsx; start at PaymentMethodsScreen(), then follow
+// the named actions below.
+// How: PaymentMethodsScreen() renders the screen and keeps its form/list/progress values in React
+// state. loadSavedCards(), handleAddCard() and setDefaultCard() contain the API calls; ApiClient.ts
+// adds the /api base path and saved login token.
+/** Manages saved card metadata and the preferred payment method; it does not process payments. */
 import ConfirmationDialog from '../components/ConfirmationDialog';
 import ScrollableCard from '../components/ScrollableCard';
 import { useToast } from '../components/Toast';
@@ -17,7 +25,17 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Banknote, Check, CheckCircle2, ChevronLeft, ChevronRight, CreditCard, Plus, ShieldCheck, Trash2 } from 'lucide-react-native';
+import {
+  Banknote,
+  Check,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  CreditCard,
+  Plus,
+  ShieldCheck,
+  Trash2,
+} from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import apiClient from '../services/ApiClient';
 import { colors, font, radius, shadow, spacing } from '../theme/theme';
@@ -62,6 +80,10 @@ export default function PaymentMethodsScreen() {
     loadSavedCards();
   }, []);
 
+  // Feature: Retrieve the account saved card display details and current defaults.
+  // Where: PaymentMethodsScreen.loadSavedCards() below.
+  // How: loadSavedCards() requests /users/me/payment-methods and puts the returned display metadata
+  // into the saved-card state used by this screen.
   const loadSavedCards = async () => {
     setLoading(true);
     setLoadError('');
@@ -84,6 +106,11 @@ export default function PaymentMethodsScreen() {
     }
   };
 
+  // Feature: Check the card form and save display metadata; this does not process a card payment.
+  // Where: PaymentMethodsScreen.handleAddCard() below.
+  // How: handleAddCard() validates the form and sends card display metadata to
+  // /users/me/payment-methods. UserController.addPaymentMethod() stores user_payment_methods; no
+  // card charge occurs here.
   const handleAddCard = async () => {
     if (cards.length >= MAX_SAVED_CARDS) return;
 
@@ -147,6 +174,11 @@ export default function PaymentMethodsScreen() {
     setAddCardVisible(false);
   };
 
+  // Feature: Send the selected saved card as the default and refresh the displayed preference.
+  // Where: PaymentMethodsScreen.setDefaultCard() below.
+  // How: setDefaultCard() uses apiClient.put(`/users/me/payment-methods/${cardId}/default`) through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend. setCards() and
+  // setPaymentMethod() update React state, which redraws the related screen content.
   const setDefaultCard = async (cardId: string) => {
     if (!beginUpdate()) return;
     try {
@@ -158,6 +190,11 @@ export default function PaymentMethodsScreen() {
     } finally { endUpdate(); }
   };
 
+  // Feature: Remove the selected saved card through the API and reload the saved list.
+  // Where: PaymentMethodsScreen.handleDeleteCard() below.
+  // How: handleDeleteCard() uses apiClient.delete(`/users/me/payment-methods/${cardId}`) through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend. setCards() and
+  // setPaymentMethod() update React state, which redraws the related screen content.
   const handleDeleteCard = async (cardId: string) => {
     if (!beginUpdate()) return;
     const currentDefault = cards.find((card) => card.isDefault) || cards[0];
@@ -180,6 +217,11 @@ export default function PaymentMethodsScreen() {
     } finally { setPendingDelete(null); endUpdate(); }
   };
 
+  // Feature: Save the chosen cash/card preference for future bookings.
+  // Where: PaymentMethodsScreen.selectPaymentMethod() below.
+  // How: selectPaymentMethod() uses apiClient.put('/users/me/payment-method') through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend. setPaymentMethod() update
+  // React state, which redraws the related screen content.
   const selectPaymentMethod = async (method: 'CASH' | 'CARD') => {
     if (method === paymentMethod || !beginUpdate()) return;
     try {
@@ -376,6 +418,7 @@ export default function PaymentMethodsScreen() {
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
   content: { padding: spacing.lg, paddingBottom: 40 },

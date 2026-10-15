@@ -1,8 +1,14 @@
+// Database record: store ride conversation text, sender and send time. The annotations map these
+// fields to table columns; the methods below read and update the record.
+// Where: ChatMessage in this file maps to the messages table.
+// How: @Id identifies its record and @Column/@Enumerated define field storage. Repository/service
+// code reads and updates these fields through the methods below.
 package com.campusconnect.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
+/** Maps a persisted message to its ride, sender and recipient. */
 @Entity
 @Table(name = "messages")
 public class ChatMessage {

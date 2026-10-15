@@ -1,3 +1,9 @@
+// Diagnostic API: report backend/database connectivity and basic request information for local
+// troubleshooting.
+// Where: TestController handles /api/test; @GetMapping/@PostMapping/@PutMapping identify the
+// actions below.
+// How: Spring reads request fields/path IDs, invokes these controller methods and returns their
+// ResponseEntity. Service/repository/JDBC calls inside the methods perform the actual work.
 package com.campusconnect.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,6 +20,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/** Provides diagnostic API endpoints used by the connection-check screen and local development checks. */
 @RestController
 @RequestMapping("/api/test")
 public class TestController {

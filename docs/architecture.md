@@ -17,5 +17,4 @@ WebSockets from an included dependency or empty configuration file. SMTP and
 map/routing services are external dependencies. Use a reachable LAN API address
 on a real device and HTTPS in a future deployment.
 
-UML/ERD assets and relationship caveats: report/assets and report pp.6–8/13–15.
 Historical SQL does not fully match JPA mappings; see deployment.md.

@@ -1,4 +1,12 @@
-// mobile/src/screens/CreateAccountScreen.tsx
+// Registration: collect rider or driver details in steps, select driver documents and capture a
+// guided enrollment photo. Submit the completed application to the backend and explain the next
+// verification or approval step.
+// Where: mobile/src/screens/CreateAccountScreen.tsx; start at CreateAccountScreen(), then follow
+// the named actions below.
+// How: CreateAccountScreen() renders the screen and keeps its form/list/progress values in React
+// state. handleFinalSubmit() contain the API calls; ApiClient.ts adds the /api base path and saved
+// login token.
+/** Collects role-specific account details, documents and guided face enrollment before registration. */
 import React, { useRef, useState, useEffect, useLayoutEffect } from 'react';
 import {
   View,
@@ -10,18 +18,15 @@ import {
   Platform,
   ScrollView,
   Animated,
-  Easing,
   StatusBar,
   Image,
-  Linking,
-  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
-import CameraView from 'expo-camera/build/CameraView';
+
 import { useCameraPermissions } from 'expo-camera';
 import {
   User,
@@ -41,21 +46,14 @@ import {
   CloudUpload,
   FileCheck2,
   Camera as CameraIcon,
-  RotateCcw,
   CheckCircle2,
-  MoveUp,
-  MoveDown,
-  MoveLeft,
-  MoveRight,
-  Circle,
-  AlertCircle,
 } from 'lucide-react-native';
 import Button from '../components/Button';
 import BottomSheetModal from '../components/BottomSheetModal';
 import { useToast } from '../components/Toast';
 import { colors, radius, spacing, font } from '../theme/theme';
 import apiClient from '../services/ApiClient';
-import { LinearGradient } from 'expo-linear-gradient';
+
 import GuidedFaceScan, { FaceScanResult } from '../components/GuidedFaceScan';
 
 type RootStackParamList = {
@@ -72,14 +70,6 @@ type RootStackParamList = {
 
 type Role = 'RIDER' | 'DRIVER';
 type YearOption = { label: string; value: number };
-type Direction = 'center' | 'left' | 'right' | 'up' | 'down';
-
-interface FaceVerificationStep {
-  direction: Direction;
-  label: string;
-  icon: React.ReactNode | null;
-  completed: boolean;
-}
 
 const YEAR_OPTIONS: YearOption[] = [
   { label: '1st Year', value: 1 },
@@ -91,7 +81,6 @@ const YEAR_OPTIONS: YearOption[] = [
 
 const TOTAL_STEPS = 4;
 const CAMPUS_EMAIL_DOMAIN = '@spu.ac.za';
-const MAX_ATTEMPTS_PER_STEP = 3;
 
 export default function CreateAccountScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
@@ -137,9 +126,8 @@ export default function CreateAccountScreen() {
   const [agreeTerms, setAgreeTerms] = useState(false);
 
   // Step 4 — Face Verification
-  const [permission, requestPermission] = useCameraPermissions();
-  const cameraRef = useRef<any>(null);
-  const [cameraReady, setCameraReady] = useState(false);
+  const [, requestPermission] = useCameraPermissions();
+
   const [hasRequestedCameraPermission, setHasRequestedCameraPermission] = useState(false);
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
   const [faceScanResult, setFaceScanResult] = useState<FaceScanResult | null>(null);
@@ -147,6 +135,10 @@ export default function CreateAccountScreen() {
 
   const [isComplete, setIsComplete] = useState(false);
 
+  // Feature: Open the file picker and keep the selected driver application document.
+  // Where: CreateAccountScreen.pickDocument() below.
+  // How: pickDocument() uses DocumentPicker.getDocumentAsync() in the block below to carry out this
+  // step.
   const pickDocument = async (setter: (a: DocumentPicker.DocumentPickerAsset) => void) => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -162,6 +154,10 @@ export default function CreateAccountScreen() {
     }
   };
 
+  // Feature: Let the driver choose a vehicle photo and validate the selected file.
+  // Where: CreateAccountScreen.pickVehiclePhoto() below.
+  // How: pickVehiclePhoto() uses DocumentPicker.getDocumentAsync() in the block below to carry out
+  // this step. setVehiclePhotoAsset() update React state, which redraws the related screen content.
   const pickVehiclePhoto = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -231,6 +227,10 @@ export default function CreateAccountScreen() {
     return null;
   };
 
+  // Feature: Validate the current registration step before moving to the next step.
+  // Where: CreateAccountScreen.goNext() below.
+  // How: goNext() uses validateStep1(), validateStep2() and validateStep3() in the block below to
+  // carry out this step. setStep() update React state, which redraws the related screen content.
   const goNext = () => {
     if (step === 1) {
       const err = validateStep1();
@@ -247,6 +247,11 @@ export default function CreateAccountScreen() {
     setStep((s) => Math.min(s + 1, TOTAL_STEPS));
   };
 
+  // Feature: Return to the previous registration step without submitting the account.
+  // Where: CreateAccountScreen.goBack() below.
+  // How: goBack() uses navigation.canGoBack(), navigation.goBack() and navigation.replace() in the
+  // block below to carry out this step. setStep() update React state, which redraws the related
+  // screen content.
   const goBack = () => {
     if (step === 1) {
       if (navigation.canGoBack()) navigation.goBack();
@@ -256,6 +261,11 @@ export default function CreateAccountScreen() {
     setStep((s) => Math.max(s - 1, 1));
   };
 
+  // Feature: Request camera access and update the capture state according to the permission result.
+  // Where: CreateAccountScreen.handleRequestPermission() below.
+  // How: handleRequestPermission() uses requestPermission() in the block below to carry out this
+  // step. setHasRequestedCameraPermission() update React state, which redraws the related screen
+  // content.
   const handleRequestPermission = async () => {
     try {
       setHasRequestedCameraPermission(true);
@@ -279,6 +289,12 @@ export default function CreateAccountScreen() {
     }
   }, [step, hasRequestedCameraPermission]);
 
+  // Feature: Check the completed registration steps and send account, enrollment and driver
+  // application data.
+  // Where: CreateAccountScreen.handleFinalSubmit() below.
+  // How: handleFinalSubmit() builds FormData from the form, enrollment image/metadata and
+  // applicable driver files, then posts /auth/register. AuthController and AuthService save the
+  // account and pending driver profile.
   const handleFinalSubmit = async () => {
     if (!selfieUri) {
       showToast('Please complete face verification first', 'red');
@@ -860,6 +876,7 @@ function UploadZone({ file, onPress }: { file: DocumentPicker.DocumentPickerAsse
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.white },
   scrollView: { flex: 1 },
@@ -1069,408 +1086,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
 
-  cameraPlaceholder: { width: '100%', height: 320, borderRadius: 20, backgroundColor: colors.gray100 },
-
-  permissionBox: {
-    alignItems: 'center',
-    backgroundColor: colors.gray50,
-    borderRadius: 20,
-    padding: spacing.xl,
-    gap: 12,
-    minHeight: 300,
-    justifyContent: 'center',
-  },
-  permissionIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(34,197,94,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  permissionTitle: { fontFamily: font.bold, fontSize: 17, fontWeight: '700', color: colors.gray900 },
-  permissionSubtitle: {
-    fontFamily: font.regular,
-    fontSize: 13,
-    color: colors.gray500,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  permissionButton: {
-    backgroundColor: colors.green,
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 30,
-    marginTop: 8,
-  },
-  permissionButtonText: {
-    fontFamily: font.semibold,
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.white,
-  },
-
-  verificationContainer: {
-    alignItems: 'center',
-  },
-
-  cameraWrapper: {
-    width: '100%',
-    maxWidth: 420,
-    aspectRatio: 1,
-    borderRadius: 24,
-    overflow: 'hidden',
-    backgroundColor: colors.gray900,
-    marginBottom: spacing.md,
-    shadowColor: colors.gray900,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  cameraFrame: {
-    flex: 1,
-    position: 'relative',
-  },
-  cameraView: {
-    flex: 1,
-  },
-  overlayTop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 90,
-  },
-  overlayBottom: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 90,
-  },
-
-  flashOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: colors.white,
-  },
-
-  faceGuide: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  faceGuideInner: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  faceGuideInnerComplete: {
-    borderColor: 'rgba(76,175,80,0.85)',
-  },
-  guideCircle: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-  },
-
-  directionOverlay: {
-    position: 'absolute',
-    bottom: 40,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  directionBadge: {
-    backgroundColor: 'rgba(0,0,0,0.72)',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 30,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  directionIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  directionLabel: {
-    fontFamily: font.semibold,
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.white,
-  },
-
-  statusIndicator: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 20,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.green,
-    position: 'relative',
-  },
-  statusPulse: {
-    position: 'absolute',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.green,
-    opacity: 0.5,
-  },
-  statusText: {
-    fontFamily: font.medium,
-    fontSize: 10,
-    fontWeight: '500',
-    color: colors.white,
-  },
-
-  verifyingOverlay: {
-    position: 'absolute',
-    left: 16,
-    bottom: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(0,0,0,0.72)',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-  },
-  verifyingText: {
-    fontFamily: font.medium,
-    fontSize: 11,
-    fontWeight: '500',
-    color: colors.white,
-  },
-
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    width: '100%',
-    backgroundColor: 'rgba(239,68,68,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.25)',
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: spacing.sm,
-  },
-  errorText: {
-    fontFamily: font.medium,
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.red,
-    lineHeight: 16,
-  },
-  attemptsText: {
-    fontFamily: font.regular,
-    fontSize: 10.5,
-    color: colors.red,
-    marginTop: 2,
-  },
-
-  progressContainer: {
-    width: '100%',
-    paddingHorizontal: 4,
-    marginBottom: spacing.md,
-  },
-  progressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  progressTitle: {
-    fontFamily: font.medium,
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.gray600,
-  },
-  progressPercent: {
-    fontFamily: font.bold,
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.green,
-  },
-  progressTrack: {
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.gray200,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 2,
-    backgroundColor: colors.green,
-  },
-
-  stepsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    paddingHorizontal: 4,
-    marginBottom: spacing.md,
-  },
-  stepItem: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  stepCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.gray200,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepCircleActive: {
-    backgroundColor: colors.blue,
-    borderWidth: 2,
-    borderColor: colors.blue,
-  },
-  stepCircleComplete: {
-    backgroundColor: colors.green,
-    borderWidth: 2,
-    borderColor: colors.green,
-  },
-  stepNumber: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepNumberText: {
-    fontFamily: font.semibold,
-    fontSize: 10,
-    fontWeight: '600',
-    color: colors.gray600,
-  },
-  stepLabel: {
-    fontFamily: font.medium,
-    fontSize: 8,
-    fontWeight: '500',
-    color: colors.gray400,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  stepLabelComplete: {
-    color: colors.green,
-  },
-
-  controlsContainer: {
-    width: '100%',
-    gap: 8,
-  },
-  startButton: {
-    width: '100%',
-    borderRadius: 30,
-    overflow: 'hidden',
-  },
-  startButtonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 14,
-  },
-  startButtonText: {
-    fontFamily: font.bold,
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.white,
-  },
-
-  captureRow: {
-    width: '100%',
-    alignItems: 'center',
-    gap: 8,
-  },
-  captureButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.green,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: colors.green,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 6,
-    borderWidth: 4,
-    borderColor: 'rgba(76,175,80,0.25)',
-  },
-  captureButtonDisabled: {
-    backgroundColor: colors.gray400,
-    shadowOpacity: 0,
-  },
-  captureHint: {
-    fontFamily: font.medium,
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.gray600,
-    textAlign: 'center',
-  },
-  resetButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    backgroundColor: colors.gray100,
-    borderRadius: 30,
-    marginTop: 4,
-  },
-  resetButtonText: {
-    fontFamily: font.medium,
-    fontSize: 13,
-    fontWeight: '500',
-    color: colors.gray600,
-  },
-
   completeContainer: {
     alignItems: 'center',
     paddingVertical: spacing.md,
   },
-  completeIconRing: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: 'rgba(76,175,80,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.md,
-  },
+
   completeTitle: {
     fontFamily: font.bold,
     fontSize: 20,
@@ -1484,16 +1104,5 @@ const styles = StyleSheet.create({
     color: colors.gray500,
     marginBottom: spacing.md,
   },
-  completePreview: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    overflow: 'hidden',
-    borderWidth: 3,
-    borderColor: colors.green,
-  },
-  completeImage: {
-    width: '100%',
-    height: '100%',
-  },
+
 });

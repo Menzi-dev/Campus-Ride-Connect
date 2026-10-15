@@ -1,5 +1,13 @@
+// Connection checks: call diagnostic and user endpoints and show the returned result or error. This
+// helps identify client-to-backend connection problems.
+// Where: mobile/src/screens/TestConnectionScreen.tsx; start at TestConnectionScreen(), then follow
+// the named actions below.
+// How: TestConnectionScreen() renders the screen and keeps its form/list/progress values in React
+// state. testConnection(), testHello() and getUsers() contain the API calls; ApiClient.ts adds the
+// /api base path and saved login token.
+/** Provides the registered diagnostic screen for checking client-to-backend connectivity. */
 import { useToast } from '../components/Toast';
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
     View,
     Text,
@@ -125,6 +133,7 @@ const TestConnectionScreen = () => {
     );
 };
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
     container: {
         flex: 1, minWidth: 0, minHeight: 0,

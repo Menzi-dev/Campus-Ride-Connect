@@ -1,5 +1,12 @@
+-- Database migration: update rides table. Apply these schema/data changes to the intended database
+-- after checking its current structure.
 -- Migration: Update rides table with new columns and status values
 -- This migration adds the missing columns and updates the status enum to support new ride statuses
+-- Where: SQL statements in database/mysql/migrations/001_update_rides_table.sql, involving rides
+-- and CURRENT_TIMESTAMP.
+-- How: MySQL executes these statements directly. CREATE/ALTER change structure;
+-- INSERT/UPDATE/DELETE change rows when present. Java entities/repositories use the resulting
+-- application tables.
 
 -- Add missing columns to rides table if they don't exist
 ALTER TABLE rides

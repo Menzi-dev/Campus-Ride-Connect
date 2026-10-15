@@ -1,3 +1,7 @@
+// Shared appearance: define colours, spacing, text sizes and corner styles used across the app.
+// Where: exported theme values in mobile/src/theme/theme.ts.
+// How: Screens/components import these values into StyleSheet.create() so colours, spacing and text
+// styles come from shared definitions.
 import { Platform } from 'react-native';
 
 // Design tokens — ported 1:1 from the HTML prototype's :root CSS variables.

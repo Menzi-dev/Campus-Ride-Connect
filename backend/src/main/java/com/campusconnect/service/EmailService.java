@@ -1,3 +1,8 @@
+// Email delivery: check mail configuration and send plain-text and HTML messages through Spring
+// mail. Return whether delivery was accepted by the configured sender.
+// Where: EmailService, starting with configured() and send() in this file.
+// How: The calling controller/service uses these methods. Their named mail, repository or other
+// helper calls perform the work described below.
 package com.campusconnect.service;
 
 import jakarta.annotation.PostConstruct;
@@ -10,6 +15,7 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.HtmlUtils;
 
+/** Checks mail configuration and sends plain-text and HTML application emails through the configured SMTP sender. */
 @Service
 public class EmailService {
     private static final Logger LOG = LoggerFactory.getLogger(EmailService.class);
@@ -36,11 +42,20 @@ public class EmailService {
         }
     }
 
+    // Feature: Check whether the required mail sender settings are available.
+    // Where: EmailService.configured() below.
+    // How: configured() uses username.isBlank(), password.isBlank() and password.contains() to
+    // build/check the result returned by the code below.
     public boolean configured() {
         return !disabled && username != null && !username.isBlank() && password != null && !password.isBlank()
             && !password.contains("YOUR_") && host != null && !host.isBlank();
     }
 
+    // Feature: Build a plain-text/HTML email and attempt delivery through the configured mail
+    // sender.
+    // Where: EmailService.send() below.
+    // How: send() calls configured() in this class to carry out the operation. Any failed checks
+    // stop the operation with the exception shown below.
     public boolean send(String recipient, String subject, String text, String html) {
         if (!configured()) { LOG.warn("Email delivery skipped: SMTP credentials are missing or email is disabled."); return false; }
         try {

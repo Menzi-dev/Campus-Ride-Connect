@@ -1,8 +1,15 @@
+// Database record: store driver account reference, vehicle details, approval and availability
+// information. The annotations map these fields to table columns; the methods below read and update
+// the record.
+// Where: Driver in this file maps to the drivers table.
+// How: @Id identifies its record and @Column/@Enumerated define field storage. Repository/service
+// code reads and updates these fields through the methods below.
 package com.campusconnect.entity;
 
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 
+/** Maps a driver profile, application approval, vehicle information and availability to the database. */
 @Entity
 @Table(name = "drivers")
 public class Driver {

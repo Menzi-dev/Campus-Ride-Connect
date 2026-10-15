@@ -1,3 +1,8 @@
+// Shared bottom sheet: display supplied content in a modal panel and let the parent close it.
+// Where: mobile/src/components/BottomSheetModal.tsx.
+// How: BottomSheetModal() reads visible/onClose and children props to render a Modal and its shared
+// panel. The parent screen controls whether it is open.
+/** Displays scrollable sheet content with safe-area padding and keyboard-aware positioning. */
 import React from 'react';
 import {
   Modal,
@@ -44,6 +49,7 @@ export default function BottomSheetModal({ visible, onClose, title, subtitle, ch
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFill,

@@ -1,3 +1,8 @@
+// Browser layout checks: provide synthetic accounts/API responses and test several screen sizes.
+// These checks do not create real bookings or verify a live backend.
+// Where: mobile/scripts/check-responsive.cjs; follow mockApi() and main().
+// How: Playwright controls Chromium while mocked API routes supply synthetic records. Node
+// assertions check the resulting page/actions; this does not prove real backend integration.
 /* Run against a local Expo web server. API fixtures keep checks independent of real accounts. */
 const assert = require('node:assert/strict');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -12,6 +17,11 @@ const rides = Array.from({ length: 8 }, (_, i) => ({
   fare: 45.5, createdAt: '2026-10-04T10:00:00', riderRating: i % 2 ? 4 : null,
 }));
 
+// Feature: Intercept API calls with synthetic responses so browser checks do not depend on real
+// accounts or alerts.
+// Where: check-responsive.mockApi() below.
+// How: mockApi() installs Playwright request interception and returns synthetic account/ride data.
+// The browser scripts exercise the client without writing real records.
 async function mockApi(page, role = 'RIDER') {
   await page.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -38,6 +48,10 @@ async function login(page) {
   await page.getByText('Sign In', { exact: true }).click();
 }
 
+// Feature: Assert that the page fits the tested browser width without horizontal overflow.
+// Where: check-responsive.checkPageWidth() below.
+// How: checkPageWidth() reads browser page geometry and uses Node assertions to detect a page wider
+// than the current test viewport.
 async function checkPageWidth(page, label) {
   const overflow = await page.getByTestId('app-page-area').evaluate((area) => {
     return [...area.querySelectorAll('div')]

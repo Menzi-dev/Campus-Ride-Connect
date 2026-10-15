@@ -1,8 +1,15 @@
+// Database record: store account details, password hash, role, profile and enrollment/verification
+// state. The annotations map these fields to table columns; the methods below read and update the
+// record.
+// Where: User in this file maps to the users table.
+// How: @Id identifies its record and @Column/@Enumerated define field storage. Repository/service
+// code reads and updates these fields through the methods below.
 package com.campusconnect.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
+/** Maps account credentials, role, profile, face enrollment and email-verification state. */
 @Entity
 @Table(name = "users")
 public class User {
@@ -28,6 +35,11 @@ public class User {
 	public boolean requiresEmailVerification() { return role != Role.DRIVER && !isEmailVerified(); }
 	public void setEmailVerified(Boolean value) { emailVerified = value; }
 
+	// Feature: Store the password hash for login checks and hide it from JSON responses.
+	// The role below identifies the account's rider, driver, admin or security access.
+	// Where: passwordHash and role below map to users.password_hash and users.role.
+	// How: AuthService uses BCrypt encode()/matches(); JwtTokenProvider puts the role in
+	// the token and JwtAuthenticationFilter makes it available to Spring access checks.
 	@Column(name = "password_hash", nullable = false)
 	@com.fasterxml.jackson.annotation.JsonIgnore
 	private String passwordHash;
@@ -60,6 +72,11 @@ public class User {
 	@Column(name = "vehicle_year")
 	private Integer vehicleYear;
 
+	// Feature: Keep enrollment data separately from the public profile. A saved enrollment
+	// photo is a comparison reference; it does not by itself prove the user's identity.
+	// Where: faceEnrollmentPhoto, faceEmbedding and faceScanMetadata below.
+	// How: registration saves the enrollment. RideFaceVerificationService reads its image
+	// for Python comparison; @JsonIgnore keeps these private fields out of normal JSON output.
 	@Column(name = "face_verified")
 	private Boolean faceVerified = false;
 

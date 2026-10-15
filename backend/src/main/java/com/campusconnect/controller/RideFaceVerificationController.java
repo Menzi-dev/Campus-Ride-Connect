@@ -1,3 +1,9 @@
+// Ride face API: receive a rider or driver scan, call the comparison service and return a
+// confirmation for the permitted ride action.
+// Where: RideFaceVerificationController handles /api/face; @GetMapping/@PostMapping/@PutMapping
+// identify the actions below.
+// How: Spring reads request fields/path IDs, invokes these controller methods and returns their
+// ResponseEntity. Service/repository/JDBC calls inside the methods perform the actual work.
 package com.campusconnect.controller;
 
 import com.campusconnect.dto.RideRequest;
@@ -7,6 +13,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
+/** Checks the authenticated account and delegates rider or driver face comparisons to the verification service. */
 @RestController
 @RequestMapping("/api/face")
 public class RideFaceVerificationController {
@@ -16,6 +23,12 @@ public class RideFaceVerificationController {
     public record ScanRequest(String image, RideRequest ride) {}
     public record DriverScanRequest(String image, Long rideId) {}
 
+    // Feature: Check driver eligibility and the pending ride before requesting a driver face
+    // comparison.
+    // Where: RideFaceVerificationController.verifyDriver() below.
+    // How: verifyDriver() uses drivers.checkDriver() and checkAvailable(), then
+    // verification.verify() with driverAcceptanceDraft(). The client receives the confirmation
+    // needed by DriverController.acceptRequest().
     @PostMapping("/verify-driver")
     public ResponseEntity<?> verifyDriver(@RequestBody DriverScanRequest request) {
         try {

@@ -1,8 +1,14 @@
+// Database record: store email confirmation hash, account reference and expiry/use state. The
+// annotations map these fields to table columns; the methods below read and update the record.
+// Where: EmailVerificationToken in this file maps to the email_verification_tokens table.
+// How: @Id identifies its record and @Column/@Enumerated define field storage. Repository/service
+// code reads and updates these fields through the methods below.
 package com.campusconnect.entity;
 
 import jakarta.persistence.*;
 import java.time.Instant;
 
+/** Stores hashed account verification tokens and codes together with expiry, attempts and use state. */
 @Entity
 @Table(name = "email_verification_tokens")
 public class EmailVerificationToken {

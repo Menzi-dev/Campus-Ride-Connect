@@ -1,5 +1,18 @@
+// Legal information: display the terms or privacy text chosen through the navigation route.
+// Where: mobile/src/screens/LegalDocumentScreen.tsx; start at LegalDocumentScreen(), then follow
+// the named actions below.
+// How: LegalDocumentScreen() renders the JSX below using its props, route data and local state. Its
+// event callbacks connect visible controls to the operations in this file.
+/** Displays the in-app terms or privacy text selected by the navigation route. */
 import React from 'react';
-import { ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import { ChevronLeft } from 'lucide-react-native';
@@ -177,6 +190,7 @@ export default function LegalDocumentScreen() {
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.white },
   scrollView: { flex: 1, minHeight: 0 },

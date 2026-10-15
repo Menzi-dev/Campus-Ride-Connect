@@ -1,3 +1,8 @@
+# Backend settings: configure the server and its database/security behaviour. External environment
+# and private configuration can provide local values.
+# Where: backend/src/main/resources/application.yml; Spring reads it at backend startup.
+# How: Nested keys configure the datasource, server and other options present here. Environment
+# references and imported private files supply the local values.
 spring:
   config:
     import: "optional:file:${user.home}/.campusconnect/mail.properties,optional:file:./config/mail.properties,optional:file:./backend/config/mail.properties,optional:file:./config/database.properties,optional:file:./backend/config/database.properties"
@@ -44,6 +49,11 @@ server:
   address: 0.0.0.0
 
 app:
+  face-matcher:
+    # Backend startup launches Python unless a matcher is already healthy on port 8090.
+    auto-start: ${FACE_MATCHER_AUTO_START:true}
+    project-root: ${FACE_MATCHER_PROJECT_ROOT:}
+    startup-timeout-seconds: 20
   mail:
     required: ${APP_MAIL_REQUIRED:false}
   public-url: ${APP_PUBLIC_URL:http://localhost:8085}

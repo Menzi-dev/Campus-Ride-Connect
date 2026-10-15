@@ -1,6 +1,13 @@
+-- Database migration: email verification and driver emails. Apply these schema/data changes to the
+-- intended database after checking its current structure.
 -- Non-destructive migration for deployments that do not use Hibernate ddl-auto=update.
 -- Apply ONCE. Do not run manually if Hibernate has already created these fields/tables.
 -- Existing accounts remain NULL (legacy access). New AuthService registrations explicitly write FALSE.
+-- Where: SQL statements in database/mysql/migrations/018_email_verification_and_driver_emails.sql,
+-- involving users, email_verification_tokens and driver_decision_emails.
+-- How: MySQL executes these statements directly. CREATE/ALTER change structure;
+-- INSERT/UPDATE/DELETE change rows when present. Java entities/repositories use the resulting
+-- application tables.
 ALTER TABLE users ADD COLUMN email_verified BOOLEAN NULL DEFAULT NULL;
 CREATE TABLE email_verification_tokens (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,

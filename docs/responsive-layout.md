@@ -1,7 +1,7 @@
 # Responsive layouts and rider navigation
 
-The running entry point is `mobile/index.js` → `mobile/App.tsx`. Both `App.tsx`
-and the alternate `AppNavigator.tsx` use `AppLayout`.
+The running entry point is `mobile/index.js` → `mobile/App.tsx`, which uses
+`AppLayout` for shared screen layout and rider navigation.
 
 `AppLayout` gives the navigator a bounded, shrinkable area and renders one rider
 bottom bar as its sibling. Home, History, Schedule and Profile no longer render

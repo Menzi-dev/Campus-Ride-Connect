@@ -1,3 +1,11 @@
+-- Database structure: create the initial tables and relationships for application records. This
+-- historical script is not the complete current Java mapping; check the migrations and current
+-- database before applying it.
+-- Where: SQL statements in database/mysql/schema.sql, involving users, user_payment_methods, rides
+-- and CURRENT_TIMESTAMP.
+-- How: MySQL executes these statements directly. CREATE/ALTER change structure;
+-- INSERT/UPDATE/DELETE change rows when present. Java entities/repositories use the resulting
+-- application tables.
 CREATE DATABASE IF NOT EXISTS campus_connect;
 USE campus_connect;
 

@@ -1,3 +1,8 @@
+// Email ownership checks: issue a verification link/code, store its hash and enforce expiry, use
+// and retry rules before marking the account verified.
+// Where: EmailVerificationService, starting with issue(), verify() and verifyCode() in this file.
+// How: issue() generates a link/code and stores a token hash through tokens. It checks the previous
+// issue time before sending VerificationMail through the configured mail flow.
 package com.campusconnect.service;
 
 import com.campusconnect.entity.EmailVerificationToken;
@@ -18,6 +23,7 @@ import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Locale;
 
+/** Issues hashed verification links and codes, enforces expiry and retry limits, and marks accounts verified. */
 @Service
 public class EmailVerificationService {
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -45,6 +51,11 @@ public class EmailVerificationService {
         this.passwordEncoder = passwordEncoder;
     }
 
+    // Feature: Create a temporary email confirmation and schedule its delivery while enforcing the
+    // resend wait.
+    // Where: EmailVerificationService.issue() below.
+    // How: issue() generates a link/code and stores a token hash through tokens. It checks the
+    // previous issue time before sending VerificationMail through the configured mail flow.
     @Transactional
     public void issue(User user) {
         if (!user.requiresEmailVerification()) return;
@@ -66,12 +77,22 @@ public class EmailVerificationService {
         events.publishEvent(new VerificationMail(user.getEmail(), raw, code));
     }
 
+    // Feature: Look up the account email and request another confirmation through the shared issue
+    // flow.
+    // Where: EmailVerificationService.resend() below.
+    // How: resend() uses users.findByEmailForUpdate() to read, validate or save the data for this
+    // operation. The return/exception handling below supplies its result to the caller.
     @Transactional
     public void resend(String rawEmail) {
         String address = rawEmail.trim().toLowerCase(Locale.ROOT);
         users.findByEmailForUpdate(address).filter(User::requiresEmailVerification).ifPresent(this::issue);
     }
 
+    // Feature: Find the stored link hash, check validity and mark the linked account email
+    // verified.
+    // Where: EmailVerificationService.verify() below.
+    // How: verify() hashes the received link value, finds its stored token, checks validity and
+    // saves the linked account emailVerified flag through users.
     @Transactional
     public void verify(String raw) {
         if (raw == null || !raw.matches("[A-Za-z0-9_-]{43}")) throw invalid();
@@ -86,8 +107,14 @@ public class EmailVerificationService {
         users.save(user); tokens.save(token);
     }
 
+    // Feature: Check the email code hash, expiry and failed attempts before marking the account
+    // verified.
+    // Where: EmailVerificationService.verifyCode() below.
+    // How: verifyCode() hashes the submitted code, checks the stored email token, expiry and
+    // attempts, then saves the account verified state. Failed attempts remain recorded.
     @Transactional(noRollbackFor = IllegalArgumentException.class)
     public void verifyCode(String rawEmail, String code) {
+        // Failed checks must commit their attempt count, even though validation throws an error.
         if (rawEmail == null || code == null || !code.matches("\\d{6}")) throw invalidCode();
         var user = users.findByEmailForUpdate(rawEmail.trim().toLowerCase(Locale.ROOT))
             .orElseThrow(EmailVerificationService::invalidCode);
@@ -103,8 +130,15 @@ public class EmailVerificationService {
         users.save(user); tokens.save(token);
     }
 
+    // Feature: Build and send the configured code or link email without storing the raw secret in
+    // the database.
+    // Where: EmailVerificationService.sendVerificationMail() below.
+    // How: sendVerificationMail() uses email.send(), EmailService.page() and EmailService.escape()
+    // to read, validate or save the data for this operation. The return/exception handling below
+    // supplies its result to the caller.
     @TransactionalEventListener
     public void sendVerificationMail(VerificationMail request) {
+        // Send after the registration transaction commits so a rolled-back account gets no email.
         if (!"link".equalsIgnoreCase(deliveryMode)) {
             long minutes = Math.min(10, Math.max(5, expiryMinutes));
             String text = "Welcome to CampusConnect.\n\nYour email verification code is " + request.code()

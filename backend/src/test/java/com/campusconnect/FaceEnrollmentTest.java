@@ -1,3 +1,9 @@
+// Test feature: check face enrollment behaviour using the cases below. Use the fixtures and any
+// mocked dependencies defined here to exercise success and failure cases.
+// Where: FaceEnrollmentTest in this file, including arbitraryImagesNeverPassLegacyVerification()
+// and enrollmentIsNotIdentityVerificationAndIsExcludedFromAccountResponses().
+// How: JUnit executes the test methods. Fixtures and any Mockito mocks in this class provide
+// controlled inputs; assertions check the returned values, errors or saved interactions.
 package com.campusconnect;
 
 import com.campusconnect.controller.AuthController;

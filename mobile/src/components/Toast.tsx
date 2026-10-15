@@ -1,5 +1,19 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+// Shared notifications: let screens show a brief message and manage how that message appears and
+// disappears.
+// Where: mobile/src/components/Toast.tsx.
+// How: ToastProvider() owns notification state and timing. useToast() reads the shared context so a
+// screen can call showToast() without creating its own message component.
+/** Provides shared timed feedback through context, replacing the previous toast when a new one arrives. */
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { Animated, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { colors, radius, spacing, font } from '../theme/theme';
 
 type ToastColor = 'green' | 'red' | 'blue' | 'yellow';
@@ -80,6 +94,7 @@ const toastStyles = StyleSheet.create({
   yellow: { backgroundColor: colors.yellow },
 });
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   toast: {
     position: 'absolute',

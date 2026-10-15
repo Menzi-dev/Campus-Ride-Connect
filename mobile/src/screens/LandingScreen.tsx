@@ -1,5 +1,20 @@
+// Welcome screen: present the app purpose and feature cards, animate the introduction and provide
+// entry points for login and registration.
+// Where: mobile/src/screens/LandingScreen.tsx; start at LandingScreen(), then follow the named
+// actions below.
+// How: LandingScreen() renders the JSX below using its props, route data and local state. Its event
+// callbacks connect visible controls to the operations in this file.
+/** Introduces the app and opens the sign-in or registration flow. */
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, StatusBar, Image, useWindowDimensions } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Animated,
+  StatusBar,
+  Image,
+  useWindowDimensions,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -126,6 +141,7 @@ function Feature({
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.white, overflow: 'hidden' },
 

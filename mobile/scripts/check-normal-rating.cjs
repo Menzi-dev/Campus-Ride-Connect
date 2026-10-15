@@ -1,3 +1,8 @@
+// Browser feedback checks: simulate a completed rider trip and verify rating submission, optional
+// comments and retry.
+// Where: mobile/scripts/check-normal-rating.cjs; follow check().
+// How: Playwright controls Chromium while mocked API routes supply synthetic records. Node
+// assertions check the resulting page/actions; this does not prove real backend integration.
 /* Normal Home ride completion; synthetic API responses only. */
 const assert = require('node:assert/strict');
 const path = require('node:path');

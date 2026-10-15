@@ -1,3 +1,9 @@
+// Driver navigation: display the driver tabs and open the selected dashboard, earnings, history or
+// profile screen.
+// Where: mobile/src/components/DriverBottomNav.tsx.
+// How: DriverBottomNav() maps its driver tab definitions into touchable controls and uses
+// navigation to open their route names.
+/** Renders driver tabs and opens the corresponding registered driver screens. */
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BarChart3, Clock3, Home, UserRound } from 'lucide-react-native';
@@ -27,6 +33,7 @@ export default function DriverBottomNav({ active }: { active: Tab }) {
   })}</View>;
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flexShrink: 0, flexDirection: 'row', backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: colors.gray200, paddingTop: spacing.sm },
   tab: { flex: 1, minWidth: 0, minHeight: 44, justifyContent: 'center', alignItems: 'center', gap: 3 },

@@ -1,4 +1,11 @@
-// mobile/src/screens/AdminDashboardScreen.tsx
+// Administrator dashboard: load totals and driver applications. Open submitted documents, approve
+// or reject an application and refresh the displayed information after a decision.
+// Where: mobile/src/screens/AdminDashboardScreen.tsx; start at AdminDashboardScreen(), then follow
+// the named actions below.
+// How: AdminDashboardScreen() renders the screen and keeps its form/list/progress values in React
+// state. loadData(), handleDecision() and viewDocument() contain the API calls; ApiClient.ts adds
+// the /api base path and saved login token.
+/** Loads university operations data and provides driver application review actions. */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
@@ -12,8 +19,6 @@ import {
   Modal,
   Pressable,
   Image,
-  Linking,
-  FlatList,
   AppState,
   Platform,
 } from 'react-native';
@@ -31,15 +36,11 @@ import {
   MapPinned,
   FileWarning,
   Settings as SettingsIcon,
-  ArrowRight,
   X,
   TriangleAlert,
   RotateCcw,
   Check,
   Eye,
-  Download,
-  UserCheck,
-  UserX,
   Clock,
   Mail,
   Phone,
@@ -118,6 +119,12 @@ export default function AdminDashboardScreen() {
   const decisionRef = useRef<string | null>(null);
   const loadVersion = useRef(0);
 
+  // Feature: Retrieve dashboard totals and driver applications, keeping refresh and retry feedback
+  // in sync.
+  // Where: AdminDashboardScreen.loadData() below.
+  // How: loadData() uses apiClient.get('/admin/dashboard') through mobile/src/services/ApiClient.ts
+  // to exchange data with the backend. setRefreshing() and setLoading() update React state, which
+  // redraws the related screen content.
   const loadData = useCallback(async (isRefresh = false, silent = false) => {
     if (loadingRef.current || decisionRef.current) return;
     loadingRef.current = true;
@@ -174,6 +181,10 @@ export default function AdminDashboardScreen() {
     }, [loadData])
   );
 
+  // Feature: Send the chosen application approval or rejection and refresh the administrator data.
+  // Where: AdminDashboardScreen.handleDecision() below.
+  // How: handleDecision() posts /admin/driver-approvals/${id}/${decision}. AdminController updates
+  // the account/driver records; setApprovals() and the dashboard refresh show the result.
   const handleDecision = async (id: string, decision: 'approve' | 'reject') => {
     if (decisionRef.current) return;
     decisionRef.current = id;
@@ -210,6 +221,11 @@ export default function AdminDashboardScreen() {
     }
   };
 
+  // Feature: Open the selected driver application document and report any failure.
+  // Where: AdminDashboardScreen.viewDocument() below.
+  // How: viewDocument() uses apiClient.get(url) through mobile/src/services/ApiClient.ts to
+  // exchange data with the backend. setDocumentPreview() update React state, which redraws the
+  // related screen content.
   const viewDocument = async (url: string, title: string) => {
     try {
       if (Platform.OS !== 'web') return showToast('Open the dashboard in your browser to preview documents', 'red');
@@ -735,6 +751,7 @@ function NavCard({ icon, label, onPress }: { icon: React.ReactNode; label: strin
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50 },
   centered: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xxxl },

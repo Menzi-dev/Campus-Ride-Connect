@@ -1,12 +1,44 @@
+// Driver profile: load account and vehicle information, update the profile photo and provide
+// sign-out actions.
+// Where: mobile/src/screens/DriverProfileScreen.tsx; start at DriverProfileScreen(), then follow
+// the named actions below.
+// How: DriverProfileScreen() renders the screen and keeps its form/list/progress values in React
+// state. load() and handleSelectPhoto() contain the API calls; ApiClient.ts adds the /api base path
+// and saved login token.
+/** Loads driver account and vehicle details and provides profile editing and sign-out actions. */
 import { useToast } from '../components/Toast';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Image, Platform, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import { BadgeCheck, Camera, CarFront, ChevronRight, Clock3, HelpCircle, LogOut, Mail, Phone, ShieldCheck, Star, UserRound } from 'lucide-react-native';
+import {
+  BadgeCheck,
+  Camera,
+  CarFront,
+  ChevronRight,
+  Clock3,
+  HelpCircle,
+  LogOut,
+  Mail,
+  Phone,
+  ShieldCheck,
+  Star,
+  UserRound,
+} from 'lucide-react-native';
 import apiClient from '../services/ApiClient';
 import DriverBottomNav from '../components/DriverBottomNav';
 import { colors, font, radius, spacing } from '../theme/theme';
@@ -44,6 +76,12 @@ export default function DriverProfileScreen() {
   const [loadError, setLoadError] = useState('');
   const [showLogoutConfirmation, setShowLogoutConfirmation] = useState(false);
 
+  // Feature: Retrieve the records used by this screen and update loading, refresh and error
+  // feedback.
+  // Where: DriverProfileScreen.load() below.
+  // How: load() uses apiClient.get('/driver/profile') through mobile/src/services/ApiClient.ts to
+  // exchange data with the backend. setRefreshing() and setLoading() update React state, which
+  // redraws the related screen content.
   const load = useCallback(async (refresh = false) => {
     refresh ? setRefreshing(true) : setLoading(true);
     try {
@@ -73,6 +111,11 @@ export default function DriverProfileScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  // Feature: Choose a profile image and prepare it for the profile photo update.
+  // Where: DriverProfileScreen.handleSelectPhoto() below.
+  // How: handleSelectPhoto() uses apiClient.put('/users/me/profile-photo') through
+  // mobile/src/services/ApiClient.ts to exchange data with the backend. setProfile() and
+  // setProfileImage() update React state, which redraws the related screen content.
   const handleSelectPhoto = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -119,6 +162,11 @@ export default function DriverProfileScreen() {
     }
   };
 
+  // Feature: Remove an unusable cached profile image so the screen can display its fallback.
+  // Where: DriverProfileScreen.handleProfileImageError() below.
+  // How: handleProfileImageError() uses AsyncStorage.removeItem() and AsyncStorage.setItem() in the
+  // block below to carry out this step. setProfileImage() and setProfile() update React state,
+  // which redraws the related screen content.
   const handleProfileImageError = async () => {
     setProfileImage(null);
     await AsyncStorage.removeItem(`userProfileImage:${ownerKey}`);
@@ -127,6 +175,10 @@ export default function DriverProfileScreen() {
     await AsyncStorage.setItem('user', JSON.stringify(nextProfile));
   };
 
+  // Feature: Clear the saved session and return to the account entry screen.
+  // Where: DriverProfileScreen.handleLogout() below.
+  // How: handleLogout() uses AsyncStorage.multiRemove() and navigation.reset() in the block below
+  // to carry out this step.
   const handleLogout = async () => {
     await AsyncStorage.multiRemove(['authToken', 'user']);
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
@@ -303,6 +355,7 @@ function DetailRow({ icon, label, value, positive }: { icon: React.ReactNode; la
   );
 }
 
+// Screen appearance: keep layout, spacing, colours and text styles together here.
 const styles = StyleSheet.create({
   container: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: colors.gray50, position: 'relative' },
   scroll: { flex: 1, minHeight: 0 },
